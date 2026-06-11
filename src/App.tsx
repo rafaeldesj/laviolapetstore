@@ -10,6 +10,11 @@ import { Footer } from './components/Footer';
 import { LoginModal } from './components/LoginModal';
 import { RegisterModal } from './components/RegisterModal';
 import { PetCrud } from './components/PetCrud';
+import { Agendamentos } from './components/Agendamentos';
+import { Financeiro } from './components/Financeiro';
+import { Estoque } from './components/Estoque';
+import { Prontuario } from './components/Prontuario';
+import { Relatorios } from './components/Relatorios';
 import { UserManagement } from './components/admin/UserManagement';
 import { useAuth } from './hooks/useAuth';
 import { roleHierarchy } from './supabaseClient';
@@ -92,6 +97,26 @@ function App() {
 
             {activeSection === 'pets' && user && (
               <PetCrud userId={user.id} styles={styles} />
+            )}
+
+            {activeSection === 'agendamentos' && user && (
+              <Agendamentos styles={styles} />
+            )}
+
+            {activeSection === 'financeiro' && user && (
+              <Financeiro styles={styles} />
+            )}
+
+            {activeSection === 'estoque' && user && (
+              <Estoque styles={styles} />
+            )}
+
+            {activeSection === 'prontuario' && user && (
+              <Prontuario styles={styles} />
+            )}
+
+            {activeSection === 'relatorios' && user && (
+              <Relatorios styles={styles} />
             )}
 
             {activeSection === 'usuarios' && user && isManager && (
