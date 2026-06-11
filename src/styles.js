@@ -88,8 +88,8 @@ export const getStyles = (highContrast, fontSize, isDesktop, windowWidth) => {
       gap: '10px'
     },
     btnAcc: (isHovered) => ({
-      backgroundColor: cardBg,
-      border: `1px solid ${borderColor}`,
+      backgroundColor: isHovered ? primary : cardBg,
+      border: `1px solid ${isHovered ? primary : borderColor}`,
       color: isHovered ? (highContrast ? '#000000' : '#ffffff') : textMain,
       padding: '8px 12px',
       borderRadius: '8px',
@@ -101,11 +101,7 @@ export const getStyles = (highContrast, fontSize, isDesktop, windowWidth) => {
       gap: '6px',
       boxShadow: shadow,
       transition: 'all 0.3s ease',
-      outline: 'none',
-      ...(isHovered && {
-        backgroundColor: primary,
-        borderColor: primary
-      })
+      outline: 'none'
     }),
     siteNavigation: {
       backgroundColor: highContrast ? '#000000' : primary,
@@ -114,9 +110,7 @@ export const getStyles = (highContrast, fontSize, isDesktop, windowWidth) => {
       boxShadow: shadow,
       height: 'fit-content',
       alignSelf: 'start',
-      ...(highContrast && {
-        border: '2px solid #ffffff'
-      })
+      border: highContrast ? '2px solid #ffffff' : 'none'
     },
     navList: {
       display: 'flex',
@@ -128,7 +122,7 @@ export const getStyles = (highContrast, fontSize, isDesktop, windowWidth) => {
       margin: 0
     },
     navLink: (isActive, isHovered) => ({
-      color: '#ffffff',
+      color: (highContrast && isHovered) ? '#000000' : '#ffffff',
       textDecoration: 'none',
       padding: '10px 18px',
       borderRadius: '8px',
@@ -136,12 +130,10 @@ export const getStyles = (highContrast, fontSize, isDesktop, windowWidth) => {
       display: 'block',
       transition: 'all 0.3s ease',
       width: '100%',
-      backgroundColor: (isActive || isHovered) ? 'rgba(255, 255, 255, 0.15)' : 'transparent',
-      transform: (isActive || isHovered) ? (isDesktop ? 'translateX(4px)' : 'translateY(-1px)') : 'none',
-      ...(highContrast && isHovered && {
-        backgroundColor: '#ffff00',
-        color: '#000000'
-      })
+      backgroundColor: (highContrast && isHovered)
+        ? '#ffff00'
+        : ((isActive || isHovered) ? 'rgba(255, 255, 255, 0.15)' : 'transparent'),
+      transform: (isActive || isHovered) ? (isDesktop ? 'translateX(4px)' : 'translateY(-1px)') : 'none'
     }),
     mainContent: {
       display: 'flex',
@@ -178,6 +170,7 @@ export const getStyles = (highContrast, fontSize, isDesktop, windowWidth) => {
     serviceCard: (isHovered, customLeftBorder = false) => ({
       backgroundColor: background,
       border: `1px solid ${isHovered ? primary : borderColor}`,
+      borderLeft: customLeftBorder ? `4px solid ${secondary}` : `1px solid ${isHovered ? primary : borderColor}`,
       borderRadius: '12px',
       padding: '24px',
       transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
@@ -185,10 +178,7 @@ export const getStyles = (highContrast, fontSize, isDesktop, windowWidth) => {
       flexDirection: 'column',
       gap: '12px',
       transform: isHovered ? 'translateY(-4px)' : 'none',
-      boxShadow: isHovered ? shadowLg : 'none',
-      ...(customLeftBorder && {
-        borderLeft: `4px solid ${secondary}`
-      })
+      boxShadow: isHovered ? shadowLg : 'none'
     }),
     cardIcon: {
       backgroundColor: highContrast ? 'transparent' : 'rgba(210, 85%, 45%, 0.1)',
@@ -200,9 +190,7 @@ export const getStyles = (highContrast, fontSize, isDesktop, windowWidth) => {
       justifyContent: 'center',
       borderRadius: '50%',
       fontSize: '1.5rem',
-      ...(highContrast && {
-        border: '1px solid #ffffff'
-      })
+      border: highContrast ? '1px solid #ffffff' : 'none'
     },
     serviceCardTitle: {
       fontSize: '1.25rem',
