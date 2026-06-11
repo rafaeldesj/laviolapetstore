@@ -8,22 +8,22 @@ import { ContactForm } from './components/ContactForm';
 import { Sidebar } from './components/Sidebar';
 import { Footer } from './components/Footer';
 import { LoginModal } from './components/LoginModal';
+import { RegisterModal } from './components/RegisterModal';
 import { PetCrud } from './components/PetCrud';
-import { supabase, isSupabaseConfigured } from './supabaseClient';
+import { UserManagement } from './components/admin/UserManagement';
+import { useAuth } from './hooks/useAuth';
+import { roleHierarchy } from './supabaseClient';
 import { getStyles } from './styles';
 
-interface UserSession {
-  id: string;
-  email: string;
-  name: string;
-}
+type ModalView = 'none' | 'login' | 'register';
 
 function App() {
   const [windowWidth, setWindowWidth] = useState<number>(window.innerWidth);
   const [isSkipFocused, setIsSkipFocused] = useState<boolean>(false);
   const [activeSection, setActiveSection] = useState<string>('inicio');
-  const [user, setUser] = useState<UserSession | null>(null);
-  const [showLoginModal, setShowLoginModal] = useState<boolean>(false);
+  const [modalView, setModalView] = useState<ModalView>('none');
+
+  const { user, logout, setMockUser } = useAuth();
 
   useEffect(() => {
     const handleResize = () => setWindowWidth(window.innerWidth);
@@ -41,60 +41,18 @@ function App() {
   }, [windowWidth]);
 
   useEffect(() => {
-    if (isSupabaseConfigured && supabase) {
-      supabase.auth.getSession().then(({ data: { session } }) => {
-        if (session?.user) {
-          setUser({
-            id: session.user.id,
-            email: session.user.email || '',
-            name: session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || '',
-          });
-        }
-      });
-
-      const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-        if (session?.user) {
-          setUser({
-            id: session.user.id,
-            email: session.user.email || '',
-            name: session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || '',
-          });
-        } else {
-          setUser(null);
-          setActiveSection('inicio');
-        }
-      });
-
-      return () => subscription.unsubscribe();
-    } else {
-      const saved = localStorage.getItem('laviola_mock_session');
-      if (saved) {
-        setUser(JSON.parse(saved));
-      }
-    }
-  }, []);
-
-  const handleLogout = async () => {
-    if (isSupabaseConfigured && supabase) {
-      await supabase.auth.signOut();
-    } else {
-      localStorage.removeItem('laviola_mock_session');
-      setUser(null);
+    if (!user && (activeSection === 'pets' || activeSection === 'usuarios')) {
       setActiveSection('inicio');
     }
-  };
+  }, [user, activeSection]);
 
-  const handleLoginSuccess = (loggedInUser: UserSession) => {
-    setUser(loggedInUser);
-    if (!isSupabaseConfigured) {
-      localStorage.setItem('laviola_mock_session', JSON.stringify(loggedInUser));
-    }
-  };
+  const userRole = user?.profile?.role;
+  const isManager = userRole ? roleHierarchy[userRole] >= roleHierarchy['manager'] : false;
 
   return (
     <>
-      <a 
-        href="#main-content" 
+      <a
+        href="#main-content"
         style={styles.skipLink(isSkipFocused)}
         onFocus={() => setIsSkipFocused(true)}
         onBlur={() => setIsSkipFocused(false)}
@@ -103,19 +61,20 @@ function App() {
       </a>
 
       <div style={styles.appContainer}>
-        <Header 
-          user={user}
-          onLoginClick={() => setShowLoginModal(true)}
-          onLogout={handleLogout}
+        <Header
+          user={user ? { name: user.name, profile: user.profile } : null}
+          onLoginClick={() => setModalView('login')}
+          onLogout={async () => { await logout(); setActiveSection('inicio'); }}
           styles={styles}
         />
 
         <div style={styles.layoutGrid}>
-          <Navigation 
-            styles={styles} 
-            activeSection={activeSection} 
-            setActiveSection={setActiveSection} 
+          <Navigation
+            styles={styles}
+            activeSection={activeSection}
+            setActiveSection={setActiveSection}
             isLoggedIn={!!user}
+            userRole={userRole}
           />
 
           <main id="main-content" style={styles.mainContent} role="main">
@@ -134,7 +93,11 @@ function App() {
             {activeSection === 'pets' && user && (
               <PetCrud userId={user.id} styles={styles} />
             )}
-            
+
+            {activeSection === 'usuarios' && user && isManager && (
+              <UserManagement currentUser={user} styles={styles} />
+            )}
+
             {activeSection === 'sobre' && (
               <section style={styles.contentSection} id="sobre" aria-labelledby="about-heading">
                 <h2 id="about-heading" style={styles.sectionTitle}>
@@ -161,10 +124,20 @@ function App() {
         <Footer styles={styles} />
       </div>
 
-      {showLoginModal && (
-        <LoginModal 
-          onClose={() => setShowLoginModal(false)}
-          onLoginSuccess={handleLoginSuccess}
+      {modalView === 'login' && (
+        <LoginModal
+          onClose={() => setModalView('none')}
+          onLoginSuccess={(u) => { setMockUser(u); setModalView('none'); }}
+          onGoRegister={() => setModalView('register')}
+          styles={styles}
+        />
+      )}
+
+      {modalView === 'register' && (
+        <RegisterModal
+          onClose={() => setModalView('none')}
+          onRegisterSuccess={(u) => { setMockUser(u); setModalView('none'); }}
+          onGoLogin={() => setModalView('login')}
           styles={styles}
         />
       )}
@@ -173,4 +146,3 @@ function App() {
 }
 
 export default App;
-

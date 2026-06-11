@@ -1,22 +1,28 @@
 import React, { useState } from 'react';
+import type { UserRole } from '../supabaseClient';
+import { roleHierarchy } from '../supabaseClient';
 
 interface NavigationProps {
   styles: any;
   activeSection: string;
   setActiveSection: (section: string) => void;
   isLoggedIn: boolean;
+  userRole?: UserRole;
 }
 
-export const Navigation: React.FC<NavigationProps> = ({ styles, activeSection, setActiveSection, isLoggedIn }) => {
+export const Navigation: React.FC<NavigationProps> = ({ styles, activeSection, setActiveSection, isLoggedIn, userRole }) => {
   const [hoveredLink, setHoveredLink] = useState<string | null>(null);
 
+  const isManager = userRole ? roleHierarchy[userRole] >= roleHierarchy['manager'] : false;
+
   const navItems = [
-    { id: 'inicio', label: 'Início' },
-    { id: 'servicos', label: 'Serviços' },
-    { id: 'promocoes', label: 'Promoções' },
-    ...(isLoggedIn ? [{ id: 'pets', label: 'Meus Pets' }] : []),
-    { id: 'sobre', label: 'Sobre Nós' },
-    { id: 'contato', label: 'Contato' }
+    { id: 'inicio', label: 'Início', always: true },
+    { id: 'servicos', label: 'Serviços', always: true },
+    { id: 'promocoes', label: 'Promoções', always: true },
+    ...(isLoggedIn ? [{ id: 'pets', label: 'Meus Pets', always: false }] : []),
+    ...(isManager ? [{ id: 'usuarios', label: 'Usuários', always: false }] : []),
+    { id: 'sobre', label: 'Sobre Nós', always: true },
+    { id: 'contato', label: 'Contato', always: true },
   ];
 
   return (
@@ -24,7 +30,7 @@ export const Navigation: React.FC<NavigationProps> = ({ styles, activeSection, s
       <ul style={styles.navList}>
         {navItems.map((item) => (
           <li key={item.id} style={{ width: '100%' }}>
-            <button 
+            <button
               onClick={() => setActiveSection(item.id)}
               onMouseEnter={() => setHoveredLink(item.id)}
               onMouseLeave={() => setHoveredLink(null)}
@@ -38,10 +44,6 @@ export const Navigation: React.FC<NavigationProps> = ({ styles, activeSection, s
                 fontSize: 'inherit',
                 display: 'block',
                 width: '100%',
-                ...(styles.highContrast && hoveredLink === item.id && {
-                  backgroundColor: '#ffff00',
-                  color: '#000000'
-                })
               }}
               aria-current={activeSection === item.id ? 'page' : undefined}
             >

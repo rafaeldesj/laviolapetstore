@@ -1,12 +1,21 @@
 import React, { useState } from 'react';
 import { PawPrint, LogIn, LogOut, User } from 'lucide-react';
+import type { UserRole } from '../supabaseClient';
+import { roleLabels } from '../supabaseClient';
 
 interface HeaderProps {
-  user: { name: string } | null;
+  user: { name: string; profile?: { role: UserRole } | null } | null;
   onLoginClick: () => void;
   onLogout: () => void;
   styles: any;
 }
+
+const roleBadgeColors: Record<UserRole, string> = {
+  developer: 'hsl(280, 70%, 55%)',
+  owner: 'hsl(36, 95%, 50%)',
+  manager: 'hsl(210, 85%, 45%)',
+  collaborator: 'hsl(142, 60%, 45%)',
+};
 
 export const Header: React.FC<HeaderProps> = ({
   user,
@@ -15,6 +24,7 @@ export const Header: React.FC<HeaderProps> = ({
   styles,
 }) => {
   const [hoveredBtn, setHoveredBtn] = useState<string | null>(null);
+  const role = user?.profile?.role;
 
   return (
     <header style={styles.siteHeader} role="banner">
@@ -26,10 +36,25 @@ export const Header: React.FC<HeaderProps> = ({
       <div style={styles.authContainer}>
         {user ? (
           <div style={styles.userInfo}>
-            <div style={styles.userAvatar} aria-hidden="true">
+            <div style={{
+              ...styles.userAvatar,
+              backgroundColor: role ? roleBadgeColors[role] + '22' : undefined,
+              color: role ? roleBadgeColors[role] : styles.primary,
+              border: `1px solid ${role ? roleBadgeColors[role] + '44' : styles.borderColor}`,
+            }} aria-hidden="true">
               <User size={16} />
             </div>
-            <span style={styles.userName}>Olá, {user.name}</span>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+              <span style={styles.userName}>Olá, {user.name}</span>
+              {role && (
+                <span style={{
+                  fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.5px',
+                  color: roleBadgeColors[role], textTransform: 'uppercase',
+                }}>
+                  {roleLabels[role]}
+                </span>
+              )}
+            </div>
             <button
               onClick={onLogout}
               style={styles.btnLogout(hoveredBtn === 'logout')}
@@ -55,4 +80,3 @@ export const Header: React.FC<HeaderProps> = ({
     </header>
   );
 };
-

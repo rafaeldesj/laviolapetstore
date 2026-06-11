@@ -3,15 +3,104 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
-export const isSupabaseConfigured = 
-  supabaseUrl.trim() !== '' && 
+export const isSupabaseConfigured =
+  supabaseUrl.trim() !== '' &&
   supabaseAnonKey.trim() !== '' &&
-  !supabaseUrl.includes('placeholder') &&
-  !supabaseAnonKey.includes('placeholder');
+  !supabaseUrl.includes('placeholder');
 
-export const supabase = isSupabaseConfigured 
-  ? createClient(supabaseUrl, supabaseAnonKey) 
+export const supabase = isSupabaseConfigured
+  ? createClient(supabaseUrl, supabaseAnonKey)
   : null;
+
+export type UserRole = 'developer' | 'owner' | 'manager' | 'collaborator';
+
+export interface CollaboratorCategory {
+  id: string;
+  name: string;
+  description: string;
+  is_active: boolean;
+}
+
+export interface UserProfile {
+  id: string;
+  email: string;
+  full_name: string;
+  username: string | null;
+  phone: string | null;
+  role: UserRole;
+  collaborator_category_id: string | null;
+  collaborator_category?: CollaboratorCategory;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface PermissionKey {
+  key: string;
+  label: string;
+  description: string;
+  module: string;
+}
+
+export interface UserPermission {
+  id: string;
+  user_id: string;
+  permission_key: string;
+  granted: boolean;
+  granted_by: string | null;
+  granted_at: string;
+}
+
+export const roleHierarchy: Record<UserRole, number> = {
+  developer: 4,
+  owner: 3,
+  manager: 2,
+  collaborator: 1,
+};
+
+export const roleLabels: Record<UserRole, string> = {
+  developer: 'Desenvolvedor',
+  owner: 'Proprietário',
+  manager: 'Gerente',
+  collaborator: 'Colaborador',
+};
+
+export const canManage = (actorRole: UserRole, targetRole: UserRole): boolean => {
+  return roleHierarchy[actorRole] > roleHierarchy[targetRole];
+};
+
+export const hasPermission = async (userId: string, permissionKey: string): Promise<boolean> => {
+  if (!supabase) return true;
+  const { data } = await supabase
+    .from('user_permissions')
+    .select('granted')
+    .eq('user_id', userId)
+    .eq('permission_key', permissionKey)
+    .single();
+  return data?.granted === true;
+};
+
+export const lookupEmailByIdentifier = async (identifier: string): Promise<string | null> => {
+  if (!supabase) return identifier;
+  const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(identifier);
+  if (isEmail) return identifier;
+  const isPhone = /^\+?[\d\s\-()]{8,}$/.test(identifier);
+  if (isPhone) {
+    const { data } = await supabase
+      .from('profiles')
+      .select('email')
+      .eq('phone', identifier)
+      .eq('is_active', true)
+      .single();
+    return data?.email || null;
+  }
+  const { data } = await supabase
+    .from('profiles')
+    .select('email')
+    .eq('username', identifier)
+    .eq('is_active', true)
+    .single();
+  return data?.email || null;
+};
 
 interface MockPet {
   id: string;
@@ -43,7 +132,7 @@ export const mockSupabaseDb = {
       ...pet,
       id: Math.random().toString(36).substring(2, 9),
       owner_id: userId,
-      created_at: new Date().toISOString()
+      created_at: new Date().toISOString(),
     };
     pets.push(newPet);
     saveLocalPets(pets);
@@ -62,5 +151,5 @@ export const mockSupabaseDb = {
     const filtered = pets.filter(p => p.id !== id);
     saveLocalPets(filtered);
     return { error: null };
-  }
+  },
 };

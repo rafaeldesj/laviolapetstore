@@ -1,110 +1,73 @@
 import React, { useState } from 'react';
-import { X } from 'lucide-react';
-import { supabase, isSupabaseConfigured } from '../supabaseClient';
+import { X, LogIn } from 'lucide-react';
+import { supabase, isSupabaseConfigured, lookupEmailByIdentifier } from '../supabaseClient';
+import type { AuthUser } from '../hooks/useAuth';
 
 interface LoginModalProps {
   onClose: () => void;
-  onLoginSuccess: (user: { id: string; email: string; name: string }) => void;
+  onLoginSuccess: (user: AuthUser) => void;
+  onGoRegister: () => void;
   styles: any;
 }
 
 export const LoginModal: React.FC<LoginModalProps> = ({
   onClose,
   onLoginSuccess,
+  onGoRegister,
   styles,
 }) => {
-  const [isSignUp, setIsSignUp] = useState<boolean>(false);
-  const [email, setEmail] = useState<string>('');
+  const [identifier, setIdentifier] = useState<string>('');
   const [password, setPassword] = useState<string>('');
-  const [name, setName] = useState<string>('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
-
   const [hoveredClose, setHoveredClose] = useState<boolean>(false);
   const [hoveredSubmit, setHoveredSubmit] = useState<boolean>(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
-    setIsLoading(true);
-
-    if (!email || !password || (isSignUp && !name)) {
-      setErrorMsg('Por favor, preencha todos os campos.');
-      setIsLoading(false);
+    if (!identifier || !password) {
+      setErrorMsg('Preencha o identificador e a senha.');
       return;
     }
-
+    setIsLoading(true);
     try {
       if (isSupabaseConfigured && supabase) {
-        if (isSignUp) {
-          const { data, error } = await supabase.auth.signUp({
-            email,
-            password,
-            options: {
-              data: {
-                full_name: name,
-              },
-            },
+        const email = await lookupEmailByIdentifier(identifier.trim());
+        if (!email) {
+          setErrorMsg('Nenhum usuário encontrado com esse e-mail, username ou celular.');
+          setIsLoading(false);
+          return;
+        }
+        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+        if (data.user) {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('*, collaborator_category:collaborator_categories(id, name, description, is_active)')
+            .eq('id', data.user.id)
+            .single();
+          onLoginSuccess({
+            id: data.user.id,
+            email: data.user.email || email,
+            name: profile?.full_name || email.split('@')[0],
+            profile: profile || null,
           });
-
-          if (error) throw error;
-          
-          if (data.user) {
-            onLoginSuccess({
-              id: data.user.id,
-              email: data.user.email || email,
-              name: name,
-            });
-            onClose();
-          }
-        } else {
-          const { data, error } = await supabase.auth.signInWithPassword({
-            email,
-            password,
-          });
-
-          if (error) throw error;
-
-          if (data.user) {
-            onLoginSuccess({
-              id: data.user.id,
-              email: data.user.email || email,
-              name: data.user.user_metadata?.full_name || email.split('@')[0],
-            });
-            onClose();
-          }
+          onClose();
         }
       } else {
-        await new Promise(resolve => setTimeout(resolve, 800));
-        
-        if (isSignUp) {
-          const mockUser = {
-            id: Math.random().toString(36).substring(2, 9),
-            email,
-            name,
-          };
-          
-          const users = JSON.parse(localStorage.getItem('laviola_mock_users') || '[]');
-          users.push(mockUser);
-          localStorage.setItem('laviola_mock_users', JSON.stringify(users));
-          
-          onLoginSuccess(mockUser);
-        } else {
-          const users = JSON.parse(localStorage.getItem('laviola_mock_users') || '[]');
-          const found = users.find((u: any) => u.email === email);
-          
-          const loggedUser = found || {
-            id: 'mock-user-123',
-            email,
-            name: email.split('@')[0],
-          };
-          
-          onLoginSuccess(loggedUser);
-        }
+        const users = JSON.parse(localStorage.getItem('laviola_mock_users') || '[]');
+        const found = users.find((u: any) =>
+          u.email === identifier || u.username === identifier || u.phone === identifier
+        );
+        const mockUser: AuthUser = found
+          ? { id: found.id, email: found.email, name: found.name, profile: null }
+          : { id: 'mock-user-123', email: identifier, name: identifier.split('@')[0], profile: null };
+        onLoginSuccess(mockUser);
         onClose();
       }
     } catch (err: any) {
-      setErrorMsg(err.message || 'Ocorreu um erro ao processar sua solicitação.');
+      setErrorMsg(err.message || 'Erro ao fazer login. Verifique seus dados.');
     } finally {
       setIsLoading(false);
     }
@@ -112,11 +75,9 @@ export const LoginModal: React.FC<LoginModalProps> = ({
 
   return (
     <div style={styles.modalOverlay}>
-      <div style={styles.modalContent} role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <div style={styles.modalContent} role="dialog" aria-modal="true" aria-labelledby="login-modal-title">
         <div style={styles.modalHeader}>
-          <h2 id="modal-title" style={styles.modalTitle}>
-            {isSignUp ? 'Criar Conta' : 'Entrar na Conta'}
-          </h2>
+          <h2 id="login-modal-title" style={styles.modalTitle}>Entrar na Conta</h2>
           <button
             onClick={onClose}
             style={styles.modalCloseBtn(hoveredClose)}
@@ -129,50 +90,37 @@ export const LoginModal: React.FC<LoginModalProps> = ({
         </div>
 
         {errorMsg && (
-          <div style={{ color: 'red', fontSize: '0.9rem', marginBottom: '10px' }}>
-            {errorMsg}
-          </div>
+          <p style={{ color: 'red', fontSize: '0.9rem', margin: '0' }}>{errorMsg}</p>
         )}
 
         <form onSubmit={handleSubmit} style={styles.modalForm}>
-          {isSignUp && (
-            <div style={styles.formGroup}>
-              <label htmlFor="auth-name" style={styles.formLabel}>Nome Completo</label>
-              <input
-                id="auth-name"
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                style={styles.formInput}
-                placeholder="Seu nome"
-                disabled={isLoading}
-              />
-            </div>
-          )}
-
           <div style={styles.formGroup}>
-            <label htmlFor="auth-email" style={styles.formLabel}>E-mail</label>
+            <label htmlFor="login-identifier" style={styles.formLabel}>
+              E-mail, Username ou Celular
+            </label>
             <input
-              id="auth-email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              id="login-identifier"
+              type="text"
+              value={identifier}
+              onChange={(e) => setIdentifier(e.target.value)}
               style={styles.formInput}
-              placeholder="seuemail@exemplo.com"
+              placeholder="Seu e-mail, username ou celular"
               disabled={isLoading}
+              autoComplete="username"
             />
           </div>
 
           <div style={styles.formGroup}>
-            <label htmlFor="auth-password" style={styles.formLabel}>Senha</label>
+            <label htmlFor="login-password" style={styles.formLabel}>Senha</label>
             <input
-              id="auth-password"
+              id="login-password"
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               style={styles.formInput}
-              placeholder="Digite sua senha"
+              placeholder="Sua senha"
               disabled={isLoading}
+              autoComplete="current-password"
             />
           </div>
 
@@ -183,20 +131,15 @@ export const LoginModal: React.FC<LoginModalProps> = ({
             onMouseEnter={() => setHoveredSubmit(true)}
             onMouseLeave={() => setHoveredSubmit(false)}
           >
-            {isLoading ? 'Carregando...' : (isSignUp ? 'Registrar' : 'Entrar')}
+            <LogIn size={16} style={{ marginRight: '6px' }} />
+            {isLoading ? 'Carregando...' : 'Entrar'}
           </button>
         </form>
 
         <p style={styles.modalSwitchText}>
-          {isSignUp ? 'Já tem uma conta?' : 'Não tem uma conta?'}
-          <button
-            onClick={() => {
-              setIsSignUp(!isSignUp);
-              setErrorMsg(null);
-            }}
-            style={styles.modalSwitchBtn}
-          >
-            {isSignUp ? 'Fazer Login' : 'Cadastre-se'}
+          Não tem conta?
+          <button onClick={onGoRegister} style={styles.modalSwitchBtn}>
+            Cadastre-se
           </button>
         </p>
       </div>
