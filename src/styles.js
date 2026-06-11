@@ -349,6 +349,230 @@ export const getStyles = (highContrast, fontSize, isDesktop, windowWidth) => {
       alignItems: 'center',
       gap: '15px',
       border: `1px solid ${borderColor}`
-    }
+    },
+    authContainer: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: '16px'
+    },
+    userInfo: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: '8px'
+    },
+    userName: {
+      fontWeight: 600,
+      color: textMain,
+      fontSize: '0.95rem'
+    },
+    userAvatar: {
+      width: '32px',
+      height: '32px',
+      borderRadius: '50%',
+      backgroundColor: highContrast ? 'transparent' : 'rgba(210, 85%, 45%, 0.1)',
+      border: `1px solid ${borderColor}`,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      color: primary
+    },
+    btnLogout: (isHovered) => ({
+      backgroundColor: isHovered ? 'hsl(0, 75%, 50%)' : 'transparent',
+      border: `1px solid ${isHovered ? 'hsl(0, 75%, 50%)' : 'hsl(0, 75%, 60%)'}`,
+      color: isHovered ? '#ffffff' : 'hsl(0, 75%, 60%)',
+      padding: '8px 16px',
+      borderRadius: '8px',
+      fontFamily: "'Outfit', sans-serif",
+      fontWeight: 600,
+      cursor: 'pointer',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '6px',
+      transition: 'all 0.3s ease'
+    }),
+    modalOverlay: {
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      width: '100%',
+      height: '100%',
+      backgroundColor: 'rgba(0, 0, 0, 0.4)',
+      backdropFilter: 'blur(4px)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 1000,
+      padding: '20px'
+    },
+    modalContent: {
+      backgroundColor: cardBg,
+      border: `1px solid ${borderColor}`,
+      borderRadius: '16px',
+      padding: '30px',
+      width: '100%',
+      maxWidth: '400px',
+      boxShadow: shadowLg,
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '20px',
+      position: 'relative'
+    },
+    modalHeader: {
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center'
+    },
+    modalTitle: {
+      fontSize: '1.4rem',
+      fontWeight: 700,
+      color: primary,
+      margin: 0
+    },
+    modalCloseBtn: (isHovered) => ({
+      background: 'none',
+      border: 'none',
+      color: isHovered ? primary : textMuted,
+      cursor: 'pointer',
+      padding: '4px',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      transition: 'color 0.2s ease'
+    }),
+    modalForm: {
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '16px'
+    },
+    formGroup: {
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '6px'
+    },
+    formLabel: {
+      fontSize: '0.9rem',
+      fontWeight: 600,
+      color: textMain
+    },
+    formInput: {
+      padding: '10px 14px',
+      borderRadius: '8px',
+      border: `1px solid ${borderColor}`,
+      backgroundColor: background,
+      color: textMain,
+      fontFamily: "'Outfit', sans-serif",
+      fontSize: '0.95rem',
+      outline: 'none',
+      transition: 'border-color 0.3s ease'
+    },
+    formSubmitBtn: (isHovered) => ({
+      backgroundColor: isHovered ? primaryHover : primary,
+      border: 'none',
+      color: '#ffffff',
+      padding: '12px',
+      borderRadius: '8px',
+      fontFamily: "'Outfit', sans-serif",
+      fontWeight: 600,
+      fontSize: '1rem',
+      cursor: 'pointer',
+      transition: 'background-color 0.2s ease',
+      marginTop: '10px'
+    }),
+    modalSwitchText: {
+      fontSize: '0.85rem',
+      color: textMuted,
+      textAlign: 'center',
+      marginTop: '10px'
+    },
+    modalSwitchBtn: {
+      background: 'none',
+      border: 'none',
+      color: primary,
+      fontWeight: 600,
+      cursor: 'pointer',
+      padding: '0 4px',
+      textDecoration: 'underline'
+    },
+    crudContainer: {
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '24px'
+    },
+    crudHeader: {
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      flexWrap: 'wrap',
+      gap: '15px'
+    },
+    crudList: {
+      display: 'grid',
+      gridTemplateColumns: windowWidth >= 768 ? 'repeat(auto-fill, minmax(280px, 1fr))' : '1fr',
+      gap: '20px'
+    },
+    petCard: {
+      backgroundColor: cardBg,
+      border: `1px solid ${borderColor}`,
+      borderRadius: '12px',
+      padding: '20px',
+      boxShadow: shadow,
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '12px'
+    },
+    petHeader: {
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center'
+    },
+    petName: {
+      fontSize: '1.2rem',
+      fontWeight: 700,
+      color: primary,
+      margin: 0
+    },
+    petBadge: {
+      fontSize: '0.75rem',
+      fontWeight: 600,
+      padding: '4px 8px',
+      borderRadius: '20px',
+      backgroundColor: highContrast ? 'transparent' : 'rgba(36, 95%, 55%, 0.1)',
+      color: secondary,
+      border: `1px solid ${borderColor}`
+    },
+    petDetail: {
+      fontSize: '0.9rem',
+      color: textMuted,
+      display: 'flex',
+      justifyContent: 'space-between'
+    },
+    petActions: {
+      display: 'flex',
+      justifyContent: 'flex-end',
+      gap: '10px',
+      marginTop: '10px',
+      borderTop: `1px solid ${borderColor}`,
+      paddingTop: '12px'
+    },
+    btnIcon: (isHovered, isDanger = false) => ({
+      background: 'none',
+      border: 'none',
+      color: isHovered 
+        ? (isDanger ? 'hsl(0, 75%, 50%)' : primary) 
+        : textMuted,
+      cursor: 'pointer',
+      padding: '6px',
+      borderRadius: '6px',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      transition: 'all 0.2s ease',
+      backgroundColor: isHovered 
+        ? (highContrast ? 'transparent' : (isDanger ? 'rgba(255, 0, 0, 0.05)' : 'rgba(210, 85%, 45%, 0.05)')) 
+        : 'transparent',
+      ...(highContrast && isHovered && {
+        border: `1px solid ${isDanger ? 'red' : 'yellow'}`
+      })
+    })
   };
 };

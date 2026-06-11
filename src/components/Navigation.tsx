@@ -4,15 +4,17 @@ interface NavigationProps {
   styles: any;
   activeSection: string;
   setActiveSection: (section: string) => void;
+  isLoggedIn: boolean;
 }
 
-export const Navigation: React.FC<NavigationProps> = ({ styles, activeSection, setActiveSection }) => {
+export const Navigation: React.FC<NavigationProps> = ({ styles, activeSection, setActiveSection, isLoggedIn }) => {
   const [hoveredLink, setHoveredLink] = useState<string | null>(null);
 
   const navItems = [
     { id: 'inicio', label: 'Início' },
     { id: 'servicos', label: 'Serviços' },
     { id: 'promocoes', label: 'Promoções' },
+    ...(isLoggedIn ? [{ id: 'pets', label: 'Meus Pets' }] : []),
     { id: 'sobre', label: 'Sobre Nós' },
     { id: 'contato', label: 'Contato' }
   ];
@@ -51,3 +53,4 @@ export const Navigation: React.FC<NavigationProps> = ({ styles, activeSection, s
     </nav>
   );
 };
+
