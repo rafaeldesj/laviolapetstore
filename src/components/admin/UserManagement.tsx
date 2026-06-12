@@ -194,7 +194,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
     }
     setIsSaving(true);
     setErrorMsg(null);
-    const specialtyName = editSpecialty.trim();
+    const specialtyName = editRole === 'collaborator' ? editSpecialty.trim() : '';
     const updatedData: any = {
       full_name: editFullName.trim(),
       username: editUsername.trim(),
@@ -215,6 +215,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
             mockUsers[idx].profile.collaborator_category = specialtyName
               ? { id: 'mock', name: specialtyName, description: '', is_active: true }
               : null;
+            mockUsers[idx].profile.collaborator_category_id = specialtyName ? 'mock' : null;
           }
           localStorage.setItem('laviola_mock_users', JSON.stringify(mockUsers));
         }
@@ -226,6 +227,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
             mockSession.profile.collaborator_category = specialtyName
               ? { id: 'mock', name: specialtyName, description: '', is_active: true }
               : null;
+            mockSession.profile.collaborator_category_id = specialtyName ? 'mock' : null;
           }
           localStorage.setItem('laviola_mock_session', JSON.stringify(mockSession));
         }
@@ -310,17 +312,41 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
 
         if (signUpError) throw signUpError;
 
-        if (data.user && newRole !== 'collaborator') {
+        // Resolve specialty category ID if collaborator
+        let categoryId: string | null = null;
+        if (newRole === 'collaborator' && newSpecialty.trim()) {
+          const specialtyName = newSpecialty.trim();
+          const { data: existingCat } = await supabase
+            .from('collaborator_categories')
+            .select('id')
+            .eq('name', specialtyName)
+            .single();
+          if (existingCat) {
+            categoryId = existingCat.id;
+          } else {
+            const { data: newCat } = await supabase
+              .from('collaborator_categories')
+              .insert({ name: specialtyName, description: '', is_active: true })
+              .select('id')
+              .single();
+            if (newCat) categoryId = newCat.id;
+          }
+        }
+
+        if (data.user) {
+          const updateData: any = { role: newRole };
+          updateData.collaborator_category_id = newRole === 'collaborator' ? categoryId : null;
           const { error: updateError } = await supabase
             .from('profiles')
-            .update({ role: newRole })
+            .update(updateData)
             .eq('id', data.user.id);
-          if (updateError) console.error('Erro ao atualizar cargo:', updateError);
+          if (updateError) console.error('Erro ao atualizar cargo/especialidade:', updateError);
         }
 
       } else {
         const mockUsers = JSON.parse(localStorage.getItem('laviola_mock_users') || '[]');
         const newId = Math.random().toString(36).substring(2, 9);
+        const specialtyName = newRole === 'collaborator' ? newSpecialty.trim() : '';
         const newProfile: UserProfile = {
           id: newId,
           email: newEmail.trim(),
@@ -328,7 +354,10 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
           username: newUsername.trim(),
           phone: newPhone.trim(),
           role: newRole,
-          collaborator_category_id: null,
+          collaborator_category_id: specialtyName ? 'mock' : null,
+          collaborator_category: specialtyName
+            ? { id: 'mock', name: specialtyName, description: '', is_active: true }
+            : undefined,
           is_active: true,
           created_at: new Date().toISOString()
         };
@@ -730,7 +759,13 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
                         </label>
                         <select
                           value={editRole}
-                          onChange={(e) => setEditRole(e.target.value as UserRole)}
+                          onChange={(e) => {
+                            const role = e.target.value as UserRole;
+                            setEditRole(role);
+                            if (role !== 'collaborator') {
+                              setEditSpecialty('');
+                            }
+                          }}
                           required
                           style={{ ...styles.formInput, padding: '8px 10px', fontSize: '0.85rem', width: '100%' }}
                         >
@@ -747,21 +782,23 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
                       </div>
 
                       {/* Especialidade */}
-                      <div style={{ flex: '1 1 150px', minWidth: '130px' }}>
-                        <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 600, color: styles.sidebarWidgetText?.color, marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                          Especialidade
-                        </label>
-                        <select
-                          value={editSpecialty}
-                          onChange={(e) => setEditSpecialty(e.target.value)}
-                          style={{ ...styles.formInput, padding: '8px 10px', fontSize: '0.85rem', width: '100%' }}
-                        >
-                          <option value="">— Nenhuma —</option>
-                          {specialties.map((s) => (
-                            <option key={s} value={s}>{s}</option>
-                          ))}
-                        </select>
-                      </div>
+                      {editRole === 'collaborator' && (
+                        <div style={{ flex: '1 1 150px', minWidth: '130px' }}>
+                          <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 600, color: styles.sidebarWidgetText?.color, marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                            Especialidade
+                          </label>
+                          <select
+                            value={editSpecialty}
+                            onChange={(e) => setEditSpecialty(e.target.value)}
+                            style={{ ...styles.formInput, padding: '8px 10px', fontSize: '0.85rem', width: '100%' }}
+                          >
+                            <option value="">— Nenhuma —</option>
+                            {specialties.map((s) => (
+                              <option key={s} value={s}>{s}</option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
 
                       {/* Buttons */}
                       <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
@@ -903,7 +940,13 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
                   <select
                     id="new-role"
                     value={newRole}
-                    onChange={(e) => setNewRole(e.target.value as UserRole)}
+                    onChange={(e) => {
+                      const role = e.target.value as UserRole;
+                      setNewRole(role);
+                      if (role !== 'collaborator') {
+                        setNewSpecialty('');
+                      }
+                    }}
                     style={styles.formInput}
                     required
                   >
@@ -918,20 +961,22 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
               </div>
 
               {/* Especialidade */}
-              <div style={styles.formGroup}>
-                <label htmlFor="new-specialty" style={styles.formLabel}>Especialidade</label>
-                <select
-                  id="new-specialty"
-                  value={newSpecialty}
-                  onChange={(e) => setNewSpecialty(e.target.value)}
-                  style={styles.formInput}
-                >
-                  <option value="">— Nenhuma —</option>
-                  {specialties.map((s) => (
-                    <option key={s} value={s}>{s}</option>
-                  ))}
-                </select>
-              </div>
+              {newRole === 'collaborator' && (
+                <div style={styles.formGroup}>
+                  <label htmlFor="new-specialty" style={styles.formLabel}>Especialidade</label>
+                  <select
+                    id="new-specialty"
+                    value={newSpecialty}
+                    onChange={(e) => setNewSpecialty(e.target.value)}
+                    style={styles.formInput}
+                  >
+                    <option value="">— Nenhuma —</option>
+                    {specialties.map((s) => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               <div style={{ display: 'flex', gap: '10px', marginTop: '15px' }}>
                 <button
