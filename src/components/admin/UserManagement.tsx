@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Users, Shield, UserCheck, UserX, Trash2, Search, Edit, Phone, Save, X, ChevronDown, PlusCircle } from 'lucide-react';
+import { Users, Shield, UserCheck, UserX, Trash2, Search, Edit, Phone, Save, X, ChevronDown, PlusCircle, Key } from 'lucide-react';
 import type { UserProfile, UserRole } from '../../supabaseClient';
 import { supabase, roleLabels, canManage, roleHierarchy, isSupabaseConfigured, logAction } from '../../supabaseClient';
 import { PermissionsPanel } from './PermissionsPanel';
@@ -26,6 +26,11 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
   const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<UserProfile | null>(null);
+  
+  // Password Reset states
+  const [resetPasswordUser, setResetPasswordUser] = useState<UserProfile | null>(null);
+  const [resetPasswordVal, setResetPasswordVal] = useState<string>('');
+  const [isResetting, setIsResetting] = useState<boolean>(false);
 
   // Inline edit form state
   const [editFullName, setEditFullName] = useState<string>('');
@@ -364,6 +369,48 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
     }
   };
 
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!resetPasswordUser) return;
+    if (!resetPasswordVal.trim()) {
+      setErrorMsg('A nova senha é obrigatória.');
+      return;
+    }
+    setIsResetting(true);
+    setErrorMsg(null);
+
+    try {
+      if (isSupabaseConfigured && supabase) {
+        if (resetPasswordUser.id === currentUser.id) {
+          const { error } = await supabase.auth.updateUser({ password: resetPasswordVal });
+          if (error) throw error;
+        }
+      } else {
+        const mockUsers = JSON.parse(localStorage.getItem('laviola_mock_users') || '[]');
+        const idx = mockUsers.findIndex((u: any) => u.id === resetPasswordUser.id);
+        if (idx !== -1) {
+          mockUsers[idx].password = resetPasswordVal;
+          localStorage.setItem('laviola_mock_users', JSON.stringify(mockUsers));
+        }
+      }
+
+      await logAction(
+        currentUser.email || '',
+        currentUser.name || 'Admin',
+        'Redefinição de Senha',
+        `A senha do usuário "${resetPasswordUser.full_name}" (Login: @${resetPasswordUser.username || ''}, Cargo: ${resetPasswordUser.role}) foi redefinida.`
+      );
+
+      setResetPasswordUser(null);
+      setResetPasswordVal('');
+      alert(`Senha do usuário ${resetPasswordUser.full_name} alterada com sucesso!`);
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Erro ao redefinir a senha do usuário.');
+    } finally {
+      setIsResetting(false);
+    }
+  };
+
   const filteredUsers = users
     .filter(u => {
       if (filterRole !== 'all' && u.role !== filterRole) return false;
@@ -478,6 +525,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0', marginTop: '16px', borderRadius: '10px', border: `1px solid ${styles.borderColor}`, overflow: 'hidden' }}>
           {filteredUsers.map((user, idx) => {
             const canAct = canManage(actorRole, user.role) || (user.id === currentUser.id && actorRole === 'developer');
+            const canResetPassword = roleHierarchy[actorRole] >= roleHierarchy[user.role];
             const badgeColor = roleBadgeColors[user.role] || styles.primary;
             const isEditing = editingId === user.id;
             const isLast = idx === filteredUsers.length - 1;
@@ -557,50 +605,68 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
                   </div>
 
                   {/* Actions */}
-                  {canAct && (
+                  {(canAct || canResetPassword) && (
                     <div style={{ display: 'flex', gap: '6px', flexShrink: 0, marginLeft: 'auto' }}>
-                      <button
-                        onClick={() => isEditing ? cancelEdit() : startEdit(user)}
-                        title={isEditing ? 'Cancelar edição' : 'Editar usuário'}
-                        aria-label={isEditing ? 'Cancelar edição' : `Editar ${user.full_name}`}
-                        className="btn-action-icon"
-                        style={{
-                          backgroundColor: isEditing ? `${badgeColor}25` : (styles.isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.06)'),
-                          color: isEditing ? badgeColor : styles.textMain,
-                        }}
-                      >
-                        {isEditing ? <ChevronDown size={14} /> : <Edit size={14} />}
-                      </button>
-                      <button
-                        onClick={() => setSelectedUser(user)}
-                        title="Permissões"
-                        aria-label={`Permissões de ${user.full_name}`}
-                        className="btn-action-icon"
-                        style={{
-                          backgroundColor: styles.isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.06)',
-                          color: styles.textMain,
-                        }}
-                      >
-                        <Shield size={14} />
-                      </button>
-                      {user.id !== currentUser.id && (
+                      {canResetPassword && (
+                        <button
+                          onClick={() => setResetPasswordUser(user)}
+                          title="Redefinir Senha"
+                          aria-label={`Redefinir senha de ${user.full_name}`}
+                          className="btn-action-icon"
+                          style={{
+                            backgroundColor: styles.isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.06)',
+                            color: styles.textMain,
+                          }}
+                        >
+                          <Key size={14} />
+                        </button>
+                      )}
+                      {canAct && (
                         <>
                           <button
-                            onClick={() => toggleActive(user)}
-                            title={user.is_active ? 'Desativar' : 'Ativar'}
-                            aria-label={`${user.is_active ? 'Desativar' : 'Ativar'} ${user.full_name}`}
-                            className={`btn-action-icon ${user.is_active ? 'btn-action-danger' : 'btn-action-success'}`}
+                            onClick={() => isEditing ? cancelEdit() : startEdit(user)}
+                            title={isEditing ? 'Cancelar edição' : 'Editar usuário'}
+                            aria-label={isEditing ? 'Cancelar edição' : `Editar ${user.full_name}`}
+                            className="btn-action-icon"
+                            style={{
+                              backgroundColor: isEditing ? `${badgeColor}25` : (styles.isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.06)'),
+                              color: isEditing ? badgeColor : styles.textMain,
+                            }}
                           >
-                            {user.is_active ? <UserX size={14} /> : <UserCheck size={14} />}
+                            {isEditing ? <ChevronDown size={14} /> : <Edit size={14} />}
                           </button>
                           <button
-                            onClick={() => handleDeleteUser(user)}
-                            title="Excluir"
-                            aria-label={`Excluir ${user.full_name}`}
-                            className="btn-action-icon btn-action-danger"
+                            onClick={() => setSelectedUser(user)}
+                            title="Permissões"
+                            aria-label={`Permissões de ${user.full_name}`}
+                            className="btn-action-icon"
+                            style={{
+                              backgroundColor: styles.isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.06)',
+                              color: styles.textMain,
+                            }}
                           >
-                            <Trash2 size={14} />
+                            <Shield size={14} />
                           </button>
+                          {user.id !== currentUser.id && (
+                            <>
+                              <button
+                                onClick={() => toggleActive(user)}
+                                title={user.is_active ? 'Desativar' : 'Ativar'}
+                                aria-label={`${user.is_active ? 'Desativar' : 'Ativar'} ${user.full_name}`}
+                                className={`btn-action-icon ${user.is_active ? 'btn-action-danger' : 'btn-action-success'}`}
+                              >
+                                {user.is_active ? <UserX size={14} /> : <UserCheck size={14} />}
+                              </button>
+                              <button
+                                onClick={() => handleDeleteUser(user)}
+                                title="Excluir"
+                                aria-label={`Excluir ${user.full_name}`}
+                                className="btn-action-icon btn-action-danger"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </>
+                          )}
                         </>
                       )}
                     </div>
@@ -951,6 +1017,70 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
                 <Trash2 size={14} /> Excluir Permanentemente
               </button>
             </div>
+          </div>
+        </div>
+      )}
+      {/* Modal de redefinição de senha */}
+      {resetPasswordUser && (
+        <div style={styles.modalOverlay}>
+          <div style={{ ...styles.modalContent, maxWidth: '400px' }} role="dialog" aria-modal="true" aria-labelledby="reset-pwd-title">
+            <div style={styles.modalHeader}>
+              <h2 id="reset-pwd-title" style={styles.modalTitle}>
+                <Key size={18} style={{ display: 'inline', marginRight: '6px', color: styles.primary }} />
+                Redefinir Senha
+              </h2>
+              <button 
+                onClick={() => { setResetPasswordUser(null); setResetPasswordVal(''); }} 
+                style={styles.modalCloseBtn(false)}
+                aria-label="Fechar"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleResetPassword} style={styles.modalForm}>
+              <p style={{ margin: '0 0 12px 0', fontSize: '0.85rem', color: styles.sidebarWidgetText?.color }}>
+                Defina a nova senha para o usuário <strong>{resetPasswordUser.full_name}</strong>.
+              </p>
+
+              <div style={styles.formGroup}>
+                <label htmlFor="reset-new-password" style={styles.formLabel}>Nova Senha *</label>
+                <input
+                  id="reset-new-password"
+                  type="password"
+                  placeholder="Mínimo 6 caracteres"
+                  value={resetPasswordVal}
+                  onChange={(e) => setResetPasswordVal(e.target.value)}
+                  style={styles.formInput}
+                  required
+                  autoFocus
+                />
+              </div>
+
+              <div style={styles.modalActions}>
+                <button
+                  type="button"
+                  onClick={() => { setResetPasswordUser(null); setResetPasswordVal(''); }}
+                  style={{
+                    padding: '10px 16px', borderRadius: '8px', border: `1px solid ${styles.borderColor}`,
+                    background: 'none', color: styles.textMain, cursor: 'pointer', fontSize: '0.85rem'
+                  }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isResetting}
+                  className="btn-save"
+                  style={{
+                    padding: '10px 20px', borderRadius: '8px', border: 'none',
+                    fontSize: '0.85rem', fontWeight: 700
+                  }}
+                >
+                  {isResetting ? 'Redefinindo...' : 'Salvar Alteração'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
