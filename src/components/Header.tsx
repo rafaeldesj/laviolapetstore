@@ -14,6 +14,7 @@ interface HeaderProps {
   onLoginClick: () => void;
   onLogout: () => void;
   styles: any;
+  windowWidth?: number;
 }
 
 const roleBadgeColors: Record<UserRole, string> = {
@@ -29,49 +30,68 @@ export const Header: React.FC<HeaderProps> = ({
   onLoginClick,
   onLogout,
   styles,
+  windowWidth = 1024,
 }) => {
   const [hoveredBtn, setHoveredBtn] = useState<string | null>(null);
   const role = user?.profile?.role;
 
+  const isMobile = windowWidth < 600;
+
   return (
     <header style={{ ...styles.siteHeader, position: 'relative' }} role="banner">
+      {/* Logo */}
       <div style={styles.siteLogo}>
         <PawPrint style={styles.logoSvg} aria-hidden="true" />
         <h1 style={styles.logoTitle}>La Viola Petshop</h1>
       </div>
 
+      {/* Auth area — compresses on mobile */}
       <div style={styles.authContainer}>
         {user ? (
           <div style={styles.userInfo}>
+            {/* Avatar */}
             <div style={{
               ...styles.userAvatar,
               backgroundColor: role ? roleBadgeColors[role] + '22' : undefined,
               color: role ? roleBadgeColors[role] : styles.primary,
               border: `1px solid ${role ? roleBadgeColors[role] + '44' : styles.borderColor}`,
             }} aria-hidden="true">
-              <User size={16} />
+              <User size={14} />
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-              <span style={styles.userName}>Olá, {user.name}</span>
-            {role && (
-                <span style={{
-                  fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.5px',
-                  color: roleBadgeColors[role], textTransform: 'uppercase',
-                }}>
-                  {roleLabels[role]}
-                  {user?.profile?.collaborator_category?.name && (
-                    <span style={{
-                      fontWeight: 500,
-                      textTransform: 'none',
-                      opacity: 0.85,
-                      letterSpacing: '0.2px',
-                    }}>
-                      {' '}({user.profile.collaborator_category.name})
-                    </span>
-                  )}
-                </span>
-              )}
-            </div>
+
+            {/* Name + role — hidden on mobile */}
+            {!isMobile && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1px', minWidth: 0 }}>
+                <span style={styles.userName}>Olá, {user.name}</span>
+                {role && (
+                  <span style={{
+                    fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.5px',
+                    color: roleBadgeColors[role], textTransform: 'uppercase',
+                    whiteSpace: 'nowrap',
+                  }}>
+                    {roleLabels[role]}
+                    {user?.profile?.collaborator_category?.name && (
+                      <span style={{ fontWeight: 500, textTransform: 'none', opacity: 0.85 }}>
+                        {' '}({user.profile.collaborator_category.name})
+                      </span>
+                    )}
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* Role badge only on mobile */}
+            {isMobile && role && (
+              <span style={{
+                fontSize: '0.6rem', fontWeight: 700, letterSpacing: '0.4px',
+                color: roleBadgeColors[role], textTransform: 'uppercase',
+                whiteSpace: 'nowrap', flexShrink: 0,
+              }}>
+                {roleLabels[role]}
+              </span>
+            )}
+
+            {/* Logout button */}
             <button
               onClick={onLogout}
               style={styles.btnLogout(hoveredBtn === 'logout')}
@@ -79,7 +99,8 @@ export const Header: React.FC<HeaderProps> = ({
               onMouseLeave={() => setHoveredBtn(null)}
               title="Sair da conta"
             >
-              <LogOut size={16} /> Sair
+              <LogOut size={14} />
+              {!isMobile && ' Sair'}
             </button>
           </div>
         ) : (
@@ -90,10 +111,12 @@ export const Header: React.FC<HeaderProps> = ({
             onMouseLeave={() => setHoveredBtn(null)}
             title="Entrar na conta"
           >
-            <LogIn size={16} /> Entrar
+            <LogIn size={16} />
+            {!isMobile && ' Entrar'}
           </button>
         )}
       </div>
+
       {/* Animacao de pets andando sobre a linha cinza */}
       <div className="header-pet-walk-container">
         <span className="header-pet-animated header-pet-dog">🐕</span>

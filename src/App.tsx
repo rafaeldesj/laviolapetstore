@@ -95,6 +95,7 @@ function App() {
           onLoginClick={() => setModalView('login')}
           onLogout={async () => { await logout(); setActiveSection('inicio'); }}
           styles={styles}
+          windowWidth={windowWidth}
         />
 
         <div style={styles.layoutGrid}>
