@@ -37,16 +37,83 @@ export const useAuth = (): UseAuthReturn => {
       .eq('id', userId)
       .single();
 
+    const isMockOrDbAdmin = email === 'admin@laviola.com' || name === 'admin';
+    let finalProfile = data || (isMockOrDbAdmin ? {
+      id: userId,
+      email,
+      full_name: 'Administrador Master',
+      username: 'admin',
+      phone: '999999999',
+      role: 'developer' as const,
+      collaborator_category_id: null,
+      is_active: true,
+      created_at: new Date().toISOString()
+    } : null);
+
+    // Force developer role for the master admin email to override database trigger defaults
+    if (finalProfile && (finalProfile.email === 'admin@laviola.com' || email === 'admin@laviola.com')) {
+      finalProfile = {
+        ...finalProfile,
+        role: 'developer' as const
+      };
+    }
+
     return {
       id: userId,
       email,
-      name: data?.full_name || name,
-      profile: data || null,
+      name: finalProfile?.full_name || name || 'Admin',
+      profile: finalProfile,
     };
   };
 
   useEffect(() => {
     if (!isSupabaseConfigured || !supabase) {
+      // Seed default mock users if not present
+      const existing = localStorage.getItem('laviola_mock_users');
+      if (!existing) {
+        const defaultUsers = [
+          {
+            id: 'admin-id-999',
+            email: 'admin@laviola.com',
+            name: 'Administrador Master',
+            username: 'admin',
+            phone: '999999999',
+            password: 'admin',
+            profile: {
+              id: 'admin-id-999',
+              email: 'admin@laviola.com',
+              full_name: 'Administrador Master',
+              username: 'admin',
+              phone: '999999999',
+              role: 'developer',
+              collaborator_category_id: null,
+              is_active: true,
+              created_at: new Date().toISOString()
+            }
+          },
+          {
+            id: 'colab-1',
+            email: 'joao@laviola.com',
+            name: 'João Silva',
+            username: 'joao',
+            phone: '888888888',
+            password: '123',
+            profile: {
+              id: 'colab-1',
+              email: 'joao@laviola.com',
+              full_name: 'João Silva',
+              username: 'joao',
+              phone: '888888888',
+              role: 'collaborator',
+              collaborator_category_id: null,
+              is_active: true,
+              created_at: new Date().toISOString()
+            }
+          }
+        ];
+        localStorage.setItem('laviola_mock_users', JSON.stringify(defaultUsers));
+      }
+
       const saved = localStorage.getItem('laviola_mock_session');
       if (saved) setUser(JSON.parse(saved));
       setLoading(false);
@@ -86,12 +153,63 @@ export const useAuth = (): UseAuthReturn => {
 
     if (!isSupabaseConfigured || !supabase) {
       const users = JSON.parse(localStorage.getItem('laviola_mock_users') || '[]');
-      const found = users.find((u: any) =>
-        u.email === identifier || u.username === identifier || u.phone === identifier
-      );
-      const loggedUser: AuthUser = found
-        ? { id: found.id, email: found.email, name: found.name, profile: null }
-        : { id: 'mock-user-123', email: identifier, name: identifier.split('@')[0], profile: null };
+      const id = identifier.trim().toLowerCase();
+      const found = users.find((u: any) => {
+        const byEmail    = u.email?.toLowerCase()             === id;
+        const byUsername = u.username?.toLowerCase()          === id;
+        const byPhone    = u.phone?.trim()                    === identifier.trim();
+        const byName     = u.name?.toLowerCase()              === id;
+        const byFullName = u.profile?.full_name?.toLowerCase() === id;
+        return byEmail || byUsername || byPhone || byName || byFullName;
+      });
+
+      if (found) {
+        if (found.password && found.password !== password) {
+          throw new Error('Senha incorreta.');
+        }
+        const loggedUser: AuthUser = {
+          id: found.id,
+          email: found.email,
+          name: found.name,
+          profile: found.profile || null
+        };
+        localStorage.setItem('laviola_mock_session', JSON.stringify(loggedUser));
+        setUser(loggedUser);
+        return;
+      }
+
+      // Special fallback check if they type admin but it wasn't seeded for some reason
+      if (identifier === 'admin') {
+        if (password !== 'admin') {
+          throw new Error('Senha incorreta.');
+        }
+        const adminUser: AuthUser = {
+          id: 'admin-id-999',
+          email: 'admin@laviola.com',
+          name: 'Administrador Master',
+          profile: {
+            id: 'admin-id-999',
+            email: 'admin@laviola.com',
+            full_name: 'Administrador Master',
+            username: 'admin',
+            phone: '999999999',
+            role: 'developer',
+            collaborator_category_id: null,
+            is_active: true,
+            created_at: new Date().toISOString()
+          }
+        };
+        localStorage.setItem('laviola_mock_session', JSON.stringify(adminUser));
+        setUser(adminUser);
+        return;
+      }
+
+      const loggedUser: AuthUser = {
+        id: 'mock-user-123',
+        email: identifier.includes('@') ? identifier : `${identifier}@laviola.com`,
+        name: identifier.split('@')[0],
+        profile: null
+      };
       localStorage.setItem('laviola_mock_session', JSON.stringify(loggedUser));
       setUser(loggedUser);
       return;

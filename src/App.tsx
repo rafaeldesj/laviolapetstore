@@ -28,7 +28,7 @@ function App() {
   const [activeSection, setActiveSection] = useState<string>('inicio');
   const [modalView, setModalView] = useState<ModalView>('none');
 
-  const { user, logout, setMockUser } = useAuth();
+  const { user, login, logout, setMockUser } = useAuth();
 
   useEffect(() => {
     const handleResize = () => setWindowWidth(window.innerWidth);
@@ -100,7 +100,7 @@ function App() {
             )}
 
             {activeSection === 'agendamentos' && user && (
-              <Agendamentos styles={styles} />
+              <Agendamentos styles={styles} currentUser={user} setActiveSection={setActiveSection} />
             )}
 
             {activeSection === 'financeiro' && user && (
@@ -155,6 +155,8 @@ function App() {
           onLoginSuccess={(u) => { setMockUser(u); setModalView('none'); }}
           onGoRegister={() => setModalView('register')}
           styles={styles}
+          login={login}
+          user={user}
         />
       )}
 

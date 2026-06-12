@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
-import { X, LogIn } from 'lucide-react';
-import { supabase, isSupabaseConfigured, lookupEmailByIdentifier } from '../supabaseClient';
+import { X, LogIn, Eye, EyeOff } from 'lucide-react';
 import type { AuthUser } from '../hooks/useAuth';
 
 interface LoginModalProps {
@@ -8,6 +7,9 @@ interface LoginModalProps {
   onLoginSuccess: (user: AuthUser) => void;
   onGoRegister: () => void;
   styles: any;
+  /** login function from useAuth – handles both Supabase and mock paths */
+  login: (identifier: string, password: string) => Promise<void>;
+  user: AuthUser | null;
 }
 
 export const LoginModal: React.FC<LoginModalProps> = ({
@@ -15,9 +17,12 @@ export const LoginModal: React.FC<LoginModalProps> = ({
   onLoginSuccess,
   onGoRegister,
   styles,
+  login,
+  user,
 }) => {
   const [identifier, setIdentifier] = useState<string>('');
   const [password, setPassword] = useState<string>('');
+  const [showPassword, setShowPassword] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [hoveredClose, setHoveredClose] = useState<boolean>(false);
@@ -32,46 +37,24 @@ export const LoginModal: React.FC<LoginModalProps> = ({
     }
     setIsLoading(true);
     try {
-      if (isSupabaseConfigured && supabase) {
-        const email = await lookupEmailByIdentifier(identifier.trim());
-        if (!email) {
-          setErrorMsg('Nenhum usuário encontrado com esse e-mail, username ou celular.');
-          setIsLoading(false);
-          return;
-        }
-        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) throw error;
-        if (data.user) {
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('*, collaborator_category:collaborator_categories(id, name, description, is_active)')
-            .eq('id', data.user.id)
-            .single();
-          onLoginSuccess({
-            id: data.user.id,
-            email: data.user.email || email,
-            name: profile?.full_name || email.split('@')[0],
-            profile: profile || null,
-          });
-          onClose();
-        }
-      } else {
-        const users = JSON.parse(localStorage.getItem('laviola_mock_users') || '[]');
-        const found = users.find((u: any) =>
-          u.email === identifier || u.username === identifier || u.phone === identifier
-        );
-        const mockUser: AuthUser = found
-          ? { id: found.id, email: found.email, name: found.name, profile: null }
-          : { id: 'mock-user-123', email: identifier, name: identifier.split('@')[0], profile: null };
-        onLoginSuccess(mockUser);
-        onClose();
-      }
+      await login(identifier.trim(), password);
+      // After login, useAuth updates `user`. We read that via the prop after state settles.
+      // onLoginSuccess will be called by the parent once user changes.
     } catch (err: any) {
       setErrorMsg(err.message || 'Erro ao fazer login. Verifique seus dados.');
     } finally {
       setIsLoading(false);
     }
   };
+
+  // When the parent detects user changed (logged in), it can close this modal.
+  // We trigger onLoginSuccess + onClose when user is set after login.
+  React.useEffect(() => {
+    if (user) {
+      onLoginSuccess(user);
+      onClose();
+    }
+  }, [user]);
 
   return (
     <div style={styles.modalOverlay}>
@@ -90,7 +73,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
         </div>
 
         {errorMsg && (
-          <p style={{ color: 'red', fontSize: '0.9rem', margin: '0' }}>{errorMsg}</p>
+          <p style={{ color: 'hsl(0,75%,55%)', fontSize: '0.9rem', margin: '0', padding: '8px 12px', backgroundColor: 'hsl(0,75%,55%,0.08)', borderRadius: '6px', border: '1px solid hsl(0,75%,55%,0.25)' }}>{errorMsg}</p>
         )}
 
         <form onSubmit={handleSubmit} style={styles.modalForm}>
@@ -112,16 +95,37 @@ export const LoginModal: React.FC<LoginModalProps> = ({
 
           <div style={styles.formGroup}>
             <label htmlFor="login-password" style={styles.formLabel}>Senha</label>
-            <input
-              id="login-password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              style={styles.formInput}
-              placeholder="Sua senha"
-              disabled={isLoading}
-              autoComplete="current-password"
-            />
+            <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+              <input
+                id="login-password"
+                type={showPassword ? 'text' : 'password'}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                style={{ ...styles.formInput, width: '100%', paddingRight: '40px' }}
+                placeholder="Sua senha"
+                disabled={isLoading}
+                autoComplete="current-password"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                style={{
+                  position: 'absolute',
+                  right: '10px',
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  color: styles.sidebarWidgetText?.color || '#999',
+                  display: 'flex',
+                  alignItems: 'center',
+                  padding: 0
+                }}
+                title={showPassword ? 'Esconder senha' : 'Mostrar senha'}
+                aria-label={showPassword ? 'Esconder senha' : 'Mostrar senha'}
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
           </div>
 
           <button

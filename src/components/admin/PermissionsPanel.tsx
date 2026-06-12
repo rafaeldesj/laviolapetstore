@@ -33,8 +33,24 @@ export const PermissionsPanel: React.FC<PermissionsPanelProps> = ({
   }, [targetUser.id]);
 
   const fetchData = async () => {
-    if (!supabase) return;
     setIsLoading(true);
+    if (!supabase) {
+      const mockKeys = [
+        { key: 'manage_users', label: 'Gerenciar Usuários', description: 'Permite ativar/desativar e editar permissões de usuários.', module: 'Administração' },
+        { key: 'view_financial', label: 'Visualizar Financeiro', description: 'Acesso ao caixa e relatórios financeiros.', module: 'Financeiro' },
+        { key: 'manage_stock', label: 'Gerenciar Estoque', description: 'Adicionar, editar e remover produtos.', module: 'Estoque' },
+        { key: 'veterinary_records', label: 'Prontuários Veterinários', description: 'Criar e editar prontuários médicos de animais.', module: 'Clínica' },
+      ];
+      setAllPermissions(mockKeys);
+      
+      const savedPerms = JSON.parse(localStorage.getItem(`laviola_mock_perms_${targetUser.id}`) || '{}');
+      setUserPermissions(savedPerms);
+      
+      const modules = new Set(mockKeys.map(k => k.module));
+      setExpandedModules(modules);
+      setIsLoading(false);
+      return;
+    }
     const [{ data: keys }, { data: perms }] = await Promise.all([
       supabase.from('permission_keys').select('*').order('module'),
       supabase.from('user_permissions').select('*').eq('user_id', targetUser.id),
@@ -53,10 +69,17 @@ export const PermissionsPanel: React.FC<PermissionsPanelProps> = ({
   };
 
   const togglePermission = async (key: string, currentValue: boolean) => {
-    if (!supabase) return;
     setErrorMsg(null);
     setIsSaving(key);
     const newValue = !currentValue;
+    if (!supabase) {
+      const savedPerms = JSON.parse(localStorage.getItem(`laviola_mock_perms_${targetUser.id}`) || '{}');
+      savedPerms[key] = newValue;
+      localStorage.setItem(`laviola_mock_perms_${targetUser.id}`, JSON.stringify(savedPerms));
+      setUserPermissions(prev => ({ ...prev, [key]: newValue }));
+      setIsSaving(null);
+      return;
+    }
     try {
       const { error } = await supabase
         .from('user_permissions')

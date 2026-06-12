@@ -463,6 +463,7 @@ export const getStyles = (highContrast, fontSize, isDesktop, windowWidth) => {
       fontFamily: "'Outfit', sans-serif",
       fontSize: '0.95rem',
       outline: 'none',
+      boxSizing: 'border-box',
       transition: 'border-color 0.3s ease'
     },
     formSubmitBtn: (isHovered) => ({

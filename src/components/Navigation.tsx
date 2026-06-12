@@ -38,7 +38,7 @@ export const Navigation: React.FC<NavigationProps> = ({ styles, activeSection, s
     { id: 'estoque',    label: 'Estoque / Produtos',       icon: <Package size={16} />,       requiresLogin: true },
     { id: 'prontuario', label: 'Prontuário Vet.',          icon: <ClipboardList size={16} />, requiresLogin: true },
     { id: 'relatorios', label: 'Relatórios',               icon: <BarChart3 size={16} />,     requiresLogin: true },
-    { id: 'usuarios',   label: 'Gestão de Usuários',       icon: <Users size={16} />,         requiresLogin: true, requiresManager: true },
+    { id: 'usuarios',   label: 'Usuários',                 icon: <Users size={16} />,         requiresLogin: true, requiresManager: true },
     { id: 'sobre',      label: 'Sobre Nós',                icon: <Info size={16} />,          requiresLogin: false },
     { id: 'contato',    label: 'Contato',                  icon: <Phone size={16} />,         requiresLogin: false },
   ];

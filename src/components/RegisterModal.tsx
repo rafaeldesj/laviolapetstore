@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, UserPlus, Mail } from 'lucide-react';
+import { X, UserPlus, Mail, Eye, EyeOff } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '../supabaseClient';
 import type { AuthUser } from '../hooks/useAuth';
 
@@ -24,6 +24,7 @@ export const RegisterModal: React.FC<RegisterModalProps> = ({
   const [username, setUsername] = useState<string>('');
   const [phone, setPhone] = useState<string>('');
   const [password, setPassword] = useState<string>('');
+  const [showPassword, setShowPassword] = useState<boolean>(false);
   const [otpCode, setOtpCode] = useState<string>('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -53,7 +54,7 @@ export const RegisterModal: React.FC<RegisterModalProps> = ({
     setIsLoading(true);
     try {
       if (isSupabaseConfigured && supabase) {
-        const { error } = await supabase.auth.signUp({
+        const { data, error } = await supabase.auth.signUp({
           email: email.trim(),
           password,
           options: {
@@ -65,16 +66,56 @@ export const RegisterModal: React.FC<RegisterModalProps> = ({
           },
         });
         if (error) throw error;
-        setStep('otp');
+
+        if (data.session && data.user) {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('*, collaborator_category:collaborator_categories(id, name, description, is_active)')
+            .eq('id', data.user.id)
+            .single();
+          
+          onRegisterSuccess({
+            id: data.user.id,
+            email: data.user.email || email,
+            name: profile?.full_name || fullName,
+            profile: profile || null,
+          });
+          onClose();
+        } else {
+          setErrorMsg('Cadastro realizado! Faça login com seus dados.');
+          setTimeout(() => {
+            onGoLogin();
+          }, 2000);
+        }
       } else {
-        const users = JSON.parse(localStorage.getItem('laviola_mock_users') || '[]');
+        const newId = Math.random().toString(36).substring(2, 9);
+        const newProfile = {
+          id: newId,
+          email: email.trim(),
+          full_name: fullName.trim(),
+          username: username.trim(),
+          phone: phone.trim(),
+          role: 'collaborator' as const,
+          collaborator_category_id: null,
+          is_active: true,
+          created_at: new Date().toISOString(),
+        };
         const newUser: AuthUser = {
-          id: Math.random().toString(36).substring(2, 9),
+          id: newId,
           email: email.trim(),
           name: fullName.trim(),
-          profile: null,
+          profile: newProfile,
         };
-        users.push({ ...newUser, username: username.trim(), phone: phone.trim() });
+        const users = JSON.parse(localStorage.getItem('laviola_mock_users') || '[]');
+        users.push({
+          id: newId,
+          email: email.trim(),
+          name: fullName.trim(),
+          username: username.trim(),
+          phone: phone.trim(),
+          password: password,       // ← senha salva
+          profile: newProfile,
+        });
         localStorage.setItem('laviola_mock_users', JSON.stringify(users));
         onRegisterSuccess(newUser);
         onClose();
@@ -176,8 +217,37 @@ export const RegisterModal: React.FC<RegisterModalProps> = ({
 
             <div style={styles.formGroup}>
               <label htmlFor="reg-password" style={styles.formLabel}>Senha *</label>
-              <input id="reg-password" type="password" value={password} onChange={(e) => setPassword(e.target.value)}
-                style={styles.formInput} placeholder="Mínimo 6 caracteres" disabled={isLoading} autoComplete="new-password" />
+              <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                <input
+                  id="reg-password"
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  style={{ ...styles.formInput, width: '100%', paddingRight: '40px' }}
+                  placeholder="Mínimo 6 caracteres"
+                  disabled={isLoading}
+                  autoComplete="new-password"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  style={{
+                    position: 'absolute',
+                    right: '10px',
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    color: styles.sidebarWidgetText?.color || '#999',
+                    display: 'flex',
+                    alignItems: 'center',
+                    padding: 0
+                  }}
+                  title={showPassword ? 'Esconder senha' : 'Mostrar senha'}
+                  aria-label={showPassword ? 'Esconder senha' : 'Mostrar senha'}
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
             </div>
 
             <button type="submit" disabled={isLoading}

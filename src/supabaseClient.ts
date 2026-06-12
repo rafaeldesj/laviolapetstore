@@ -80,6 +80,7 @@ export const hasPermission = async (userId: string, permissionKey: string): Prom
 };
 
 export const lookupEmailByIdentifier = async (identifier: string): Promise<string | null> => {
+  if (identifier.toLowerCase() === 'admin') return 'admin@laviola.com';
   if (!supabase) return identifier;
   const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(identifier);
   if (isEmail) return identifier;
@@ -112,6 +113,30 @@ interface MockPet {
   created_at: string;
 }
 
+export interface Appointment {
+  id: string;
+  pet_id: string;
+  pet_name: string;
+  owner_id: string;
+  service_type: string;
+  scheduled_at: string;
+  status: 'Agendado' | 'Em Andamento' | 'Concluído' | 'Cancelado';
+  notes: string;
+  created_at: string;
+}
+
+export interface MockAppointment {
+  id: string;
+  pet_id: string;
+  pet_name: string;
+  owner_id: string;
+  service_type: string;
+  scheduled_at: string;
+  status: 'Agendado' | 'Em Andamento' | 'Concluído' | 'Cancelado';
+  notes: string;
+  created_at: string;
+}
+
 const getLocalPets = (): MockPet[] => {
   const data = localStorage.getItem('laviola_pets');
   return data ? JSON.parse(data) : [];
@@ -121,10 +146,23 @@ const saveLocalPets = (pets: MockPet[]) => {
   localStorage.setItem('laviola_pets', JSON.stringify(pets));
 };
 
+const getLocalAppointments = (): MockAppointment[] => {
+  const data = localStorage.getItem('laviola_appointments');
+  return data ? JSON.parse(data) : [];
+};
+
+const saveLocalAppointments = (appointments: MockAppointment[]) => {
+  localStorage.setItem('laviola_appointments', JSON.stringify(appointments));
+};
+
 export const mockSupabaseDb = {
   getPets: async (userId: string) => {
     const pets = getLocalPets();
     return { data: pets.filter(p => p.owner_id === userId), error: null };
+  },
+  getAllPets: async () => {
+    const pets = getLocalPets();
+    return { data: pets, error: null };
   },
   addPet: async (pet: Omit<MockPet, 'id' | 'created_at' | 'owner_id'>, userId: string) => {
     const pets = getLocalPets();
@@ -150,6 +188,38 @@ export const mockSupabaseDb = {
     const pets = getLocalPets();
     const filtered = pets.filter(p => p.id !== id);
     saveLocalPets(filtered);
+    return { error: null };
+  },
+  getAppointments: async (userId: string, isStaff: boolean) => {
+    const appointments = getLocalAppointments();
+    if (isStaff) {
+      return { data: appointments, error: null };
+    }
+    return { data: appointments.filter(a => a.owner_id === userId), error: null };
+  },
+  addAppointment: async (appointment: Omit<MockAppointment, 'id' | 'created_at'>) => {
+    const appointments = getLocalAppointments();
+    const newAppointment: MockAppointment = {
+      ...appointment,
+      id: Math.random().toString(36).substring(2, 9),
+      created_at: new Date().toISOString(),
+    };
+    appointments.push(newAppointment);
+    saveLocalAppointments(appointments);
+    return { data: newAppointment, error: null };
+  },
+  updateAppointment: async (id: string, updates: Partial<Omit<MockAppointment, 'id' | 'owner_id' | 'created_at'>>) => {
+    const appointments = getLocalAppointments();
+    const index = appointments.findIndex(a => a.id === id);
+    if (index === -1) return { data: null, error: new Error('Appointment not found') };
+    appointments[index] = { ...appointments[index], ...updates };
+    saveLocalAppointments(appointments);
+    return { data: appointments[index], error: null };
+  },
+  deleteAppointment: async (id: string) => {
+    const appointments = getLocalAppointments();
+    const filtered = appointments.filter(a => a.id !== id);
+    saveLocalAppointments(filtered);
     return { error: null };
   },
 };
