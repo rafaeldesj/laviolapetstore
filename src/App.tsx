@@ -131,7 +131,7 @@ function App() {
               <Pagamentos styles={styles} currentUser={user} />
             )}
 
-            {activeSection === 'financeiro' && user && userRole !== 'client' && (
+            {activeSection === 'financeiro' && user && isManager && (
               <Financeiro styles={styles} />
             )}
 
