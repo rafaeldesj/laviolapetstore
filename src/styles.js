@@ -45,8 +45,10 @@ export const getStyles = (highContrast, fontSize, isDesktop, windowWidth) => {
       minHeight: '100vh',
       display: 'flex',
       flexDirection: 'column',
+      maxWidth: '1600px',
+      margin: '0 auto',
       width: '100%',
-      padding: windowWidth < 768 ? '0 10px' : windowWidth < 1200 ? '0 20px' : '0 40px',
+      padding: windowWidth < 768 ? '0 10px' : windowWidth < 1200 ? '0 28px' : '0 48px',
       boxSizing: 'border-box',
     },
     layoutGrid: {
