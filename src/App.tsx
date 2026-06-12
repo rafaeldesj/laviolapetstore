@@ -15,6 +15,7 @@ import { Financeiro } from './components/Financeiro';
 import { Estoque } from './components/Estoque';
 import { Prontuario } from './components/Prontuario';
 import { Relatorios } from './components/Relatorios';
+import { Pagamentos } from './components/Pagamentos';
 import { UserManagement } from './components/admin/UserManagement';
 import { Registros } from './components/admin/Registros';
 import { Configuracoes } from './components/admin/Configuracoes';
@@ -59,7 +60,7 @@ function App() {
   }, [styles.bodyStyle]);
 
   useEffect(() => {
-    const isPrivate = ['pets', 'agendamentos', 'financeiro', 'estoque', 'prontuario', 'relatorios', 'usuarios', 'registros', 'configuracoes'].includes(activeSection);
+    const isPrivate = ['pets', 'agendamentos', 'financeiro', 'estoque', 'prontuario', 'relatorios', 'pagamentos', 'usuarios', 'registros', 'configuracoes'].includes(activeSection);
     const requiresMgmt = ['usuarios', 'registros'].includes(activeSection);
     const requiresOwnerDev = ['configuracoes'].includes(activeSection);
     const requiresStock = activeSection === 'estoque';
@@ -126,7 +127,11 @@ function App() {
               <Agendamentos styles={styles} currentUser={user} setActiveSection={setActiveSection} />
             )}
 
-            {activeSection === 'financeiro' && user && (
+            {activeSection === 'pagamentos' && user && userRole === 'client' && (
+              <Pagamentos styles={styles} currentUser={user} />
+            )}
+
+            {activeSection === 'financeiro' && user && userRole !== 'client' && (
               <Financeiro styles={styles} />
             )}
 
