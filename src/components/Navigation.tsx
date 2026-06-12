@@ -33,7 +33,8 @@ export const Navigation: React.FC<NavigationProps> = ({ styles, activeSection, s
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const isDesktop = styles.layoutGrid?.gridTemplateColumns?.includes('200px') ||
-    styles.layoutGrid?.gridTemplateColumns?.includes('220px');
+    styles.layoutGrid?.gridTemplateColumns?.includes('220px') ||
+    styles.layoutGrid?.gridTemplateColumns?.includes('264px');
   const primary = styles.primary || 'hsl(210, 85%, 45%)';
 
   const isManager = userRole ? roleHierarchy[userRole] >= roleHierarchy['manager'] : false;

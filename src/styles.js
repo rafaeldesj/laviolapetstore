@@ -53,7 +53,7 @@ export const getStyles = (highContrast, fontSize, isDesktop, windowWidth) => {
     },
     layoutGrid: {
       display: 'grid',
-      gridTemplateColumns: windowWidth >= 1200 ? '220px 1fr 280px'
+      gridTemplateColumns: windowWidth >= 1200 ? '264px 1fr 280px'
         : windowWidth >= 768 ? '200px 1fr'
         : '1fr',
       gap: windowWidth < 768 ? '12px' : '24px',
