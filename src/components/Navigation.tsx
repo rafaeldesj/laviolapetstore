@@ -34,7 +34,6 @@ export const Navigation: React.FC<NavigationProps> = ({ styles, activeSection, s
 
   const isDesktop = styles.layoutGrid?.gridTemplateColumns?.includes('240px');
   const primary = styles.primary || 'hsl(210, 85%, 45%)';
-  const secondary = styles.secondary || 'hsl(36, 95%, 55%)';
 
   const isManager = userRole ? roleHierarchy[userRole] >= roleHierarchy['manager'] : false;
   const isStaff = userRole ? roleHierarchy[userRole] >= roleHierarchy['collaborator'] : false;
@@ -142,9 +141,7 @@ export const Navigation: React.FC<NavigationProps> = ({ styles, activeSection, s
   }
 
   // Mobile: hamburger menu
-  const activeLabel = visibleItems.find(i => i.activeSection === activeSection)?.label
-    || visibleItems.find(i => i.id === activeSection)?.label
-    || 'Menu';
+  const activeLabel = visibleItems.find(i => i.id === activeSection)?.label || 'Menu';
 
   return (
     <>
