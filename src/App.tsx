@@ -19,6 +19,7 @@ import { Pagamentos } from './components/Pagamentos';
 import { UserManagement } from './components/admin/UserManagement';
 import { Registros } from './components/admin/Registros';
 import { Configuracoes } from './components/admin/Configuracoes';
+import { VendaAvulsa } from './components/VendaAvulsa';
 import { useAuth } from './hooks/useAuth';
 import { roleHierarchy } from './supabaseClient';
 import { getStyles } from './styles';
@@ -60,7 +61,7 @@ function App() {
   }, [styles.bodyStyle]);
 
   useEffect(() => {
-    const isPrivate = ['pets', 'agendamentos', 'financeiro', 'estoque', 'prontuario', 'relatorios', 'pagamentos', 'usuarios', 'registros', 'configuracoes'].includes(activeSection);
+    const isPrivate = ['venda-avulsa', 'pets', 'agendamentos', 'financeiro', 'estoque', 'prontuario', 'relatorios', 'pagamentos', 'usuarios', 'registros', 'configuracoes'].includes(activeSection);
     const requiresMgmt = ['usuarios', 'registros'].includes(activeSection);
     const requiresOwnerDev = ['configuracoes'].includes(activeSection);
     const requiresStock = activeSection === 'estoque';
@@ -117,6 +118,10 @@ function App() {
 
             {activeSection === 'promocoes' && (
               <Promotions styles={styles} />
+            )}
+
+            {activeSection === 'venda-avulsa' && user && (
+              <VendaAvulsa styles={styles} currentUser={user} />
             )}
 
             {activeSection === 'pets' && user && (
