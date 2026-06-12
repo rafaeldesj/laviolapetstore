@@ -238,21 +238,37 @@ export const Estoque: React.FC<EstoqueProps> = ({ styles }) => {
               .pet-animated {
                 position: absolute;
                 bottom: 0px;
+                left: -50px;
                 font-size: 1.15rem;
                 white-space: nowrap;
                 line-height: 1;
               }
               .pet-dog {
-                animation: pet-walk-ltr 15s linear infinite;
+                animation-name: pet-walk-ltr;
+                animation-duration: 15s;
+                animation-timing-function: linear;
+                animation-iteration-count: infinite;
               }
               .pet-cat {
-                animation: pet-walk-rtl 20s linear infinite 3s;
+                animation-name: pet-walk-rtl;
+                animation-duration: 20s;
+                animation-timing-function: linear;
+                animation-delay: 3s;
+                animation-iteration-count: infinite;
               }
               .pet-rabbit {
-                animation: pet-walk-ltr-hop 18s linear infinite 6s;
+                animation-name: pet-walk-ltr-hop;
+                animation-duration: 18s;
+                animation-timing-function: linear;
+                animation-delay: 6s;
+                animation-iteration-count: infinite;
               }
               .pet-bird {
-                animation: pet-walk-rtl-fly 10s linear infinite 1s;
+                animation-name: pet-walk-rtl-fly;
+                animation-duration: 10s;
+                animation-timing-function: linear;
+                animation-delay: 1s;
+                animation-iteration-count: infinite;
               }
 
               @keyframes pet-walk-ltr {
