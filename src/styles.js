@@ -47,37 +47,40 @@ export const getStyles = (highContrast, fontSize, isDesktop, windowWidth) => {
       flexDirection: 'column',
       maxWidth: '1400px',
       margin: '0 auto',
-      padding: '0 20px',
-      width: '100%'
+      padding: windowWidth < 768 ? '0 12px' : '0 20px',
+      width: '100%',
+      boxSizing: 'border-box',
     },
     layoutGrid: {
       display: 'grid',
       gridTemplateColumns: isDesktop ? '240px 1fr 300px' : '1fr',
-      gap: '30px',
-      margin: '30px 0',
+      gap: isDesktop ? '30px' : '16px',
+      margin: isDesktop ? '30px 0' : '16px 0',
       flexGrow: 1
     },
     siteHeader: {
       display: 'flex',
-      flexDirection: headerIsRow ? 'row' : 'column',
+      flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      padding: '24px 0',
+      padding: windowWidth < 768 ? '14px 0' : '24px 0',
       borderBottom: `2px solid ${borderColor}`,
-      gap: '20px'
+      gap: '12px',
+      flexWrap: 'wrap' as const,
+      position: 'relative' as const,
     },
     siteLogo: {
       display: 'flex',
       alignItems: 'center',
-      gap: '12px'
+      gap: '10px'
     },
     logoSvg: {
       color: primary,
-      width: '44px',
-      height: '44px'
+      width: windowWidth < 768 ? '32px' : '44px',
+      height: windowWidth < 768 ? '32px' : '44px'
     },
     logoTitle: {
-      fontSize: '1.8rem',
+      fontSize: windowWidth < 768 ? '1.3rem' : '1.8rem',
       fontWeight: 800,
       color: primary,
       letterSpacing: '-0.5px'
@@ -138,21 +141,23 @@ export const getStyles = (highContrast, fontSize, isDesktop, windowWidth) => {
     mainContent: {
       display: 'flex',
       flexDirection: 'column',
-      gap: '40px'
+      gap: windowWidth < 768 ? '16px' : '40px',
+      minWidth: 0,
     },
     contentSection: {
       backgroundColor: cardBg,
-      padding: '30px',
+      padding: windowWidth < 768 ? '16px 14px' : '30px',
       borderRadius: '12px',
       border: `1px solid ${borderColor}`,
-      boxShadow: shadow
+      boxShadow: shadow,
+      overflowX: 'hidden' as const,
     },
     sectionTitle: {
-      fontSize: '1.6rem',
+      fontSize: windowWidth < 768 ? '1.25rem' : '1.6rem',
       fontWeight: 700,
       color: primary,
       position: 'relative',
-      marginBottom: '20px'
+      marginBottom: '16px'
     },
     sectionTitleBar: {
       width: '50px',
@@ -214,7 +219,7 @@ export const getStyles = (highContrast, fontSize, isDesktop, windowWidth) => {
       transition: 'all 0.3s ease'
     }),
     complementarySidebar: {
-      display: 'flex',
+      display: isDesktop ? 'flex' : 'none',
       flexDirection: 'column',
       gap: '24px'
     },
@@ -353,17 +358,24 @@ export const getStyles = (highContrast, fontSize, isDesktop, windowWidth) => {
     authContainer: {
       display: 'flex',
       alignItems: 'center',
-      gap: '16px'
+      gap: windowWidth < 768 ? '8px' : '16px',
+      flexShrink: 0,
     },
     userInfo: {
       display: 'flex',
       alignItems: 'center',
-      gap: '8px'
+      gap: '8px',
+      maxWidth: windowWidth < 480 ? '120px' : 'none',
+      overflow: 'hidden',
     },
     userName: {
       fontWeight: 600,
       color: textMain,
-      fontSize: '0.95rem'
+      fontSize: windowWidth < 480 ? '0.8rem' : '0.95rem',
+      whiteSpace: 'nowrap' as const,
+      overflow: 'hidden',
+      textOverflow: 'ellipsis',
+      maxWidth: windowWidth < 480 ? '80px' : '160px',
     },
     userAvatar: {
       width: '32px',
@@ -380,7 +392,7 @@ export const getStyles = (highContrast, fontSize, isDesktop, windowWidth) => {
       backgroundColor: isHovered ? 'hsl(0, 75%, 50%)' : 'transparent',
       border: `1px solid ${isHovered ? 'hsl(0, 75%, 50%)' : 'hsl(0, 75%, 60%)'}`,
       color: isHovered ? '#ffffff' : 'hsl(0, 75%, 60%)',
-      padding: '8px 16px',
+      padding: windowWidth < 480 ? '6px 10px' : '8px 16px',
       borderRadius: '8px',
       fontFamily: "'Outfit', sans-serif",
       fontWeight: 600,
@@ -388,7 +400,9 @@ export const getStyles = (highContrast, fontSize, isDesktop, windowWidth) => {
       display: 'flex',
       alignItems: 'center',
       gap: '6px',
-      transition: 'all 0.3s ease'
+      transition: 'all 0.3s ease',
+      fontSize: windowWidth < 480 ? '0.8rem' : '1rem',
+      whiteSpace: 'nowrap' as const,
     }),
     modalOverlay: {
       position: 'fixed',
