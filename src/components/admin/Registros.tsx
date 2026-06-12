@@ -262,13 +262,12 @@ export const Registros: React.FC<RegistrosProps> = ({ styles }) => {
                       {log.action}
                     </span>
                     <span style={{
-                      fontSize: '0.68rem',
+                      fontSize: '0.65rem',
                       padding: '2px 6px',
                       borderRadius: '4px',
                       backgroundColor: isLocalLog ? 'rgba(100, 100, 100, 0.08)' : 'rgba(54, 162, 235, 0.08)',
                       color: isLocalLog ? styles.sidebarWidgetText?.color : 'hsl(210, 85%, 45%)',
                       border: `1px solid ${isLocalLog ? styles.borderColor : 'rgba(54, 162, 235, 0.2)'}`,
-                      fontSize: '0.65rem',
                       fontWeight: 600,
                     }}>
                       {isLocalLog ? 'MOCK LOCAL' : 'BD SUPABASE'}

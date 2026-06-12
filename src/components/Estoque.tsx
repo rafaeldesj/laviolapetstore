@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Package, AlertTriangle, PlusCircle, Search, Filter, Trash2, Edit, Save, X, AlertCircle, ShoppingBag, DollarSign } from 'lucide-react';
+import { Package, AlertTriangle, PlusCircle, Search, Filter, Trash2, Edit, Save, AlertCircle, ShoppingBag } from 'lucide-react';
 import { supabase, mockSupabaseDb, isSupabaseConfigured, logAction } from '../supabaseClient';
 import type { Product } from '../supabaseClient';
 import { useAuth } from '../hooks/useAuth';
