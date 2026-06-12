@@ -104,8 +104,28 @@ export const useAuth = (): UseAuthReturn => {
               full_name: 'João Silva',
               username: 'joao',
               phone: '888888888',
-              role: 'collaborator',
+              role: 'client',
               collaborator_category_id: null,
+              is_active: true,
+              created_at: new Date().toISOString()
+            }
+          },
+          {
+            id: 'stock-1',
+            email: 'estoque@laviola.com',
+            name: 'Carlos Estoque',
+            username: 'estoque',
+            phone: '777777777',
+            password: '123',
+            profile: {
+              id: 'stock-1',
+              email: 'estoque@laviola.com',
+              full_name: 'Carlos Estoque',
+              username: 'estoque',
+              phone: '777777777',
+              role: 'collaborator',
+              collaborator_category_id: 'cat-estoquista',
+              collaborator_category: { id: 'cat-estoquista', name: 'Estoquista', description: '', is_active: true },
               is_active: true,
               created_at: new Date().toISOString()
             }
@@ -154,13 +174,15 @@ export const useAuth = (): UseAuthReturn => {
     if (!isSupabaseConfigured || !supabase) {
       const users = JSON.parse(localStorage.getItem('laviola_mock_users') || '[]');
       const id = identifier.trim().toLowerCase();
+      const digitsOnly = id.replace(/\D/g, '');
       const found = users.find((u: any) => {
-        const byEmail    = u.email?.toLowerCase()             === id;
-        const byUsername = u.username?.toLowerCase()          === id;
-        const byPhone    = u.phone?.trim()                    === identifier.trim();
-        const byName     = u.name?.toLowerCase()              === id;
-        const byFullName = u.profile?.full_name?.toLowerCase() === id;
-        return byEmail || byUsername || byPhone || byName || byFullName;
+        const byEmail      = u.email?.toLowerCase() === id;
+        const byEmailPref  = u.email?.toLowerCase().split('@')[0] === id;
+        const byUsername   = u.username?.toLowerCase() === id;
+        const byPhone      = u.phone?.trim() === identifier.trim() || (digitsOnly && u.phone?.replace(/\D/g, '').includes(digitsOnly));
+        const byName       = u.name?.toLowerCase() === id;
+        const byFullName   = u.profile?.full_name?.toLowerCase() === id;
+        return byEmail || byEmailPref || byUsername || byPhone || byName || byFullName;
       });
 
       if (found) {

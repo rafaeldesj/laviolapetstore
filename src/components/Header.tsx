@@ -4,7 +4,13 @@ import type { UserRole } from '../supabaseClient';
 import { roleLabels } from '../supabaseClient';
 
 interface HeaderProps {
-  user: { name: string; profile?: { role: UserRole } | null } | null;
+  user: {
+    name: string;
+    profile?: {
+      role: UserRole;
+      collaborator_category?: { name: string } | null;
+    } | null;
+  } | null;
   onLoginClick: () => void;
   onLogout: () => void;
   styles: any;
@@ -15,6 +21,7 @@ const roleBadgeColors: Record<UserRole, string> = {
   owner: 'hsl(36, 95%, 50%)',
   manager: 'hsl(210, 85%, 45%)',
   collaborator: 'hsl(142, 60%, 45%)',
+  client: 'hsl(220, 15%, 55%)',
 };
 
 export const Header: React.FC<HeaderProps> = ({
@@ -46,12 +53,22 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
               <span style={styles.userName}>Olá, {user.name}</span>
-              {role && (
+            {role && (
                 <span style={{
                   fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.5px',
                   color: roleBadgeColors[role], textTransform: 'uppercase',
                 }}>
                   {roleLabels[role]}
+                  {user?.profile?.collaborator_category?.name && (
+                    <span style={{
+                      fontWeight: 500,
+                      textTransform: 'none',
+                      opacity: 0.85,
+                      letterSpacing: '0.2px',
+                    }}>
+                      {' '}({user.profile.collaborator_category.name})
+                    </span>
+                  )}
                 </span>
               )}
             </div>

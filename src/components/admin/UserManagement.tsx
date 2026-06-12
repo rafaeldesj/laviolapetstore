@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Users, Shield, UserCheck, UserX, Search, Edit, Phone, Save, X, ChevronDown, PlusCircle } from 'lucide-react';
+import { Users, Shield, UserCheck, UserX, Trash2, Search, Edit, Phone, Save, X, ChevronDown, PlusCircle } from 'lucide-react';
 import type { UserProfile, UserRole } from '../../supabaseClient';
-import { supabase, roleLabels, canManage, roleHierarchy, isSupabaseConfigured } from '../../supabaseClient';
+import { supabase, roleLabels, canManage, roleHierarchy, isSupabaseConfigured, logAction } from '../../supabaseClient';
 import { PermissionsPanel } from './PermissionsPanel';
 import type { AuthUser } from '../../hooks/useAuth';
 
@@ -15,6 +15,7 @@ const roleBadgeColors: Record<UserRole, string> = {
   owner: 'hsl(36, 95%, 50%)',
   manager: 'hsl(210, 85%, 45%)',
   collaborator: 'hsl(142, 60%, 45%)',
+  client: 'hsl(220, 15%, 55%)',
 };
 
 export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, styles }) => {
@@ -24,12 +25,14 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
 
   const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<UserProfile | null>(null);
 
   // Inline edit form state
   const [editFullName, setEditFullName] = useState<string>('');
   const [editUsername, setEditUsername] = useState<string>('');
   const [editPhone, setEditPhone] = useState<string>('');
   const [editRole, setEditRole] = useState<UserRole>('collaborator');
+  const [editSpecialty, setEditSpecialty] = useState<string>('');
   const [isSaving, setIsSaving] = useState(false);
 
   // Create user form state
@@ -39,8 +42,22 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
   const [newUsername, setNewUsername] = useState<string>('');
   const [newPhone, setNewPhone] = useState<string>('');
   const [newPassword, setNewPassword] = useState<string>('');
-  const [newRole, setNewRole] = useState<UserRole>('collaborator');
+  const [newRole, setNewRole] = useState<UserRole>('client');
+  const [newSpecialty, setNewSpecialty] = useState<string>('');
   const [hoveredBtn, setHoveredBtn] = useState<string | null>(null);
+
+  // Available specialties
+  const defaultSpecialties = [
+    'Estoquista',
+    'Tosador(a) / Banhista',
+    'Atendente / Recepcionista',
+    'Auxiliar Veterinário',
+    'Veterinário(a)',
+    'Financeiro',
+    'Marketing',
+    'Outros',
+  ];
+  const [specialties, setSpecialties] = useState<string[]>(defaultSpecialties);
 
   // Filters
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -66,6 +83,15 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
           .order('full_name');
         if (error) throw error;
         setUsers(data || []);
+        // Load categories from Supabase
+        const { data: cats } = await supabase
+          .from('collaborator_categories')
+          .select('name')
+          .eq('is_active', true)
+          .order('name');
+        if (cats && cats.length > 0) {
+          setSpecialties(cats.map((c: any) => c.name));
+        }
       }
     } catch (err: any) {
       setErrorMsg(err.message || 'Erro ao carregar usuários.');
@@ -79,6 +105,10 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
   }, [fetchUsers]);
 
   const toggleActive = async (user: UserProfile) => {
+    if (user.id === currentUser.id) {
+      setErrorMsg('Você não pode desativar seu próprio usuário.');
+      return;
+    }
     try {
       if (!supabase) {
         const mockUsers = JSON.parse(localStorage.getItem('laviola_mock_users') || '[]');
@@ -91,9 +121,48 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
         const { error } = await supabase.from('profiles').update({ is_active: !user.is_active }).eq('id', user.id);
         if (error) throw error;
       }
+      await logAction(
+        currentUser.email || '',
+        currentUser.name || 'Admin',
+        user.is_active ? 'Desativação de Usuário' : 'Ativação de Usuário',
+        `O usuário "${user.full_name}" (ID: ${user.id}) foi ${user.is_active ? 'desativado' : 'ativado'}.`
+      );
       fetchUsers();
     } catch (err: any) {
       setErrorMsg(err.message || 'Erro ao alternar status.');
+    }
+  };
+
+  const handleDeleteUser = (user: UserProfile) => {
+    if (user.id === currentUser.id) {
+      setErrorMsg('Você não pode excluir seu próprio usuário.');
+      return;
+    }
+    setDeleteTarget(user);
+  };
+
+  const confirmDeleteUser = async () => {
+    if (!deleteTarget) return;
+    const user = deleteTarget;
+    setDeleteTarget(null);
+    try {
+      if (!supabase) {
+        const mockUsers = JSON.parse(localStorage.getItem('laviola_mock_users') || '[]');
+        const filtered = mockUsers.filter((u: any) => u.id !== user.id);
+        localStorage.setItem('laviola_mock_users', JSON.stringify(filtered));
+      } else {
+        const { error } = await supabase.from('profiles').delete().eq('id', user.id);
+        if (error) throw error;
+      }
+      await logAction(
+        currentUser.email || '',
+        currentUser.name || 'Admin',
+        'Exclusão de Usuário',
+        `O usuário "${user.full_name}" (E-mail: ${user.email}, Cargo: ${user.role}) foi excluído do sistema permanentemente.`
+      );
+      fetchUsers();
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Erro ao excluir o usuário.');
     }
   };
 
@@ -103,6 +172,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
     setEditUsername(user.username || '');
     setEditPhone(user.phone || '');
     setEditRole(user.role);
+    setEditSpecialty((user as any).collaborator_category?.name || '');
     setErrorMsg(null);
   };
 
@@ -119,7 +189,8 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
     }
     setIsSaving(true);
     setErrorMsg(null);
-    const updatedData = {
+    const specialtyName = editSpecialty.trim();
+    const updatedData: any = {
       full_name: editFullName.trim(),
       username: editUsername.trim(),
       phone: editPhone.trim(),
@@ -135,15 +206,59 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
           mockUsers[idx].phone = updatedData.phone;
           if (mockUsers[idx].profile) {
             Object.assign(mockUsers[idx].profile, updatedData);
+            // Store specialty as embedded object for mock display
+            mockUsers[idx].profile.collaborator_category = specialtyName
+              ? { id: 'mock', name: specialtyName, description: '', is_active: true }
+              : null;
           }
           localStorage.setItem('laviola_mock_users', JSON.stringify(mockUsers));
         }
+        if (user.id === currentUser.id) {
+          const mockSession = JSON.parse(localStorage.getItem('laviola_mock_session') || '{}');
+          mockSession.name = updatedData.full_name;
+          if (mockSession.profile) {
+            Object.assign(mockSession.profile, updatedData);
+            mockSession.profile.collaborator_category = specialtyName
+              ? { id: 'mock', name: specialtyName, description: '', is_active: true }
+              : null;
+          }
+          localStorage.setItem('laviola_mock_session', JSON.stringify(mockSession));
+        }
       } else {
+        // Resolve or create category in Supabase
+        let categoryId: string | null = null;
+        if (specialtyName) {
+          const { data: existingCat } = await supabase
+            .from('collaborator_categories')
+            .select('id')
+            .eq('name', specialtyName)
+            .single();
+          if (existingCat) {
+            categoryId = existingCat.id;
+          } else {
+            const { data: newCat } = await supabase
+              .from('collaborator_categories')
+              .insert({ name: specialtyName, description: '', is_active: true })
+              .select('id')
+              .single();
+            if (newCat) categoryId = newCat.id;
+          }
+        }
+        updatedData.collaborator_category_id = categoryId;
         const { error } = await supabase.from('profiles').update(updatedData).eq('id', user.id);
         if (error) throw error;
       }
+      await logAction(
+        currentUser.email || '',
+        currentUser.name || 'Admin',
+        'Edição de Usuário',
+        `O usuário "${user.full_name}" (ID: ${user.id}) teve seus dados atualizados. Cargo: ${editRole}.`
+      );
       setEditingId(null);
       fetchUsers();
+      if (user.id === currentUser.id) {
+        window.location.reload();
+      }
     } catch (err: any) {
       setErrorMsg(err.message || 'Erro ao salvar alterações.');
     } finally {
@@ -226,12 +341,20 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
         localStorage.setItem('laviola_mock_users', JSON.stringify(mockUsers));
       }
 
+      await logAction(
+        currentUser.email || '',
+        currentUser.name || 'Admin',
+        'Criação de Usuário',
+        `Um novo usuário "${newFullName}" (E-mail: ${newEmail.trim()}, Cargo: ${newRole}) foi criado no sistema.`
+      );
+
       setNewFullName('');
       setNewEmail('');
       setNewUsername('');
       setNewPhone('');
       setNewPassword('');
       setNewRole('collaborator');
+      setNewSpecialty('');
       setIsCreating(false);
       fetchUsers();
     } catch (err: any) {
@@ -354,7 +477,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0', marginTop: '16px', borderRadius: '10px', border: `1px solid ${styles.borderColor}`, overflow: 'hidden' }}>
           {filteredUsers.map((user, idx) => {
-            const canAct = canManage(actorRole, user.role) && user.id !== currentUser.id;
+            const canAct = canManage(actorRole, user.role) || (user.id === currentUser.id && actorRole === 'developer');
             const badgeColor = roleBadgeColors[user.role] || styles.primary;
             const isEditing = editingId === user.id;
             const isLast = idx === filteredUsers.length - 1;
@@ -415,6 +538,11 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
                         whiteSpace: 'nowrap',
                       }}>
                         {roleLabels[user.role]}
+                        {(user as any).collaborator_category?.name && (
+                          <span style={{ fontWeight: 500, textTransform: 'none', opacity: 0.85 }}>
+                            {' '}({(user as any).collaborator_category.name})
+                          </span>
+                        )}
                       </span>
                     </div>
                     <div style={{ fontSize: '0.75rem', color: styles.sidebarWidgetText?.color, marginTop: '2px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
@@ -459,20 +587,38 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
                       >
                         <Shield size={14} />
                       </button>
-                      <button
-                        onClick={() => toggleActive(user)}
-                        title={user.is_active ? 'Desativar' : 'Ativar'}
-                        aria-label={`${user.is_active ? 'Desativar' : 'Ativar'} ${user.full_name}`}
-                        style={{
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          width: '30px', height: '30px', borderRadius: '6px', border: 'none',
-                          cursor: 'pointer', transition: 'all 0.15s',
-                          backgroundColor: user.is_active ? 'hsl(0,75%,55%,0.1)' : 'hsl(142,60%,45%,0.1)',
-                          color: user.is_active ? 'hsl(0,75%,55%)' : 'hsl(142,60%,45%)',
-                        }}
-                      >
-                        {user.is_active ? <UserX size={14} /> : <UserCheck size={14} />}
-                      </button>
+                      {user.id !== currentUser.id && (
+                        <>
+                          <button
+                            onClick={() => toggleActive(user)}
+                            title={user.is_active ? 'Desativar' : 'Ativar'}
+                            aria-label={`${user.is_active ? 'Desativar' : 'Ativar'} ${user.full_name}`}
+                            style={{
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              width: '30px', height: '30px', borderRadius: '6px', border: 'none',
+                              cursor: 'pointer', transition: 'all 0.15s',
+                              backgroundColor: user.is_active ? 'hsl(0,75%,55%,0.1)' : 'hsl(142,60%,45%,0.1)',
+                              color: user.is_active ? 'hsl(0,75%,55%)' : 'hsl(142,60%,45%)',
+                            }}
+                          >
+                            {user.is_active ? <UserX size={14} /> : <UserCheck size={14} />}
+                          </button>
+                          <button
+                            onClick={() => handleDeleteUser(user)}
+                            title="Excluir"
+                            aria-label={`Excluir ${user.full_name}`}
+                            style={{
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              width: '30px', height: '30px', borderRadius: '6px', border: 'none',
+                              cursor: 'pointer', transition: 'all 0.15s',
+                              backgroundColor: 'hsl(0,75%,55%,0.1)',
+                              color: 'hsl(0,75%,55%)',
+                            }}
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </>
+                      )}
                     </div>
                   )}
                 </div>
@@ -547,6 +693,23 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
                             if (!allowed) return null;
                             return <option key={role} value={role}>{label}</option>;
                           })}
+                        </select>
+                      </div>
+
+                      {/* Especialidade */}
+                      <div style={{ flex: '1 1 150px', minWidth: '130px' }}>
+                        <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 600, color: styles.sidebarWidgetText?.color, marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                          Especialidade
+                        </label>
+                        <select
+                          value={editSpecialty}
+                          onChange={(e) => setEditSpecialty(e.target.value)}
+                          style={{ ...styles.formInput, padding: '8px 10px', fontSize: '0.85rem', width: '100%' }}
+                        >
+                          <option value="">— Nenhuma —</option>
+                          {specialties.map((s) => (
+                            <option key={s} value={s}>{s}</option>
+                          ))}
                         </select>
                       </div>
 
@@ -706,6 +869,22 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
                 </div>
               </div>
 
+              {/* Especialidade */}
+              <div style={styles.formGroup}>
+                <label htmlFor="new-specialty" style={styles.formLabel}>Especialidade</label>
+                <select
+                  id="new-specialty"
+                  value={newSpecialty}
+                  onChange={(e) => setNewSpecialty(e.target.value)}
+                  style={styles.formInput}
+                >
+                  <option value="">— Nenhuma —</option>
+                  {specialties.map((s) => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
+                </select>
+              </div>
+
               <div style={{ display: 'flex', gap: '10px', marginTop: '15px' }}>
                 <button
                   type="submit"
@@ -727,6 +906,68 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* Modal de confirmação de exclusão */}
+      {deleteTarget && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 9999,
+          backgroundColor: 'rgba(0,0,0,0.55)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <div style={{
+            backgroundColor: styles.isDark ? '#1e2130' : '#fff',
+            borderRadius: '14px',
+            padding: '28px 32px',
+            maxWidth: '420px', width: '90%',
+            boxShadow: '0 20px 60px rgba(0,0,0,0.35)',
+            border: `1px solid ${styles.borderColor}`,
+            display: 'flex', flexDirection: 'column', gap: '16px',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{
+                width: '40px', height: '40px', borderRadius: '50%',
+                backgroundColor: 'hsl(0,75%,55%,0.12)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+              }}>
+                <Trash2 size={20} color="hsl(0,75%,55%)" />
+              </div>
+              <div>
+                <p style={{ margin: 0, fontWeight: 700, fontSize: '1rem', color: styles.textMain }}>
+                  Excluir usuário?
+                </p>
+                <p style={{ margin: 0, fontSize: '0.85rem', color: styles.sidebarWidgetText?.color, marginTop: '3px' }}>
+                  <strong>{deleteTarget.full_name}</strong> será removido permanentemente.
+                </p>
+              </div>
+            </div>
+            <p style={{ margin: 0, fontSize: '0.82rem', color: 'hsl(0,75%,55%)', fontWeight: 500 }}>
+              ⚠️ Esta ação não pode ser desfeita.
+            </p>
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => setDeleteTarget(null)}
+                style={{
+                  padding: '9px 18px', borderRadius: '8px', cursor: 'pointer',
+                  border: `1px solid ${styles.borderColor}`, backgroundColor: 'transparent',
+                  color: styles.textMain, fontSize: '0.87rem', fontWeight: 600,
+                }}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={confirmDeleteUser}
+                style={{
+                  padding: '9px 18px', borderRadius: '8px', cursor: 'pointer',
+                  border: 'none', backgroundColor: 'hsl(0,75%,55%)',
+                  color: '#fff', fontSize: '0.87rem', fontWeight: 700,
+                  display: 'flex', alignItems: 'center', gap: '6px',
+                }}
+              >
+                <Trash2 size={14} /> Excluir Permanentemente
+              </button>
+            </div>
           </div>
         </div>
       )}

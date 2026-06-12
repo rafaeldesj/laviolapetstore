@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { 
   Home, Scissors, Tag, Info, Phone,
   PawPrint, CalendarDays, Wallet, Package, 
-  ClipboardList, BarChart3, Users
+  ClipboardList, BarChart3, Users, History, Settings
 } from 'lucide-react';
 import type { UserRole } from '../supabaseClient';
 import { roleHierarchy } from '../supabaseClient';
@@ -13,6 +13,8 @@ interface NavItem {
   icon: React.ReactNode;
   requiresLogin?: boolean;
   requiresManager?: boolean;
+  requiresOwnerDev?: boolean;
+  requiresStockAccess?: boolean;
 }
 
 interface NavigationProps {
@@ -21,9 +23,10 @@ interface NavigationProps {
   setActiveSection: (section: string) => void;
   isLoggedIn: boolean;
   userRole?: UserRole;
+  userSpecialty?: string | null;
 }
 
-export const Navigation: React.FC<NavigationProps> = ({ styles, activeSection, setActiveSection, isLoggedIn, userRole }) => {
+export const Navigation: React.FC<NavigationProps> = ({ styles, activeSection, setActiveSection, isLoggedIn, userRole, userSpecialty }) => {
   const [hoveredLink, setHoveredLink] = useState<string | null>(null);
 
   const isManager = userRole ? roleHierarchy[userRole] >= roleHierarchy['manager'] : false;
@@ -35,15 +38,27 @@ export const Navigation: React.FC<NavigationProps> = ({ styles, activeSection, s
     { id: 'pets',       label: 'Pets',                     icon: <PawPrint size={16} />,      requiresLogin: true },
     { id: 'agendamentos', label: 'Agendamentos',           icon: <CalendarDays size={16} />,  requiresLogin: true },
     { id: 'financeiro', label: 'Financeiro / Caixa',       icon: <Wallet size={16} />,        requiresLogin: true },
-    { id: 'estoque',    label: 'Estoque / Produtos',       icon: <Package size={16} />,       requiresLogin: true },
+    { id: 'estoque',    label: 'Estoque / Produtos',       icon: <Package size={16} />,       requiresLogin: true, requiresStockAccess: true },
     { id: 'prontuario', label: 'Prontuário Vet.',          icon: <ClipboardList size={16} />, requiresLogin: true },
     { id: 'relatorios', label: 'Relatórios',               icon: <BarChart3 size={16} />,     requiresLogin: true },
     { id: 'usuarios',   label: 'Usuários',                 icon: <Users size={16} />,         requiresLogin: true, requiresManager: true },
+    { id: 'registros',  label: 'Registros',                icon: <History size={16} />,       requiresLogin: true, requiresManager: true },
+    { id: 'configuracoes', label: 'Configurações',         icon: <Settings size={16} />,      requiresLogin: true, requiresOwnerDev: true },
     { id: 'sobre',      label: 'Sobre Nós',                icon: <Info size={16} />,          requiresLogin: false },
     { id: 'contato',    label: 'Contato',                  icon: <Phone size={16} />,         requiresLogin: false },
   ];
 
+  const isOwnerOrDev = userRole === 'developer' || userRole === 'owner';
+  const isStockAllowed = isLoggedIn && (
+    userRole === 'developer' ||
+    userRole === 'owner' ||
+    userRole === 'manager' ||
+    userSpecialty === 'Estoquista'
+  );
+
   const visibleItems = allNavItems.filter(item => {
+    if (item.requiresStockAccess) return isStockAllowed;
+    if (item.requiresOwnerDev) return isLoggedIn && isOwnerOrDev;
     if (item.requiresManager) return isLoggedIn && isManager;
     if (item.requiresLogin) return isLoggedIn;
     return true;

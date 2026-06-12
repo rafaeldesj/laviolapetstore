@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { CalendarDays, Clock, PlusCircle, Trash2, Check, Play, X, User, PawPrint, Save } from 'lucide-react';
-import { supabase, mockSupabaseDb, isSupabaseConfigured, roleHierarchy } from '../supabaseClient';
+import { supabase, mockSupabaseDb, isSupabaseConfigured, roleHierarchy, logAction } from '../supabaseClient';
 import type { Appointment } from '../supabaseClient';
 import type { AuthUser } from '../hooks/useAuth';
 
@@ -97,15 +97,31 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
     try {
       if (isSupabaseConfigured && supabase) {
         if (isStaffMode) {
-          const { data } = await supabase.from('pets').select(`*, profiles(full_name, email)`);
-          const mapped = (data || []).map((p: any) => ({
-            ...p,
-            tutor_name: p.profiles?.full_name || 'Desconhecido',
-            tutor_email: p.profiles?.email || '',
-          }));
+          const { data: petsData, error: petsError } = await supabase.from('pets').select('*');
+          if (petsError) throw petsError;
+
+          let profilesData: any[] = [];
+          try {
+            const { data: profs, error: profsError } = await supabase.from('profiles').select('id, full_name, email');
+            if (!profsError && profs) {
+              profilesData = profs;
+            }
+          } catch (pErr) {
+            console.warn('Erro ao carregar perfis em fetchPets:', pErr);
+          }
+
+          const mapped = (petsData || []).map((p: any) => {
+            const profile = profilesData.find((prof: any) => prof.id === p.owner_id);
+            return {
+              ...p,
+              tutor_name: profile?.full_name || 'Desconhecido',
+              tutor_email: profile?.email || '',
+            };
+          });
           setAllPets(mapped);
         } else {
-          const { data } = await supabase.from('pets').select('*').eq('owner_id', currentUser.id);
+          const { data, error } = await supabase.from('pets').select('*').eq('owner_id', currentUser.id);
+          if (error) throw error;
           setPets(data || []);
         }
       } else {
@@ -126,8 +142,9 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
           setPets(data || []);
         }
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Erro ao buscar pets:', err);
+      setErrorMsg(err.message || 'Erro ao carregar lista de pets.');
     }
   };
 
@@ -174,6 +191,12 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
       } else {
         await mockSupabaseDb.addAppointment(newAppointmentData);
       }
+      await logAction(
+        currentUser.email || '',
+        currentUser.name || 'Tutor',
+        'Novo Agendamento',
+        `Agendamento de "${serviceType}" para o pet "${petName || 'Pet'}" em ${scheduledDate} às ${scheduledTime}.`
+      );
       setSelectedPetId('');
       setScheduledDate('');
       setScheduledTime('');
@@ -190,6 +213,9 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
   const handleUpdateStatus = async (appointmentId: string, newStatus: 'Agendado' | 'Em Andamento' | 'Concluído' | 'Cancelado') => {
     setIsLoading(true);
     setErrorMsg(null);
+    const appToUpdate = appointments.find(a => a.id === appointmentId);
+    const petName = appToUpdate ? appToUpdate.pet_name : 'Pet';
+    const service = appToUpdate ? appToUpdate.service_type : 'Serviço';
     try {
       if (isSupabaseConfigured && supabase) {
         const { error } = await supabase
@@ -200,6 +226,12 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
       } else {
         await mockSupabaseDb.updateAppointment(appointmentId, { status: newStatus });
       }
+      await logAction(
+        currentUser.email || '',
+        currentUser.name || 'Usuário',
+        'Atualização de Agendamento',
+        `O status do agendamento de "${service}" para o pet "${petName}" foi alterado para "${newStatus}".`
+      );
       fetchAppointments();
     } catch (err: any) {
       setErrorMsg(err.message || 'Erro ao atualizar status.');
@@ -216,6 +248,9 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
     if (!confirm('Deseja remover definitivamente este agendamento do histórico?')) return;
     setIsLoading(true);
     setErrorMsg(null);
+    const appToDelete = appointments.find(a => a.id === appointmentId);
+    const petName = appToDelete ? appToDelete.pet_name : 'Pet';
+    const service = appToDelete ? appToDelete.service_type : 'Serviço';
     try {
       if (isSupabaseConfigured && supabase) {
         const { error } = await supabase.from('appointments').delete().eq('id', appointmentId);
@@ -223,6 +258,12 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
       } else {
         await mockSupabaseDb.deleteAppointment(appointmentId);
       }
+      await logAction(
+        currentUser.email || '',
+        currentUser.name || 'Usuário',
+        'Exclusão de Agendamento',
+        `O agendamento de "${service}" para o pet "${petName}" (ID: ${appointmentId}) foi removido permanentemente.`
+      );
       fetchAppointments();
     } catch (err: any) {
       setErrorMsg(err.message || 'Erro ao remover agendamento.');

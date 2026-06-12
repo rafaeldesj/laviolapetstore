@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Trash2, Edit3, X, Save, PawPrint } from 'lucide-react';
-import { supabase, mockSupabaseDb, isSupabaseConfigured } from '../supabaseClient';
+import { supabase, mockSupabaseDb, isSupabaseConfigured, logAction } from '../supabaseClient';
+import { useAuth } from '../hooks/useAuth';
 
 interface Pet {
   id: string;
@@ -17,6 +18,7 @@ interface PetCrudProps {
 }
 
 export const PetCrud: React.FC<PetCrudProps> = ({ userId, styles }) => {
+  const { user: currentUser } = useAuth();
   const [pets, setPets] = useState<Pet[]>([]);
   const [name, setName] = useState<string>('');
   const [species, setSpecies] = useState<string>('Cão');
@@ -76,6 +78,12 @@ export const PetCrud: React.FC<PetCrudProps> = ({ userId, styles }) => {
       } else {
         await mockSupabaseDb.addPet(newPetData, userId);
       }
+      await logAction(
+        currentUser?.email || '',
+        currentUser?.name || 'Tutor',
+        'Cadastro de Pet',
+        `O pet "${name}" (Espécie: ${species}, Raça: ${breed}, Idade: ${age}) foi cadastrado.`
+      );
       setName('');
       setSpecies('Cão');
       setBreed('');
@@ -108,6 +116,12 @@ export const PetCrud: React.FC<PetCrudProps> = ({ userId, styles }) => {
       } else {
         await mockSupabaseDb.updatePet(petId, updatedData);
       }
+      await logAction(
+        currentUser?.email || '',
+        currentUser?.name || 'Tutor',
+        'Edição de Pet',
+        `O pet "${name}" (ID: ${petId}, Espécie: ${species}, Raça: ${breed}, Idade: ${age}) foi editado.`
+      );
       setEditingId(null);
       setName('');
       setSpecies('Cão');
@@ -124,6 +138,8 @@ export const PetCrud: React.FC<PetCrudProps> = ({ userId, styles }) => {
     if (!confirm('Deseja realmente remover este pet?')) return;
     setIsLoading(true);
     setErrorMsg(null);
+    const petToDelete = pets.find(p => p.id === petId);
+    const petName = petToDelete ? petToDelete.name : 'Pet';
     try {
       if (isSupabaseConfigured && supabase) {
         const { error } = await supabase
@@ -134,6 +150,12 @@ export const PetCrud: React.FC<PetCrudProps> = ({ userId, styles }) => {
       } else {
         await mockSupabaseDb.deletePet(petId);
       }
+      await logAction(
+        currentUser?.email || '',
+        currentUser?.name || 'Tutor',
+        'Exclusão de Pet',
+        `O pet "${petName}" (ID: ${petId}) foi excluído do sistema.`
+      );
       fetchPets();
     } catch (err: any) {
       setErrorMsg(err.message || 'Erro ao deletar pet.');

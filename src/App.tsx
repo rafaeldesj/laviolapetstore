@@ -16,6 +16,8 @@ import { Estoque } from './components/Estoque';
 import { Prontuario } from './components/Prontuario';
 import { Relatorios } from './components/Relatorios';
 import { UserManagement } from './components/admin/UserManagement';
+import { Registros } from './components/admin/Registros';
+import { Configuracoes } from './components/admin/Configuracoes';
 import { useAuth } from './hooks/useAuth';
 import { roleHierarchy } from './supabaseClient';
 import { getStyles } from './styles';
@@ -29,6 +31,17 @@ function App() {
   const [modalView, setModalView] = useState<ModalView>('none');
 
   const { user, login, logout, setMockUser } = useAuth();
+  const userRole = user?.profile?.role;
+  const userSpecialty = (user?.profile as any)?.collaborator_category?.name as string | undefined;
+  const isManager = userRole ? roleHierarchy[userRole] >= roleHierarchy['manager'] : false;
+  const isOwnerOrDev = userRole === 'developer' || userRole === 'owner';
+
+  const [highContrast, setHighContrast] = useState<boolean>(() => {
+    return localStorage.getItem('laviola_high_contrast') === 'true';
+  });
+  const [fontSize, setFontSize] = useState<number>(() => {
+    return Number(localStorage.getItem('laviola_font_size')) || 16;
+  });
 
   useEffect(() => {
     const handleResize = () => setWindowWidth(window.innerWidth);
@@ -36,23 +49,32 @@ function App() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  const styles = getStyles(false, 16, windowWidth >= 992, windowWidth);
+  const styles = getStyles(highContrast, fontSize, windowWidth >= 992, windowWidth);
 
   useEffect(() => {
     const body = document.body;
     Object.keys(styles.bodyStyle).forEach((key) => {
       (body.style as any)[key] = (styles.bodyStyle as any)[key];
     });
-  }, [windowWidth]);
+  }, [styles.bodyStyle]);
 
   useEffect(() => {
-    if (!user && (activeSection === 'pets' || activeSection === 'usuarios')) {
+    const isPrivate = ['pets', 'agendamentos', 'financeiro', 'estoque', 'prontuario', 'relatorios', 'usuarios', 'registros', 'configuracoes'].includes(activeSection);
+    const requiresMgmt = ['usuarios', 'registros'].includes(activeSection);
+    const requiresOwnerDev = ['configuracoes'].includes(activeSection);
+    const requiresStock = activeSection === 'estoque';
+    const isStockAllowed = userRole === 'developer' || userRole === 'owner' || userRole === 'manager' || userSpecialty === 'Estoquista';
+
+    if (isPrivate && !user) {
+      setActiveSection('inicio');
+    } else if (requiresMgmt && user && !isManager) {
+      setActiveSection('inicio');
+    } else if (requiresOwnerDev && user && !isOwnerOrDev) {
+      setActiveSection('inicio');
+    } else if (requiresStock && user && !isStockAllowed) {
       setActiveSection('inicio');
     }
-  }, [user, activeSection]);
-
-  const userRole = user?.profile?.role;
-  const isManager = userRole ? roleHierarchy[userRole] >= roleHierarchy['manager'] : false;
+  }, [user, activeSection, isManager, isOwnerOrDev, userRole, userSpecialty]);
 
   return (
     <>
@@ -80,6 +102,7 @@ function App() {
             setActiveSection={setActiveSection}
             isLoggedIn={!!user}
             userRole={userRole}
+            userSpecialty={userSpecialty}
           />
 
           <main id="main-content" style={styles.mainContent} role="main">
@@ -121,6 +144,26 @@ function App() {
 
             {activeSection === 'usuarios' && user && isManager && (
               <UserManagement currentUser={user} styles={styles} />
+            )}
+
+            {activeSection === 'registros' && user && isManager && (
+              <Registros styles={styles} />
+            )}
+
+            {activeSection === 'configuracoes' && user && isOwnerOrDev && (
+              <Configuracoes
+                styles={styles}
+                highContrast={highContrast}
+                setHighContrast={(val) => {
+                  setHighContrast(val);
+                  localStorage.setItem('laviola_high_contrast', String(val));
+                }}
+                fontSize={fontSize}
+                setFontSize={(val) => {
+                  setFontSize(val);
+                  localStorage.setItem('laviola_font_size', String(val));
+                }}
+              />
             )}
 
             {activeSection === 'sobre' && (

@@ -12,7 +12,7 @@ export const supabase = isSupabaseConfigured
   ? createClient(supabaseUrl, supabaseAnonKey)
   : null;
 
-export type UserRole = 'developer' | 'owner' | 'manager' | 'collaborator';
+export type UserRole = 'developer' | 'owner' | 'manager' | 'collaborator' | 'client';
 
 export interface CollaboratorCategory {
   id: string;
@@ -55,6 +55,7 @@ export const roleHierarchy: Record<UserRole, number> = {
   owner: 3,
   manager: 2,
   collaborator: 1,
+  client: 0,
 };
 
 export const roleLabels: Record<UserRole, string> = {
@@ -62,6 +63,7 @@ export const roleLabels: Record<UserRole, string> = {
   owner: 'Proprietário',
   manager: 'Gerente',
   collaborator: 'Colaborador',
+  client: 'Cliente',
 };
 
 export const canManage = (actorRole: UserRole, targetRole: UserRole): boolean => {
@@ -84,23 +86,38 @@ export const lookupEmailByIdentifier = async (identifier: string): Promise<strin
   if (!supabase) return identifier;
   const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(identifier);
   if (isEmail) return identifier;
-  const isPhone = /^\+?[\d\s\-()]{8,}$/.test(identifier);
-  if (isPhone) {
-    const { data } = await supabase
+
+  const cleanInput = identifier.trim();
+  const digitsOnly = cleanInput.replace(/\D/g, '');
+
+  try {
+    let orFilter = `username.ilike."${cleanInput}",full_name.ilike."${cleanInput}",email.ilike."${cleanInput}",email.ilike."${cleanInput}@%"`;
+    if (cleanInput) {
+      orFilter += `,phone.eq."${cleanInput}"`;
+    }
+    if (digitsOnly) {
+      orFilter += `,phone.like."%${digitsOnly}%"`;
+    }
+
+    const { data, error } = await supabase
       .from('profiles')
       .select('email')
-      .eq('phone', identifier)
-      .eq('is_active', true)
-      .single();
-    return data?.email || null;
+      .or(orFilter)
+      .eq('is_active', true);
+
+    if (error) {
+      console.error('Erro na busca de e-mail por identificador:', error);
+      return null;
+    }
+
+    if (data && data.length > 0) {
+      return data[0].email;
+    }
+  } catch (err) {
+    console.error('Falha ao buscar e-mail:', err);
   }
-  const { data } = await supabase
-    .from('profiles')
-    .select('email')
-    .eq('username', identifier)
-    .eq('is_active', true)
-    .single();
-  return data?.email || null;
+
+  return null;
 };
 
 interface MockPet {
@@ -153,6 +170,93 @@ const getLocalAppointments = (): MockAppointment[] => {
 
 const saveLocalAppointments = (appointments: MockAppointment[]) => {
   localStorage.setItem('laviola_appointments', JSON.stringify(appointments));
+};
+
+interface MockProduct {
+  id: string;
+  name: string;
+  category: string;
+  brand: string;
+  price: number;
+  cost_price: number;
+  quantity: number;
+  min_stock: number;
+  sku: string;
+  created_at: string;
+}
+
+const getLocalProducts = (): MockProduct[] => {
+  const data = localStorage.getItem('laviola_products');
+  if (data) return JSON.parse(data);
+
+  const defaultProducts: MockProduct[] = [
+    {
+      id: 'prod-1',
+      name: 'Ração Golden Cães Adultos 15kg',
+      category: 'Ração / Alimentos',
+      brand: 'Premier Golden',
+      price: 155.90,
+      cost_price: 105.00,
+      quantity: 8,
+      min_stock: 3,
+      sku: '7891011121314',
+      created_at: new Date().toISOString()
+    },
+    {
+      id: 'prod-2',
+      name: 'Shampoo Anticoceira Pet 500ml',
+      category: 'Higiene & Beleza',
+      brand: 'Pet Clean',
+      price: 38.50,
+      cost_price: 22.00,
+      quantity: 2,
+      min_stock: 5,
+      sku: '7891011121315',
+      created_at: new Date().toISOString()
+    },
+    {
+      id: 'prod-3',
+      name: 'Anti-pulgas NexGard 10-25kg',
+      category: 'Medicamentos / Farmácia',
+      brand: 'Merial',
+      price: 95.00,
+      cost_price: 60.00,
+      quantity: 0,
+      min_stock: 2,
+      sku: '7891011121316',
+      created_at: new Date().toISOString()
+    },
+    {
+      id: 'prod-4',
+      name: 'Coleira Ajustável Azul M',
+      category: 'Acessórios',
+      brand: 'Petz',
+      price: 25.00,
+      cost_price: 12.50,
+      quantity: 15,
+      min_stock: 2,
+      sku: '7891011121317',
+      created_at: new Date().toISOString()
+    },
+    {
+      id: 'prod-5',
+      name: 'Brinquedo Mordedor Ossinho',
+      category: 'Brinquedos',
+      brand: 'Kong',
+      price: 15.00,
+      cost_price: 6.00,
+      quantity: 20,
+      min_stock: 5,
+      sku: '7891011121318',
+      created_at: new Date().toISOString()
+    }
+  ];
+  localStorage.setItem('laviola_products', JSON.stringify(defaultProducts));
+  return defaultProducts;
+};
+
+const saveLocalProducts = (products: MockProduct[]) => {
+  localStorage.setItem('laviola_products', JSON.stringify(products));
 };
 
 export const mockSupabaseDb = {
@@ -222,4 +326,129 @@ export const mockSupabaseDb = {
     saveLocalAppointments(filtered);
     return { error: null };
   },
+  getProducts: async () => {
+    const products = getLocalProducts();
+    return { data: products, error: null };
+  },
+  addProduct: async (product: Omit<MockProduct, 'id' | 'created_at'>) => {
+    const products = getLocalProducts();
+    const newProduct: MockProduct = {
+      ...product,
+      id: Math.random().toString(36).substring(2, 9),
+      created_at: new Date().toISOString(),
+    };
+    products.push(newProduct);
+    saveLocalProducts(products);
+    return { data: newProduct, error: null };
+  },
+  updateProduct: async (id: string, updates: Partial<Omit<MockProduct, 'id' | 'created_at'>>) => {
+    const products = getLocalProducts();
+    const index = products.findIndex(p => p.id === id);
+    if (index === -1) return { data: null, error: new Error('Product not found') };
+    products[index] = { ...products[index], ...updates };
+    saveLocalProducts(products);
+    return { data: products[index], error: null };
+  },
+  deleteProduct: async (id: string) => {
+    const products = getLocalProducts();
+    const filtered = products.filter(p => p.id !== id);
+    saveLocalProducts(filtered);
+    return { error: null };
+  },
 };
+
+export interface AuditLog {
+  id: string;
+  user_email: string;
+  user_name: string;
+  action: string;
+  details: string;
+  created_at: string;
+}
+
+export interface Product {
+  id: string;
+  name: string;
+  category: string;
+  brand: string;
+  price: number;
+  cost_price: number;
+  quantity: number;
+  min_stock: number;
+  sku: string;
+  created_at: string;
+}
+
+export const logAction = async (
+  userEmail: string,
+  userName: string,
+  action: string,
+  details: string
+): Promise<void> => {
+  const timestamp = new Date().toISOString();
+  try {
+    if (!supabase) {
+      const localLogs: AuditLog[] = JSON.parse(localStorage.getItem('laviola_audit_logs') || '[]');
+      localLogs.push({
+        id: Math.random().toString(36).substring(2, 9),
+        user_email: userEmail,
+        user_name: userName,
+        action,
+        details,
+        created_at: timestamp,
+      });
+      localStorage.setItem('laviola_audit_logs', JSON.stringify(localLogs));
+      return;
+    }
+
+    const { error } = await supabase.from('audit_logs').insert({
+      user_email: userEmail,
+      user_name: userName,
+      action,
+      details,
+      created_at: timestamp,
+    });
+
+    if (error) {
+      console.warn('Erro ao inserir log no Supabase, caindo no localStorage:', error);
+      const localLogs: AuditLog[] = JSON.parse(localStorage.getItem('laviola_audit_logs') || '[]');
+      localLogs.push({
+        id: Math.random().toString(36).substring(2, 9),
+        user_email: userEmail,
+        user_name: userName,
+        action,
+        details,
+        created_at: timestamp,
+      });
+      localStorage.setItem('laviola_audit_logs', JSON.stringify(localLogs));
+    }
+  } catch (err) {
+    console.error('Falha ao registrar log:', err);
+  }
+};
+
+export const fetchLogs = async (): Promise<AuditLog[]> => {
+  const localLogs: AuditLog[] = JSON.parse(localStorage.getItem('laviola_audit_logs') || '[]');
+  if (!supabase) {
+    return localLogs.sort((a, b) => b.created_at.localeCompare(a.created_at));
+  }
+  try {
+    const { data, error } = await supabase
+      .from('audit_logs')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.warn('Erro ao buscar logs do Supabase, retornando locais:', error);
+      return localLogs.sort((a, b) => b.created_at.localeCompare(a.created_at));
+    }
+
+    // Merge both local and Supabase logs
+    const combined = [...(data || []), ...localLogs];
+    return combined.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  } catch (err) {
+    console.error('Falha ao obter logs:', err);
+    return localLogs.sort((a, b) => b.created_at.localeCompare(a.created_at));
+  }
+};
+
