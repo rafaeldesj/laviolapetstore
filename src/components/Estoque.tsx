@@ -215,10 +215,118 @@ export const Estoque: React.FC<EstoqueProps> = ({ styles }) => {
       {/* Header */}
       <div style={styles.crudHeader}>
         <div>
-          <h2 id="estoque-heading" style={styles.sectionTitle}>
+          <h2 id="estoque-heading" style={{ ...styles.sectionTitle, position: 'relative' }}>
             <Package size={20} style={{ display: 'inline', marginRight: '8px', verticalAlign: 'middle', color: styles.primary }} />
             Controle de Estoque & Produtos
             <div style={styles.sectionTitleBar}></div>
+            <div className="pet-walk-container">
+              <span className="pet-animated pet-dog">🐶</span>
+              <span className="pet-animated pet-cat">🐱</span>
+              <span className="pet-animated pet-rabbit">🐰</span>
+              <span className="pet-animated pet-bird">🐦</span>
+            </div>
+            <style>{`
+              .pet-walk-container {
+                position: absolute;
+                bottom: 4px;
+                left: -30px;
+                width: calc(100% + 60px);
+                height: 24px;
+                overflow: hidden;
+                pointer-events: none;
+              }
+              .pet-animated {
+                position: absolute;
+                bottom: 0px;
+                font-size: 1.15rem;
+                white-space: nowrap;
+                line-height: 1;
+              }
+              .pet-dog {
+                animation: pet-walk-ltr 15s linear infinite;
+              }
+              .pet-cat {
+                animation: pet-walk-rtl 20s linear infinite 3s;
+              }
+              .pet-rabbit {
+                animation: pet-walk-ltr-hop 18s linear infinite 6s;
+              }
+              .pet-bird {
+                animation: pet-walk-rtl-fly 10s linear infinite 1s;
+              }
+
+              @keyframes pet-walk-ltr {
+                0% { left: -40px; transform: scaleX(-1); }
+                100% { left: 100%; transform: scaleX(-1); }
+              }
+              @keyframes pet-walk-rtl {
+                0% { left: 100%; transform: scaleX(1); }
+                100% { left: -40px; transform: scaleX(1); }
+              }
+              @keyframes pet-walk-ltr-hop {
+                0% { left: -40px; transform: translateY(0) scaleX(-1); }
+                2% { transform: translateY(-5px) scaleX(-1); }
+                4% { transform: translateY(0) scaleX(-1); }
+                8% { transform: translateY(0) scaleX(-1); }
+                10% { transform: translateY(-5px) scaleX(-1); }
+                12% { transform: translateY(0) scaleX(-1); }
+                16% { transform: translateY(0) scaleX(-1); }
+                18% { transform: translateY(-5px) scaleX(-1); }
+                20% { transform: translateY(0) scaleX(-1); }
+                24% { transform: translateY(0) scaleX(-1); }
+                26% { transform: translateY(-5px) scaleX(-1); }
+                28% { transform: translateY(0) scaleX(-1); }
+                32% { transform: translateY(0) scaleX(-1); }
+                34% { transform: translateY(-5px) scaleX(-1); }
+                36% { transform: translateY(0) scaleX(-1); }
+                40% { transform: translateY(0) scaleX(-1); }
+                42% { transform: translateY(-5px) scaleX(-1); }
+                44% { transform: translateY(0) scaleX(-1); }
+                48% { transform: translateY(0) scaleX(-1); }
+                50% { transform: translateY(-5px) scaleX(-1); }
+                52% { transform: translateY(0) scaleX(-1); }
+                56% { transform: translateY(0) scaleX(-1); }
+                58% { transform: translateY(-5px) scaleX(-1); }
+                60% { transform: translateY(0) scaleX(-1); }
+                64% { transform: translateY(0) scaleX(-1); }
+                66% { transform: translateY(-5px) scaleX(-1); }
+                68% { transform: translateY(0) scaleX(-1); }
+                72% { transform: translateY(0) scaleX(-1); }
+                74% { transform: translateY(-5px) scaleX(-1); }
+                76% { transform: translateY(0) scaleX(-1); }
+                80% { transform: translateY(0) scaleX(-1); }
+                82% { transform: translateY(-5px) scaleX(-1); }
+                84% { transform: translateY(0) scaleX(-1); }
+                88% { transform: translateY(0) scaleX(-1); }
+                90% { transform: translateY(-5px) scaleX(-1); }
+                92% { transform: translateY(0) scaleX(-1); }
+                96% { transform: translateY(0) scaleX(-1); }
+                98% { transform: translateY(-5px) scaleX(-1); }
+                100% { left: 100%; transform: translateY(0) scaleX(-1); }
+              }
+              @keyframes pet-walk-rtl-fly {
+                0% { left: 100%; transform: translateY(0) scaleX(1); }
+                5% { transform: translateY(-3px) scaleX(1); }
+                10% { transform: translateY(0) scaleX(1); }
+                15% { transform: translateY(-3px) scaleX(1); }
+                20% { transform: translateY(0) scaleX(1); }
+                25% { transform: translateY(-3px) scaleX(1); }
+                30% { transform: translateY(0) scaleX(1); }
+                35% { transform: translateY(-3px) scaleX(1); }
+                40% { transform: translateY(0) scaleX(1); }
+                45% { transform: translateY(-3px) scaleX(1); }
+                50% { transform: translateY(0) scaleX(1); }
+                55% { transform: translateY(-3px) scaleX(1); }
+                60% { transform: translateY(0) scaleX(1); }
+                65% { transform: translateY(-3px) scaleX(1); }
+                70% { transform: translateY(0) scaleX(1); }
+                75% { transform: translateY(-3px) scaleX(1); }
+                80% { transform: translateY(0) scaleX(1); }
+                90% { transform: translateY(-3px) scaleX(1); }
+                95% { transform: translateY(0) scaleX(1); }
+                100% { left: -40px; transform: translateY(0) scaleX(1); }
+              }
+            `}</style>
           </h2>
           <p style={{ fontSize: '0.85rem', color: styles.sidebarWidgetText?.color, marginTop: '5px' }}>
             Acompanhe a quantidade de mercadorias, altere preços e configure alertas de estoque baixo.
