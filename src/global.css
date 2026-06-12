@@ -1,0 +1,58 @@
+/* ======================================================
+   La Viola Petshop — Estilos Globais
+   ====================================================== */
+
+/* ---------- Botão Salvar / Confirmar (padrão azul) ---------- */
+.btn-save {
+  background-color: hsl(210, 85%, 45%) !important;
+  border-color: hsl(210, 85%, 45%) !important;
+  color: #ffffff !important;
+  cursor: pointer;
+  transition: opacity 0.15s ease, background-color 0.2s ease !important;
+}
+
+.btn-save:hover {
+  opacity: 0.8;
+}
+
+.btn-save:active {
+  opacity: 0.5;
+}
+
+.btn-save:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* ---------- Pequenos Botões de Ação (Icon Buttons) ---------- */
+.btn-action-icon {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 30px !important;
+  height: 30px !important;
+  border-radius: 6px !important;
+  border: none !important;
+  cursor: pointer !important;
+  padding: 6px !important;
+  transition: opacity 0.15s ease, background-color 0.2s ease !important;
+}
+
+.btn-action-icon:hover {
+  opacity: 0.8 !important;
+}
+
+.btn-action-icon:active {
+  opacity: 0.5 !important;
+}
+
+.btn-action-danger {
+  background-color: hsla(0, 75%, 55%, 0.1) !important;
+  color: hsl(0, 75%, 55%) !important;
+}
+
+.btn-action-success {
+  background-color: hsla(142, 60%, 45%, 0.1) !important;
+  color: hsl(142, 60%, 45%) !important;
+}
+

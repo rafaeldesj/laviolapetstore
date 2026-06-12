@@ -281,7 +281,8 @@ export const PetCrud: React.FC<PetCrudProps> = ({ userId, styles }) => {
             <button
               type="submit"
               disabled={isLoading}
-              style={{ ...styles.btnAcc(hoveredBtn === 'save-pet'), backgroundColor: styles.primary, color: '#ffffff', borderColor: styles.primary }}
+              className="btn-save"
+              style={{ ...styles.btnAcc(hoveredBtn === 'save-pet'), backgroundColor: undefined, borderColor: undefined }}
               onMouseEnter={() => setHoveredBtn('save-pet')}
               onMouseLeave={() => setHoveredBtn(null)}
             >
@@ -326,9 +327,11 @@ export const PetCrud: React.FC<PetCrudProps> = ({ userId, styles }) => {
               <div style={styles.petActions}>
                 <button
                   onClick={() => startEdit(pet)}
-                  style={styles.btnIcon(hoveredBtn === `edit-${pet.id}`)}
-                  onMouseEnter={() => setHoveredBtn(`edit-${pet.id}`)}
-                  onMouseLeave={() => setHoveredBtn(null)}
+                  className="btn-action-icon"
+                  style={{
+                    backgroundColor: styles.isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.06)',
+                    color: styles.textMain,
+                  }}
                   title="Editar Pet"
                   aria-label={`Editar pet ${pet.name}`}
                 >
@@ -336,9 +339,7 @@ export const PetCrud: React.FC<PetCrudProps> = ({ userId, styles }) => {
                 </button>
                 <button
                   onClick={() => handleDeletePet(pet.id)}
-                  style={styles.btnIcon(hoveredBtn === `delete-${pet.id}`, true)}
-                  onMouseEnter={() => setHoveredBtn(`delete-${pet.id}`)}
-                  onMouseLeave={() => setHoveredBtn(null)}
+                  className="btn-action-icon btn-action-danger"
                   title="Excluir Pet"
                   aria-label={`Excluir pet ${pet.name}`}
                 >

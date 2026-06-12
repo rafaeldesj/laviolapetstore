@@ -131,6 +131,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
           <button
             type="submit"
             disabled={isLoading}
+            className="btn-save"
             style={styles.formSubmitBtn(hoveredSubmit)}
             onMouseEnter={() => setHoveredSubmit(true)}
             onMouseLeave={() => setHoveredSubmit(false)}

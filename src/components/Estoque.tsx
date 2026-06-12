@@ -499,9 +499,11 @@ export const Estoque: React.FC<EstoqueProps> = ({ styles }) => {
                 <div style={{ ...styles.petActions, marginTop: 'auto' }}>
                   <button
                     onClick={() => handleOpenEditModal(product)}
-                    style={styles.btnIcon(hoveredBtn === `edit-${product.id}`)}
-                    onMouseEnter={() => setHoveredBtn(`edit-${product.id}`)}
-                    onMouseLeave={() => setHoveredBtn(null)}
+                    className="btn-action-icon"
+                    style={{
+                      backgroundColor: styles.isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.06)',
+                      color: styles.textMain,
+                    }}
                     title="Editar Produto"
                     aria-label={`Editar produto ${product.name}`}
                   >
@@ -509,9 +511,7 @@ export const Estoque: React.FC<EstoqueProps> = ({ styles }) => {
                   </button>
                   <button
                     onClick={() => handleDeleteProduct(product)}
-                    style={styles.btnIcon(hoveredBtn === `del-${product.id}`, true)}
-                    onMouseEnter={() => setHoveredBtn(`del-${product.id}`)}
-                    onMouseLeave={() => setHoveredBtn(null)}
+                    className="btn-action-icon btn-action-danger"
                     title="Remover Produto"
                     aria-label={`Remover produto ${product.name}`}
                   >
@@ -651,6 +651,7 @@ export const Estoque: React.FC<EstoqueProps> = ({ styles }) => {
                 <button
                   type="submit"
                   disabled={isSaving}
+                  className="btn-save"
                   style={{ ...styles.formSubmitBtn(hoveredBtn === 'submit-prod'), flexGrow: 1, margin: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
                   onMouseEnter={() => setHoveredBtn('submit-prod')}
                   onMouseLeave={() => setHoveredBtn(null)}

@@ -563,10 +563,8 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
                         onClick={() => isEditing ? cancelEdit() : startEdit(user)}
                         title={isEditing ? 'Cancelar edição' : 'Editar usuário'}
                         aria-label={isEditing ? 'Cancelar edição' : `Editar ${user.full_name}`}
+                        className="btn-action-icon"
                         style={{
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          width: '30px', height: '30px', borderRadius: '6px', border: 'none',
-                          cursor: 'pointer', transition: 'all 0.15s',
                           backgroundColor: isEditing ? `${badgeColor}25` : (styles.isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.06)'),
                           color: isEditing ? badgeColor : styles.textMain,
                         }}
@@ -577,10 +575,8 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
                         onClick={() => setSelectedUser(user)}
                         title="Permissões"
                         aria-label={`Permissões de ${user.full_name}`}
+                        className="btn-action-icon"
                         style={{
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          width: '30px', height: '30px', borderRadius: '6px', border: 'none',
-                          cursor: 'pointer', transition: 'all 0.15s',
                           backgroundColor: styles.isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.06)',
                           color: styles.textMain,
                         }}
@@ -593,13 +589,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
                             onClick={() => toggleActive(user)}
                             title={user.is_active ? 'Desativar' : 'Ativar'}
                             aria-label={`${user.is_active ? 'Desativar' : 'Ativar'} ${user.full_name}`}
-                            style={{
-                              display: 'flex', alignItems: 'center', justifyContent: 'center',
-                              width: '30px', height: '30px', borderRadius: '6px', border: 'none',
-                              cursor: 'pointer', transition: 'all 0.15s',
-                              backgroundColor: user.is_active ? 'hsl(0,75%,55%,0.1)' : 'hsl(142,60%,45%,0.1)',
-                              color: user.is_active ? 'hsl(0,75%,55%)' : 'hsl(142,60%,45%)',
-                            }}
+                            className={`btn-action-icon ${user.is_active ? 'btn-action-danger' : 'btn-action-success'}`}
                           >
                             {user.is_active ? <UserX size={14} /> : <UserCheck size={14} />}
                           </button>
@@ -607,13 +597,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
                             onClick={() => handleDeleteUser(user)}
                             title="Excluir"
                             aria-label={`Excluir ${user.full_name}`}
-                            style={{
-                              display: 'flex', alignItems: 'center', justifyContent: 'center',
-                              width: '30px', height: '30px', borderRadius: '6px', border: 'none',
-                              cursor: 'pointer', transition: 'all 0.15s',
-                              backgroundColor: 'hsl(0,75%,55%,0.1)',
-                              color: 'hsl(0,75%,55%)',
-                            }}
+                            className="btn-action-icon btn-action-danger"
                           >
                             <Trash2 size={14} />
                           </button>
@@ -718,14 +702,12 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
                         <button
                           type="submit"
                           disabled={isSaving}
+                          className="btn-save"
                           style={{
                             display: 'flex', alignItems: 'center', gap: '5px',
                             padding: '8px 14px', borderRadius: '7px', border: 'none',
                             cursor: isSaving ? 'not-allowed' : 'pointer',
-                            backgroundColor: styles.primary,
-                            color: '#fff',
                             fontSize: '0.82rem', fontWeight: 600,
-                            opacity: isSaving ? 0.7 : 1,
                           }}
                         >
                           <Save size={13} />
@@ -889,6 +871,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
                 <button
                   type="submit"
                   disabled={isSaving}
+                  className="btn-save"
                   style={{ ...styles.formSubmitBtn(hoveredBtn === 'submit-create'), flexGrow: 1, margin: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
                   onMouseEnter={() => setHoveredBtn('submit-create')}
                   onMouseLeave={() => setHoveredBtn(null)}

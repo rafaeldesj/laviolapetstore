@@ -212,6 +212,7 @@ export const RegisterModal: React.FC<RegisterModalProps> = ({
           </div>
 
           <button type="submit" disabled={isLoading}
+            className="btn-save"
             style={styles.formSubmitBtn(hoveredSubmit)}
             onMouseEnter={() => setHoveredSubmit(true)}
             onMouseLeave={() => setHoveredSubmit(false)}>
