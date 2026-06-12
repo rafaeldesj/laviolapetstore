@@ -66,8 +66,8 @@ export const getStyles = (highContrast, fontSize, isDesktop, windowWidth) => {
       padding: windowWidth < 768 ? '14px 0' : '24px 0',
       borderBottom: `2px solid ${borderColor}`,
       gap: '12px',
-      flexWrap: 'wrap' as const,
-      position: 'relative' as const,
+      flexWrap: 'wrap',
+      position: 'relative',
     },
     siteLogo: {
       display: 'flex',
@@ -150,7 +150,7 @@ export const getStyles = (highContrast, fontSize, isDesktop, windowWidth) => {
       borderRadius: '12px',
       border: `1px solid ${borderColor}`,
       boxShadow: shadow,
-      overflowX: 'hidden' as const,
+      overflowX: 'hidden',
     },
     sectionTitle: {
       fontSize: windowWidth < 768 ? '1.25rem' : '1.6rem',
@@ -372,7 +372,7 @@ export const getStyles = (highContrast, fontSize, isDesktop, windowWidth) => {
       fontWeight: 600,
       color: textMain,
       fontSize: windowWidth < 480 ? '0.8rem' : '0.95rem',
-      whiteSpace: 'nowrap' as const,
+      whiteSpace: 'nowrap',
       overflow: 'hidden',
       textOverflow: 'ellipsis',
       maxWidth: windowWidth < 480 ? '80px' : '160px',
@@ -402,7 +402,7 @@ export const getStyles = (highContrast, fontSize, isDesktop, windowWidth) => {
       gap: '6px',
       transition: 'all 0.3s ease',
       fontSize: windowWidth < 480 ? '0.8rem' : '1rem',
-      whiteSpace: 'nowrap' as const,
+      whiteSpace: 'nowrap',
     }),
     modalOverlay: {
       position: 'fixed',
