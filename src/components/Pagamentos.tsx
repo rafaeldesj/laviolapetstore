@@ -1,13 +1,29 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   CreditCard, CalendarDays, Clock, CheckCircle2, XCircle,
   AlertCircle, Loader2, PawPrint, RefreshCw, ChevronRight,
-  Lock, ShieldCheck, QrCode, Landmark, Smartphone, X, MapPin, Truck
+  Lock, ShieldCheck, QrCode, Landmark, Smartphone, X, MapPin, Truck, Search
 } from 'lucide-react';
 import { supabase, mockSupabaseDb, isSupabaseConfigured, logAction } from '../supabaseClient';
 import type { Appointment } from '../supabaseClient';
 import type { AuthUser } from '../hooks/useAuth';
 
+declare const L: any;
+
+const PETSHOP_COORDS = { lat: -22.9122, lng: -43.5606 };
+const ADDRESS_SUGGESTIONS = [
+  { name: 'Rua Catolândia, Campo Grande, Rio de Janeiro - RJ', lat: -22.8901, lng: -43.5891 },
+  { name: 'Rua Arthur Rios, 1200, Campo Grande, Rio de Janeiro - RJ', lat: -22.8995, lng: -43.5580 },
+  { name: 'Avenida Cesário de Melo, 2500, Campo Grande, Rio de Janeiro - RJ', lat: -22.9025, lng: -43.5610 },
+  { name: 'Rua Viúva Dantas, 350, Campo Grande, Rio de Janeiro - RJ', lat: -22.9050, lng: -43.5560 },
+  { name: 'Estrada da Caroba, 500, Campo Grande, Rio de Janeiro - RJ', lat: -22.8920, lng: -43.5600 },
+  { name: 'Estrada do Cabuçu, 800, Campo Grande, Rio de Janeiro - RJ', lat: -22.8912, lng: -43.5685 },
+  { name: 'Rua Olinda Ellis, Campo Grande, Rio de Janeiro - RJ', lat: -22.8950, lng: -43.5520 },
+  { name: 'Rua Augusto de Vasconcelos, Campo Grande, Rio de Janeiro - RJ', lat: -22.9030, lng: -43.5590 },
+  { name: 'Rua Virgílio Brígido, 148, Campo Grande, Rio de Janeiro - RJ', lat: -22.8980, lng: -43.5620 },
+  { name: 'Rua Avaré, 5, Campo Grande, Rio de Janeiro - RJ', lat: -22.9010, lng: -43.5670 },
+  { name: 'Rua Luminosa, n30, Campo Grande, Rio de Janeiro - RJ', lat: -22.8970, lng: -43.5710 }
+];
 interface PagamentosProps {
   styles: any;
   currentUser: AuthUser;
@@ -94,7 +110,10 @@ export const Pagamentos: React.FC<PagamentosProps> = ({
   // Product checkout state variables
   const [deliveryMethod, setDeliveryMethod] = useState<'retirada' | 'delivery'>('retirada');
   const [deliveryAddress, setDeliveryAddress] = useState('');
-  const [selectedPreLoc, setSelectedPreLoc] = useState('');
+  const [isAddressResolved, setIsAddressResolved] = useState(false);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [suggestions, setSuggestions] = useState<any[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
   const [isPayingProduct, setIsPayingProduct] = useState(false);
   const [showProductSuccessModal, setShowProductSuccessModal] = useState(false);
   const [productLat, setProductLat] = useState(-22.8973);
@@ -106,6 +125,12 @@ export const Pagamentos: React.FC<PagamentosProps> = ({
   const [showPaymentMethods, setShowPaymentMethods] = useState(false);
   const [selectedMethod, setSelectedMethod] = useState<string | null>(null);
   const [hoveredBtn, setHoveredBtn] = useState<string | null>(null);
+
+  // Map refs for mini-map
+  const miniMapContainerRef = useRef<HTMLDivElement | null>(null);
+  const miniMapInstanceRef = useRef<any>(null);
+  const miniMarkersRef = useRef<{ petshop?: any; client?: any }>({});
+  const miniRouteLineRef = useRef<any>(null);
 
   const fetchAppointments = useCallback(async () => {
     setIsLoading(true);
@@ -186,36 +211,369 @@ export const Pagamentos: React.FC<PagamentosProps> = ({
     .filter(a => a.status !== 'Cancelado')
     .reduce((sum, a) => sum + (serviceValueMap[a.service_type] || 70), 0);
 
-  const PREDEFINED_LOCATIONS = [
-    { name: 'Rua Arthur Rios, 1200', lat: -22.8995, lng: -43.5580 },
-    { name: 'Avenida Cesário de Melo, 2500', lat: -22.9025, lng: -43.5610 },
-    { name: 'Rua Viúva Dantas, 350', lat: -22.9050, lng: -43.5560 },
-    { name: 'Estrada da Caroba, 500', lat: -22.8920, lng: -43.5600 },
-    { name: 'Estrada do Cabuçu, 800', lat: -22.8912, lng: -43.5685 }
-  ];
-  const PETSHOP_COORDS = { lat: -22.8973, lng: -43.5639 };
+  const formatSuggestionName = useCallback((sugName: string, queryText: string) => {
+    const numberMatch = queryText.match(/,\s*(\d+[a-zA-Z]?)\b/) || queryText.match(/\s+(\d+[a-zA-Z]?)$/);
+    if (!numberMatch) {
+      return sugName;
+    }
+    const houseNumber = numberMatch[1];
+    if (sugName.includes(houseNumber)) {
+      return sugName;
+    }
+    const parts = sugName.split(',');
+    if (parts.length > 0) {
+      parts[0] = `${parts[0].trim()}, ${houseNumber}`;
+      return parts.join(', ');
+    }
+    return sugName;
+  }, []);
+
+  const handleSelectSuggestion = useCallback((sug: { name: string; lat: number; lng: number }) => {
+    const finalName = formatSuggestionName(sug.name, deliveryAddress);
+
+    // Extract house number if user typed one (e.g. ", 300" or " 300")
+    const numberMatch = deliveryAddress.match(/,\s*(\d+[a-zA-Z]?)\b/) || deliveryAddress.match(/\s+(\d+[a-zA-Z]?)$/);
+    let lat = sug.lat;
+    let lng = sug.lng;
+
+    if (numberMatch) {
+      const houseNumber = numberMatch[1];
+      // Apply a tiny deterministic coordinate offset so the pin moves according to the house number
+      const numVal = parseInt(houseNumber, 10) || 0;
+      lat += (numVal % 10) * 0.00015 - 0.0007;
+      lng += (numVal % 7) * 0.00015 - 0.0005;
+    }
+
+    setDeliveryAddress(finalName);
+    setProductLat(lat);
+    setProductLng(lng);
+    setIsAddressResolved(true);
+    setShowSuggestions(false);
+  }, [deliveryAddress, formatSuggestionName]);
+
+  const handleResolveAddress = useCallback(async () => {
+    const addr = deliveryAddress.trim();
+    if (!addr) {
+      setIsAddressResolved(false);
+      return;
+    }
+    
+    setIsSearching(true);
+    try {
+      const biasQuery = addr.toLowerCase().includes('rio de janeiro') || addr.toLowerCase().includes('campo grande')
+        ? addr
+        : `${addr}, Campo Grande, Rio de Janeiro`;
+
+      // 1. Try querying Nominatim with full address (with number)
+      let url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(biasQuery)}&limit=1&countrycodes=br`;
+      let res = await fetch(url, {
+        headers: {
+          'Accept-Language': 'pt-BR,pt;q=0.9',
+          'User-Agent': 'LaViolaDeliveryApp/2.0 (rafael.laviola@example.com)'
+        }
+      });
+      if (res.ok) {
+        let data = await res.json();
+        if (data && data.length > 0) {
+          setProductLat(parseFloat(data[0].lat));
+          setProductLng(parseFloat(data[0].lon));
+          setIsAddressResolved(true);
+          return;
+        }
+      }
+
+      // 2. If no result found, strip the house number and query the street only, then apply offset
+      const numberMatch = addr.match(/,\s*(\d+[a-zA-Z]?)\b/) || addr.match(/\s+(\d+[a-zA-Z]?)$/);
+      if (numberMatch) {
+        const streetOnlyQuery = biasQuery.replace(numberMatch[0], '');
+        url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(streetOnlyQuery)}&limit=1&countrycodes=br`;
+        res = await fetch(url, {
+          headers: {
+            'Accept-Language': 'pt-BR,pt;q=0.9',
+            'User-Agent': 'LaViolaDeliveryApp/2.0 (rafael.laviola@example.com)'
+          }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.length > 0) {
+            const numVal = parseInt(numberMatch[1], 10) || 0;
+            const latOffset = (numVal % 10) * 0.00015 - 0.0007;
+            const lngOffset = (numVal % 7) * 0.00015 - 0.0005;
+            setProductLat(parseFloat(data[0].lat) + latOffset);
+            setProductLng(parseFloat(data[0].lon) + lngOffset);
+            setIsAddressResolved(true);
+            return;
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Error in direct resolve:', err);
+    } finally {
+      setIsSearching(false);
+    }
+
+    // Fallback: deterministic offset if OSM fails or is offline
+    const normalized = addr.toLowerCase();
+    let matchedLat = PETSHOP_COORDS.lat;
+    let matchedLng = PETSHOP_COORDS.lng;
+    let matched = false;
+
+    if (normalized.includes('catolandia') || normalized.includes('catolândia')) {
+      matchedLat = -22.8901;
+      matchedLng = -43.5891;
+      matched = true;
+    } else if (normalized.includes('arthur rios')) {
+      matchedLat = -22.8995;
+      matchedLng = -43.5580;
+      matched = true;
+    } else if (normalized.includes('cesario') || normalized.includes('cesário')) {
+      matchedLat = -22.9025;
+      matchedLng = -43.5610;
+      matched = true;
+    } else if (normalized.includes('viuva') || normalized.includes('viúva')) {
+      matchedLat = -22.9050;
+      matchedLng = -43.5560;
+      matched = true;
+    } else if (normalized.includes('caroba')) {
+      matchedLat = -22.8920;
+      matchedLng = -43.5600;
+      matched = true;
+    } else if (normalized.includes('cabucu') || normalized.includes('cabuçu')) {
+      matchedLat = -22.8912;
+      matchedLng = -43.5685;
+      matched = true;
+    }
+
+    if (matched) {
+      setProductLat(matchedLat);
+      setProductLng(matchedLng);
+      setIsAddressResolved(true);
+    } else {
+      let hash = 0;
+      for (let i = 0; i < normalized.length; i++) {
+        hash = normalized.charCodeAt(i) + ((hash << 5) - hash);
+      }
+      const latOffset = ((Math.abs(hash) % 100) / 100) * 0.02 - 0.01;
+      const lngOffset = ((Math.abs(hash >> 8) % 100) / 100) * 0.02 - 0.01;
+      
+      setProductLat(PETSHOP_COORDS.lat + latOffset);
+      setProductLng(PETSHOP_COORDS.lng + lngOffset);
+      setIsAddressResolved(true);
+    }
+  }, [deliveryAddress]);
+
+  // Sync selectedProduct and reset variables
+  useEffect(() => {
+    if (selectedProduct) {
+      setDeliveryMethod('retirada');
+      setDeliveryAddress('');
+      setIsAddressResolved(false);
+      setSuggestions([]);
+      setProductLat(PETSHOP_COORDS.lat);
+      setProductLng(PETSHOP_COORDS.lng);
+      setProdPaymentMethod(null);
+    }
+  }, [selectedProduct]);
+
+  // Real-time Autocomplete geocoding API fetch (Debounced 400ms)
+  useEffect(() => {
+    const query = deliveryAddress.trim();
+    if (!query || query.length < 3 || isAddressResolved || deliveryMethod !== 'delivery') {
+      setSuggestions([]);
+      return;
+    }
+
+    setIsSearching(true);
+    const delayDebounce = setTimeout(async () => {
+      try {
+        const biasQuery = query.toLowerCase().includes('rio de janeiro') || query.toLowerCase().includes('campo grande')
+          ? query
+          : `${query}, Campo Grande, Rio de Janeiro`;
+
+        const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(biasQuery)}&limit=6&addressdetails=1&countrycodes=br`;
+        
+        const res = await fetch(url, {
+          headers: {
+            'Accept-Language': 'pt-BR,pt;q=0.9',
+            'User-Agent': 'LaViolaDeliveryApp/2.0 (rafael.laviola@example.com)'
+          }
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          const mapped = data.map((item: any) => {
+            let displayName = item.display_name;
+            displayName = displayName
+              .replace(/, Região Geográfica.*$/, '')
+              .replace(/, Região Metropolitana.*$/, '')
+              .replace(/, Região Sudeste.*$/, '')
+              .replace(/, Região de Governo.*$/, '')
+              .replace(/, Rio de Janeiro, Região Intermediária.*$/, '')
+              .replace(/, Brasil$/, '');
+
+            return {
+              name: displayName,
+              lat: parseFloat(item.lat),
+              lng: parseFloat(item.lon)
+            };
+          });
+          setSuggestions(mapped);
+        }
+      } catch (err) {
+        console.error('Error fetching autocomplete:', err);
+        // Fallback: search predefined mock suggestions offline
+        const offlineMatches = ADDRESS_SUGGESTIONS.filter(item =>
+          item.name.toLowerCase().includes(query.toLowerCase())
+        );
+        setSuggestions(offlineMatches);
+      } finally {
+        setIsSearching(false);
+      }
+    }, 400);
+
+    return () => clearTimeout(delayDebounce);
+  }, [deliveryAddress, isAddressResolved, deliveryMethod]);
+
+  // Leaflet Map Rendering and Updates for Checkout Mini Map with Real-Road Route
+  useEffect(() => {
+    let active = true;
+
+    if (
+      typeof window === 'undefined' || 
+      !(window as any).L || 
+      !miniMapContainerRef.current || 
+      !isAddressResolved || 
+      !deliveryAddress.trim() || 
+      deliveryMethod !== 'delivery'
+    ) {
+      if (miniMapInstanceRef.current) {
+        miniMapInstanceRef.current.remove();
+        miniMapInstanceRef.current = null;
+        miniMarkersRef.current = {};
+        miniRouteLineRef.current = null;
+      }
+      return;
+    }
+
+    const L = (window as any).L;
+    const mapContainer = miniMapContainerRef.current;
+
+    const petshopIcon = L.divIcon({
+      html: `<div style="background-color: hsl(210, 85%, 45%); width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; border: 2px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.3);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg></div>`,
+      className: 'custom-petshop-icon',
+      iconSize: [28, 28],
+      iconAnchor: [14, 14]
+    });
+
+    const clientIcon = L.divIcon({
+      html: `<div style="background-color: hsl(0, 75%, 50%); width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; border: 2px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.3);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"></path><circle cx="12" cy="10" r="3"></circle></svg></div>`,
+      className: 'custom-client-icon',
+      iconSize: [28, 28],
+      iconAnchor: [14, 14]
+    });
+
+    const setupMap = async () => {
+      // 1. Fetch real street route coordinates from OSRM
+      let routeCoords: [number, number][] = [
+        [PETSHOP_COORDS.lat, PETSHOP_COORDS.lng],
+        [productLat, productLng]
+      ];
+
+      try {
+        const url = `https://router.project-osrm.org/route/v1/driving/${PETSHOP_COORDS.lng},${PETSHOP_COORDS.lat};${productLng},${productLat}?overview=full&geometries=geojson`;
+        const res = await fetch(url);
+        if (res.ok && active) {
+          const data = await res.json();
+          if (data.routes && data.routes.length > 0) {
+            const coords = data.routes[0].geometry.coordinates;
+            routeCoords = coords.map((c: any) => [c[1], c[0]]);
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching OSRM route:', err);
+      }
+
+      if (!active) return;
+
+      // 2. Initialize map if not loaded
+      if (!miniMapInstanceRef.current) {
+        const initialCenter = [
+          (PETSHOP_COORDS.lat + productLat) / 2,
+          (PETSHOP_COORDS.lng + productLng) / 2
+        ];
+
+        const map = L.map(mapContainer).setView(initialCenter, 14);
+        miniMapInstanceRef.current = map;
+
+        L.tileLayer('https://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
+          maxZoom: 20,
+          subdomains: ['mt0', 'mt1', 'mt2', 'mt3'],
+          attribution: 'Map data © Google'
+        }).addTo(map);
+
+        miniMarkersRef.current.petshop = L.marker([PETSHOP_COORDS.lat, PETSHOP_COORDS.lng], { icon: petshopIcon })
+          .addTo(map)
+          .bindPopup('<b>Petshop La Viola</b><br>Origem das Entregas');
+
+        miniMarkersRef.current.client = L.marker([productLat, productLng], { icon: clientIcon })
+          .addTo(map)
+          .bindPopup(`<b>Seu Endereço</b><br>${deliveryAddress}`);
+
+        // Draw real street route line (solid or dashed)
+        miniRouteLineRef.current = L.polyline(routeCoords, { 
+          color: '#3b82f6', 
+          weight: 5, 
+          opacity: 0.8 
+        }).addTo(map);
+
+        const bounds = L.latLngBounds(routeCoords);
+        map.fitBounds(bounds, { padding: [40, 40] });
+      } else {
+        const map = miniMapInstanceRef.current;
+        
+        if (miniMarkersRef.current.client) {
+          miniMarkersRef.current.client.setLatLng([productLat, productLng]);
+          miniMarkersRef.current.client.setPopupContent(`<b>Seu Endereço</b><br>${deliveryAddress}`);
+        }
+
+        if (miniRouteLineRef.current) {
+          miniRouteLineRef.current.setLatLngs(routeCoords);
+        }
+
+        const bounds = L.latLngBounds(routeCoords);
+        map.fitBounds(bounds, { padding: [40, 40] });
+      }
+
+      setTimeout(() => {
+        if (miniMapInstanceRef.current) {
+          miniMapInstanceRef.current.invalidateSize();
+        }
+      }, 100);
+    };
+
+    setupMap();
+
+    return () => {
+      active = false;
+    };
+  }, [isAddressResolved, productLat, productLng, deliveryAddress, deliveryMethod]);
+
+  // Clean up on component unmount
+  useEffect(() => {
+    return () => {
+      if (miniMapInstanceRef.current) {
+        miniMapInstanceRef.current.remove();
+        miniMapInstanceRef.current = null;
+        miniMarkersRef.current = {};
+        miniRouteLineRef.current = null;
+      }
+    };
+  }, []);
 
   // Render Product Checkout instead of Appointment payments if selectedProduct is set
   if (selectedProduct) {
     const frete = deliveryMethod === 'delivery' ? 10.00 : 0.00;
     const total = selectedProduct.price + frete;
-
-    const handlePredefinedLoc = (e: React.ChangeEvent<HTMLSelectElement>) => {
-      const val = e.target.value;
-      setSelectedPreLoc(val);
-      if (!val) {
-        setDeliveryAddress('');
-        setProductLat(PETSHOP_COORDS.lat);
-        setProductLng(PETSHOP_COORDS.lng);
-        return;
-      }
-      const loc = PREDEFINED_LOCATIONS.find(l => l.name === val);
-      if (loc) {
-        setDeliveryAddress(loc.name + ' - Campo Grande, Rio de Janeiro - RJ');
-        setProductLat(loc.lat);
-        setProductLng(loc.lng);
-      }
-    };
 
     const handlePayProduct = (e: React.FormEvent) => {
       e.preventDefault();
@@ -379,36 +737,159 @@ export const Pagamentos: React.FC<PagamentosProps> = ({
                 Endereço para Entrega *
               </label>
               
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <span style={{ fontSize: '0.78rem', color: styles.sidebarWidgetText?.color }}>Selecione um Endereço Cadastrado para carregar as coordenadas:</span>
-                <select
-                  value={selectedPreLoc}
-                  onChange={handlePredefinedLoc}
-                  style={styles.formInput}
-                >
-                  <option value="">— Digitar novo endereço manualmente —</option>
-                  {PREDEFINED_LOCATIONS.map(loc => (
-                    <option key={loc.name} value={loc.name}>{loc.name}</option>
-                  ))}
-                </select>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', position: 'relative' }}>
+                <span style={{ fontSize: '0.78rem', color: styles.sidebarWidgetText?.color }}>
+                  Digite o endereço de entrega (ex: "Rua Catolândia" ou "Rua Arthur Rios"):
+                </span>
+                <div style={{ position: 'relative', display: 'flex', alignItems: 'center', width: '100%' }}>
+                  <input
+                    type="text"
+                    placeholder="Digite o endereço completo para buscar..."
+                    value={deliveryAddress}
+                    onChange={(e) => {
+                      setDeliveryAddress(e.target.value);
+                      setIsAddressResolved(false);
+                      setShowSuggestions(true);
+                    }}
+                    onFocus={() => setShowSuggestions(true)}
+                    onBlur={() => setShowSuggestions(false)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        if (suggestions.length > 0) {
+                          handleSelectSuggestion(suggestions[0]);
+                        } else {
+                          handleResolveAddress();
+                        }
+                      }
+                    }}
+                    style={{ ...styles.formInput, paddingRight: '40px', width: '100%' }}
+                    required
+                  />
+                  {isSearching && (
+                    <div style={{ position: 'absolute', right: '40px', display: 'flex', alignItems: 'center', color: styles.primary }}>
+                      <Loader2 size={16} className="spin-icon" style={{ animation: 'spin 1s linear infinite' }} />
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    onClick={handleResolveAddress}
+                    style={{
+                      position: 'absolute',
+                      right: '10px',
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      color: styles.primary,
+                      display: 'flex',
+                      alignItems: 'center'
+                    }}
+                    title="Buscar endereço no mapa"
+                  >
+                    <Search size={18} />
+                  </button>
+
+                  {/* Suggestions Autocomplete Dropdown */}
+                  {showSuggestions && deliveryAddress.trim() && !isAddressResolved && (
+                    <div style={{
+                      position: 'absolute',
+                      top: '100%',
+                      left: 0,
+                      right: 0,
+                      backgroundColor: styles.cardBackground || '#fff',
+                      border: `1.5px solid ${styles.borderColor}`,
+                      borderRadius: '8px',
+                      marginTop: '4px',
+                      boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
+                      zIndex: 1000,
+                      maxHeight: '220px',
+                      overflowY: 'auto'
+                    }}>
+                      {suggestions.length > 0 ? (
+                        suggestions.map((sug, idx, arr) => (
+                          <div
+                            key={idx}
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              handleSelectSuggestion(sug);
+                            }}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '10px',
+                              padding: '10px 14px',
+                              cursor: 'pointer',
+                              borderBottom: idx < arr.length - 1 ? `1px solid ${styles.borderColor}` : 'none',
+                              transition: 'background-color 0.15s ease',
+                              color: styles.textMain
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.backgroundColor = 'rgba(54, 162, 235, 0.08)';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.backgroundColor = 'transparent';
+                            }}
+                          >
+                            <MapPin size={16} style={{ color: styles.primary, flexShrink: 0 }} />
+                            <span style={{ fontSize: '0.85rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              {formatSuggestionName(sug.name, deliveryAddress)}
+                            </span>
+                          </div>
+                        ))
+                      ) : (
+                        <div
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            handleResolveAddress();
+                          }}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '10px',
+                            padding: '10px 14px',
+                            cursor: 'pointer',
+                            transition: 'background-color 0.15s ease',
+                            color: styles.sidebarWidgetText?.color
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.backgroundColor = 'rgba(54, 162, 235, 0.08)';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.backgroundColor = 'transparent';
+                          }}
+                        >
+                          <Search size={16} style={{ flexShrink: 0 }} />
+                          <span style={{ fontSize: '0.85rem', fontStyle: 'italic' }}>
+                            {isSearching ? 'Buscando endereços...' : `Buscar "${deliveryAddress}" no mapa...`}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+                <span style={{ fontSize: '0.73rem', color: styles.sidebarWidgetText?.color }}>
+                  Digite parte do nome da rua para visualizar sugestões e clique para selecioná-la.
+                </span>
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <span style={{ fontSize: '0.78rem', color: styles.sidebarWidgetText?.color }}>Endereço Completo:</span>
-                <input
-                  type="text"
-                  placeholder="Rua, Número, Complemento, Bairro - Campo Grande"
-                  value={deliveryAddress}
-                  onChange={(e) => {
-                    setDeliveryAddress(e.target.value);
-                    // Reset predefined select if they edit manually
-                    setSelectedPreLoc('');
-                    // Default coordinate offset slightly from petshop
-                    setProductLat(PETSHOP_COORDS.lat + 0.004);
-                    setProductLng(PETSHOP_COORDS.lng - 0.003);
-                  }}
-                  style={styles.formInput}
-                  required
+              {/* Mini Map Container */}
+              <div style={{
+                display: isAddressResolved && deliveryAddress.trim() ? 'block' : 'none',
+                marginTop: '10px'
+              }}>
+                <span style={{ fontSize: '0.8rem', color: 'hsl(142,60%,40%)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '8px' }}>
+                  <CheckCircle2 size={14} /> Endereço localizado no mapa!
+                </span>
+                <div 
+                  ref={miniMapContainerRef} 
+                  style={{ 
+                    height: '240px', 
+                    width: '100%', 
+                    borderRadius: '8px', 
+                    border: `1.5px solid ${styles.borderColor}`, 
+                    overflow: 'hidden',
+                    boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.06)'
+                  }} 
                 />
               </div>
             </div>

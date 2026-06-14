@@ -3,7 +3,7 @@ import {
   Truck, PlusCircle, Search, CheckCircle2, 
   Map, Compass, Play, X, Eye, Trash2
 } from 'lucide-react';
-import { logAction } from '../supabaseClient';
+import { logAction, supabase, isSupabaseConfigured } from '../supabaseClient';
 import type { AuthUser } from '../hooks/useAuth';
 
 // Declare Leaflet global object L
@@ -31,7 +31,7 @@ export interface DeliveryItem {
   created_at: string;
 }
 
-const PETSHOP_COORDS = { lat: -22.8973, lng: -43.5639 }; // Rua Dr. Ibraim Hannas, 406 - Campo Grande
+const PETSHOP_COORDS = { lat: -22.9122, lng: -43.5606 }; // Rua Dr. Ibraim Hannas, 406 - Campo Grande
 
 // Predefined nearby client destinations in Campo Grande for easy selection
 const PREDEFINED_LOCATIONS = [
@@ -78,7 +78,11 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
 
   // Seed default data if empty in localStorage on mount
   useEffect(() => {
-    const storedDeliveries = localStorage.getItem('laviola_deliveries');
+    let storedDeliveries = localStorage.getItem('laviola_deliveries');
+    if (storedDeliveries && (storedDeliveries.includes('Marcos') || storedDeliveries.includes('colab-2'))) {
+      localStorage.removeItem('laviola_deliveries');
+      storedDeliveries = null;
+    }
     if (!storedDeliveries) {
       const defaultDeliveries: DeliveryItem[] = [
         {
@@ -88,8 +92,8 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
           client_address: 'Rua Arthur Rios, 1200 - Campo Grande',
           client_lat: -22.8995,
           client_lng: -43.5580,
-          driver_id: 'colab-2', // Marcos Entregador
-          driver_name: 'Marcos Entregador',
+          driver_id: '4155f554-a955-442a-af69-75288a66a4d7', 
+          driver_name: 'Jacques Vasconcellos',
           driver_lat: -22.8995, // already arrived
           driver_lng: -43.5580,
           status: 'concluida',
@@ -104,13 +108,13 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
           client_address: 'Avenida Cesário de Melo, 2500 - Campo Grande',
           client_lat: -22.9025,
           client_lng: -43.5610,
-          driver_id: 'colab-2',
-          driver_name: 'Marcos Entregador',
+          driver_id: '', // Unassigned so the user can test dispatching
+          driver_name: '',
           driver_lat: PETSHOP_COORDS.lat,
           driver_lng: PETSHOP_COORDS.lng,
           status: 'agendada',
           items: 'Ração Golden Cães Adultos 15kg',
-          scheduled_time: 'Hoje às 17:00',
+          scheduled_time: 'A ser despachada',
           created_at: new Date().toISOString()
         }
       ];
@@ -120,21 +124,49 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
       setDeliveries(JSON.parse(storedDeliveries));
     }
 
-    // Load available clients and drivers from seeded mock users
-    const mockUsers = JSON.parse(localStorage.getItem('laviola_mock_users') || '[]');
-    const clientList = mockUsers
-      .filter((u: any) => u.profile?.role === 'client')
-      .map((u: any) => ({ id: u.id, name: u.name }));
-    const driverList = mockUsers
-      .filter((u: any) => u.profile?.role === 'collaborator' && u.profile?.collaborator_category?.name === 'Entregador')
-      .map((u: any) => ({ id: u.id, name: u.name }));
+    const fetchRealUsers = async () => {
+      if (isSupabaseConfigured && supabase) {
+        try {
+          const { data, error } = await supabase
+            .from('profiles')
+            .select(`*, collaborator_category:collaborator_categories(id, name, description, is_active)`);
+          
+          if (!error && data) {
+            const clientList = data
+              .filter((p: any) => p.role === 'client')
+              .map((p: any) => ({ id: p.id, name: p.full_name || p.username || 'Cliente' }));
 
-    // Fallbacks just in case
-    if (clientList.length === 0) clientList.push({ id: 'colab-1', name: 'João Silva' });
-    if (driverList.length === 0) driverList.push({ id: 'colab-2', name: 'Marcos Entregador' });
+            const driverList = data
+              .filter((p: any) => p.role === 'collaborator' && p.collaborator_category?.name === 'Entregador')
+              .map((p: any) => ({ id: p.id, name: p.full_name || p.username || 'Entregador' }));
+            
+            setClients(clientList);
+            setDrivers(driverList);
+            return;
+          }
+        } catch (err) {
+          console.error('Error fetching real profiles:', err);
+        }
+      }
 
-    setClients(clientList);
-    setDrivers(driverList);
+      // Fallback/Local storage mode
+      const mockUsers = JSON.parse(localStorage.getItem('laviola_mock_users') || '[]');
+      const clientList = mockUsers
+        .filter((u: any) => u.profile?.role === 'client')
+        .map((u: any) => ({ id: u.id, name: u.name }));
+      const driverList = mockUsers
+        .filter((u: any) => u.profile?.role === 'collaborator' && u.profile?.collaborator_category?.name === 'Entregador')
+        .map((u: any) => ({ id: u.id, name: u.name }));
+
+      // Fallbacks just in case
+      if (clientList.length === 0) clientList.push({ id: 'colab-1', name: 'João Silva' });
+      if (driverList.length === 0) driverList.push({ id: '4155f554-a955-442a-af69-75288a66a4d7', name: 'Jacques Vasconcellos' });
+
+      setClients(clientList);
+      setDrivers(driverList);
+    };
+
+    fetchRealUsers();
   }, []);
 
   // Poll deliveries state from localStorage every 2 seconds to make it real-time across tabs
@@ -218,6 +250,8 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
 
   // Leaflet Map Rendering and Updates
   useEffect(() => {
+    let active = true;
+
     // If Leaflet library L is not loaded yet or container is missing, skip
     if (typeof window === 'undefined' || !(window as any).L || !mapContainerRef.current || !selectedDelivery) {
       if (mapInstanceRef.current) {
@@ -251,89 +285,109 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
       iconAnchor: [14, 14]
     });
 
-    // Create map instance if it does not exist
-    if (!mapInstanceRef.current) {
-      const initialCenter = [
-        (PETSHOP_COORDS.lat + selectedDelivery.client_lat) / 2,
-        (PETSHOP_COORDS.lng + selectedDelivery.client_lng) / 2
-      ];
-
-      const map = L.map(mapContainer).setView(initialCenter, 15);
-      mapInstanceRef.current = map;
-
-      // Google Maps standard roadmap tiles
-      L.tileLayer('https://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
-        maxZoom: 20,
-        subdomains: ['mt0', 'mt1', 'mt2', 'mt3'],
-        attribution: 'Map data © Google'
-      }).addTo(map);
-
-      // Add petshop marker
-      markersRef.current.petshop = L.marker([PETSHOP_COORDS.lat, PETSHOP_COORDS.lng], { icon: petshopIcon })
-        .addTo(map)
-        .bindPopup('<b>Petshop La Viola</b><br>Origem das Entregas');
-
-      // Add client marker
-      markersRef.current.client = L.marker([selectedDelivery.client_lat, selectedDelivery.client_lng], { icon: clientIcon })
-        .addTo(map)
-        .bindPopup(`<b>Cliente: ${selectedDelivery.client_name}</b><br>${selectedDelivery.client_address}`);
-
-      // Add driver marker if dispatched
-      if (selectedDelivery.driver_id) {
-        markersRef.current.driver = L.marker([selectedDelivery.driver_lat, selectedDelivery.driver_lng], { icon: driverIcon })
-          .addTo(map)
-          .bindPopup(`<b>Entregador: ${selectedDelivery.driver_name}</b>`);
-      }
-
-      // Add route polyline
-      routeLineRef.current = L.polyline([
-        [selectedDelivery.driver_id ? selectedDelivery.driver_lat : PETSHOP_COORDS.lat, selectedDelivery.driver_id ? selectedDelivery.driver_lng : PETSHOP_COORDS.lng],
-        [selectedDelivery.client_lat, selectedDelivery.client_lng]
-      ], { color: '#3b82f6', weight: 4, opacity: 0.6, dashArray: '8, 8' }).addTo(map);
-
-      // Fit map bounds to show both shop and destination
-      const bounds = L.latLngBounds([
+    const setupMap = async () => {
+      // Fetch OSRM route from shop to client
+      let routeCoords: [number, number][] = [
         [PETSHOP_COORDS.lat, PETSHOP_COORDS.lng],
         [selectedDelivery.client_lat, selectedDelivery.client_lng]
-      ]);
-      map.fitBounds(bounds, { padding: [40, 40] });
-    } else {
-      // If map already exists, just update driver & client coordinates dynamically
-      const map = mapInstanceRef.current;
-      
-      if (selectedDelivery.driver_id) {
-        if (markersRef.current.driver) {
-          markersRef.current.driver.setLatLng([selectedDelivery.driver_lat, selectedDelivery.driver_lng]);
-          markersRef.current.driver.setPopupContent(`<b>Entregador: ${selectedDelivery.driver_name}</b>`);
-        } else {
+      ];
+
+      try {
+        const url = `https://router.project-osrm.org/route/v1/driving/${PETSHOP_COORDS.lng},${PETSHOP_COORDS.lat};${selectedDelivery.client_lng},${selectedDelivery.client_lat}?overview=full&geometries=geojson`;
+        const res = await fetch(url);
+        if (res.ok && active) {
+          const data = await res.json();
+          if (data.routes && data.routes.length > 0) {
+            const coords = data.routes[0].geometry.coordinates;
+            routeCoords = coords.map((c: any) => [c[1], c[0]]);
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching OSRM route in Delivery:', err);
+      }
+
+      if (!active) return;
+
+      // Create map instance if it does not exist
+      if (!mapInstanceRef.current) {
+        const initialCenter = [
+          (PETSHOP_COORDS.lat + selectedDelivery.client_lat) / 2,
+          (PETSHOP_COORDS.lng + selectedDelivery.client_lng) / 2
+        ];
+
+        const map = L.map(mapContainer).setView(initialCenter, 15);
+        mapInstanceRef.current = map;
+
+        // Google Maps standard roadmap tiles
+        L.tileLayer('https://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
+          maxZoom: 20,
+          subdomains: ['mt0', 'mt1', 'mt2', 'mt3'],
+          attribution: 'Map data © Google'
+        }).addTo(map);
+
+        // Add petshop marker
+        markersRef.current.petshop = L.marker([PETSHOP_COORDS.lat, PETSHOP_COORDS.lng], { icon: petshopIcon })
+          .addTo(map)
+          .bindPopup('<b>Petshop La Viola</b><br>Origem das Entregas');
+
+        // Add client marker
+        markersRef.current.client = L.marker([selectedDelivery.client_lat, selectedDelivery.client_lng], { icon: clientIcon })
+          .addTo(map)
+          .bindPopup(`<b>Cliente: ${selectedDelivery.client_name}</b><br>${selectedDelivery.client_address}`);
+
+        // Add driver marker if dispatched
+        if (selectedDelivery.driver_id) {
           markersRef.current.driver = L.marker([selectedDelivery.driver_lat, selectedDelivery.driver_lng], { icon: driverIcon })
             .addTo(map)
             .bindPopup(`<b>Entregador: ${selectedDelivery.driver_name}</b>`);
         }
-      } else {
-        if (markersRef.current.driver) {
-          map.removeLayer(markersRef.current.driver);
-          markersRef.current.driver = null;
-        }
-      }
-      
-      if (markersRef.current.client) {
-        markersRef.current.client.setLatLng([selectedDelivery.client_lat, selectedDelivery.client_lng]);
-      }
 
-      // Adjust line route representation from driver to client
-      if (routeLineRef.current) {
-        routeLineRef.current.setLatLngs([
-          [selectedDelivery.driver_id ? selectedDelivery.driver_lat : PETSHOP_COORDS.lat, selectedDelivery.driver_id ? selectedDelivery.driver_lng : PETSHOP_COORDS.lng],
+        // Add route polyline using street coordinates
+        routeLineRef.current = L.polyline(routeCoords, { color: '#3b82f6', weight: 4, opacity: 0.8 }).addTo(map);
+
+        // Fit map bounds to show both shop and destination
+        const bounds = L.latLngBounds([
+          [PETSHOP_COORDS.lat, PETSHOP_COORDS.lng],
           [selectedDelivery.client_lat, selectedDelivery.client_lng]
         ]);
+        map.fitBounds(bounds, { padding: [40, 40] });
+      } else {
+        // If map already exists, just update driver & client coordinates dynamically
+        const map = mapInstanceRef.current;
+        
+        if (selectedDelivery.driver_id) {
+          if (markersRef.current.driver) {
+            markersRef.current.driver.setLatLng([selectedDelivery.driver_lat, selectedDelivery.driver_lng]);
+            markersRef.current.driver.setPopupContent(`<b>Entregador: ${selectedDelivery.driver_name}</b>`);
+          } else {
+            markersRef.current.driver = L.marker([selectedDelivery.driver_lat, selectedDelivery.driver_lng], { icon: driverIcon })
+              .addTo(map)
+              .bindPopup(`<b>Entregador: ${selectedDelivery.driver_name}</b>`);
+          }
+        } else {
+          if (markersRef.current.driver) {
+            map.removeLayer(markersRef.current.driver);
+            markersRef.current.driver = null;
+          }
+        }
+        
+        if (markersRef.current.client) {
+          markersRef.current.client.setLatLng([selectedDelivery.client_lat, selectedDelivery.client_lng]);
+        }
+
+        // Adjust line route representation from driver to client using street coordinates
+        if (routeLineRef.current) {
+          routeLineRef.current.setLatLngs(routeCoords);
+        }
       }
-    }
+    };
+
+    setupMap();
 
     return () => {
-      // No cleanup on coordinates tick to preserve view/zoom state. Cleanup happens only when unmounting or changing selectedDelivery.
+      active = false;
     };
-  }, [selectedDelivery?.id, selectedDelivery?.driver_id]);
+  }, [selectedDelivery?.id, selectedDelivery?.driver_id, selectedDelivery?.driver_lat, selectedDelivery?.driver_lng]);
 
   // Side-effect cleanup when selected delivery is closed/swapped
   useEffect(() => {
@@ -599,6 +653,20 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
           background-color: hsl(36, 95%, 55%);
           transition: width 0.5s ease-out;
         }
+        .delivery-grid-container {
+          display: flex;
+          flex-direction: column;
+          gap: 20px;
+        }
+        @media (min-width: 1200px) {
+          .delivery-grid-container.has-map {
+            display: grid;
+            grid-template-columns: 1.2fr 1fr;
+          }
+          .delivery-grid-container.has-map.driver-view {
+            grid-template-columns: 1fr 1.2fr;
+          }
+        }
       `}</style>
 
       {/* Header */}
@@ -764,7 +832,7 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
       {/* 2. VISÃO DE ENTREGADOR                  */}
       {/* ======================================= */}
       {isDriver && (
-        <div style={{ marginTop: '24px', display: 'grid', gridTemplateColumns: selectedDelivery ? '1fr 1.2fr' : '1fr', gap: '20px' }}>
+        <div className={`delivery-grid-container${selectedDelivery ? ' has-map driver-view' : ''}`} style={{ marginTop: '24px' }}>
           
           {/* Left: Deliveries list */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
@@ -998,7 +1066,7 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
           </div>
 
           {/* List and Map split */}
-          <div style={{ display: 'grid', gridTemplateColumns: selectedDelivery ? '1.2fr 1fr' : '1fr', gap: '20px' }}>
+          <div className={`delivery-grid-container${selectedDelivery ? ' has-map' : ''}`} style={{ marginTop: '20px' }}>
             
             {/* Table layout of deliveries */}
             <div style={{
@@ -1009,12 +1077,12 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem', textAlign: 'left' }}>
                 <thead>
                   <tr style={{ borderBottom: `2px solid ${styles.borderColor}`, color: styles.sidebarWidgetText?.color }}>
-                    <th style={{ padding: '10px 8px' }}>Cliente</th>
-                    <th style={{ padding: '10px 8px' }}>Itens</th>
-                    <th style={{ padding: '10px 8px' }}>Entregador</th>
-                    <th style={{ padding: '10px 8px' }}>Agendamento</th>
-                    <th style={{ padding: '10px 8px' }}>Status</th>
-                    <th style={{ padding: '10px 8px', textAlign: 'center' }}>Ações</th>
+                    <th style={{ padding: '10px 6px' }}>Cliente</th>
+                    <th style={{ padding: '10px 6px' }}>Itens</th>
+                    <th style={{ padding: '10px 6px' }}>Entregador</th>
+                    <th style={{ padding: '10px 6px' }}>Agendamento</th>
+                    <th style={{ padding: '10px 6px' }}>Status</th>
+                    <th style={{ padding: '10px 6px', textAlign: 'center' }}>Ações</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1034,14 +1102,14 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
                           borderBottom: `1px solid ${styles.borderColor}`, color: styles.textMain,
                           backgroundColor: isSelected ? 'rgba(210, 85%, 45%, 0.04)' : 'transparent'
                         }}>
-                          <td style={{ padding: '12px 8px', fontWeight: 600 }}>
+                          <td style={{ padding: '12px 6px', fontWeight: 600 }}>
                             {d.client_name}
                             <div style={{ fontSize: '0.75rem', fontWeight: 400, color: styles.sidebarWidgetText?.color, marginTop: '2px' }}>
                               {d.client_address}
                             </div>
                           </td>
-                          <td style={{ padding: '12px 8px' }}>{d.items}</td>
-                          <td style={{ padding: '12px 8px' }}>
+                          <td style={{ padding: '12px 6px' }}>{d.items}</td>
+                          <td style={{ padding: '12px 6px' }}>
                             {d.driver_id ? (
                               d.driver_name
                             ) : (
@@ -1050,11 +1118,13 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
                                 onChange={(e) => handleDispatch(d.id, e.target.value)}
                                 style={{
                                   ...styles.formInput,
-                                  padding: '4px 8px',
+                                  padding: '4px 6px',
                                   fontSize: '0.8rem',
                                   borderColor: styles.primary,
                                   backgroundColor: styles.cardBackground,
-                                  cursor: 'pointer'
+                                  cursor: 'pointer',
+                                  maxWidth: '130px',
+                                  textOverflow: 'ellipsis'
                                 }}
                               >
                                 <option value="">— Despachar —</option>
@@ -1064,16 +1134,16 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
                               </select>
                             )}
                           </td>
-                          <td style={{ padding: '12px 8px', color: styles.sidebarWidgetText?.color }}>{d.scheduled_time}</td>
-                          <td style={{ padding: '12px 8px' }}>
+                          <td style={{ padding: '12px 6px', color: styles.sidebarWidgetText?.color }}>{d.scheduled_time}</td>
+                          <td style={{ padding: '12px 6px' }}>
                             <span style={{
-                              fontSize: '0.7rem', fontWeight: 700, padding: '3px 8px', borderRadius: '12px',
+                              fontSize: '0.7rem', fontWeight: 700, padding: '3px 6px', borderRadius: '12px',
                               backgroundColor: badg.bg, color: badg.text, border: `1px solid ${badg.border}`
                             }}>
                               {badg.label}
                             </span>
                           </td>
-                          <td style={{ padding: '12px 8px', display: 'flex', gap: '6px', justifyContent: 'center', height: '100%', alignItems: 'center', border: 'none' }}>
+                          <td style={{ padding: '12px 6px', display: 'flex', gap: '6px', justifyContent: 'center', height: '100%', alignItems: 'center', border: 'none' }}>
                             <button
                               onClick={() => setSelectedDelivery(isSelected ? null : d)}
                               title="Visualizar no Mapa"
