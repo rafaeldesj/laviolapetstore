@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { X, UserPlus, Eye, EyeOff } from 'lucide-react';
-import { supabase, isSupabaseConfigured } from '../supabaseClient';
+import { supabase, isSupabaseConfigured, logAction } from '../supabaseClient';
 import type { AuthUser } from '../hooks/useAuth';
 
 interface RegisterModalProps {
@@ -77,12 +77,24 @@ export const RegisterModal: React.FC<RegisterModalProps> = ({
             .select('*, collaborator_category:collaborator_categories(id, name, description, is_active)')
             .eq('id', data.user.id)
             .single();
-          onRegisterSuccess({
+
+          const registeredUser = {
             id: data.user.id,
             email: data.user.email || email,
             name: profile?.full_name || fullName,
             profile: profile || null,
-          });
+          };
+
+          if (registeredUser.profile?.role !== 'developer') {
+            await logAction(
+              registeredUser.email,
+              registeredUser.name,
+              'Login',
+              `O usuário "${registeredUser.name}" entrou no sistema (cadastro realizado).`
+            );
+          }
+
+          onRegisterSuccess(registeredUser);
           onClose();
         } else {
           setErrorMsg('Conta criada! Verifique seu e-mail para confirmar e depois faça login.');
@@ -119,6 +131,16 @@ export const RegisterModal: React.FC<RegisterModalProps> = ({
           profile: newProfile,
         });
         localStorage.setItem('laviola_mock_users', JSON.stringify(users));
+
+        if (newUser.profile?.role !== 'developer') {
+          await logAction(
+            newUser.email,
+            newUser.name,
+            'Login',
+            `O usuário "${newUser.name}" entrou no sistema (cadastro realizado).`
+          );
+        }
+
         onRegisterSuccess(newUser);
         onClose();
       }

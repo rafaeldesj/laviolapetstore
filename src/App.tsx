@@ -20,6 +20,7 @@ import { UserManagement } from './components/admin/UserManagement';
 import { Registros } from './components/admin/Registros';
 import { Configuracoes } from './components/admin/Configuracoes';
 import { VendaAvulsa } from './components/VendaAvulsa';
+import { Delivery } from './components/Delivery';
 import { useAuth } from './hooks/useAuth';
 import { roleHierarchy } from './supabaseClient';
 import { getStyles } from './styles';
@@ -61,7 +62,7 @@ function App() {
   }, [styles.bodyStyle]);
 
   useEffect(() => {
-    const isPrivate = ['venda-avulsa', 'pets', 'agendamentos', 'financeiro', 'estoque', 'prontuario', 'relatorios', 'pagamentos', 'usuarios', 'registros', 'configuracoes'].includes(activeSection);
+    const isPrivate = ['venda-avulsa', 'pets', 'agendamentos', 'financeiro', 'estoque', 'prontuario', 'relatorios', 'pagamentos', 'usuarios', 'registros', 'configuracoes', 'delivery'].includes(activeSection);
     const requiresMgmt = ['usuarios', 'registros'].includes(activeSection);
     const requiresOwnerDev = ['configuracoes'].includes(activeSection);
     const requiresStock = activeSection === 'estoque';
@@ -131,6 +132,10 @@ function App() {
 
             {activeSection === 'agendamentos' && user && (
               <Agendamentos styles={styles} currentUser={user} setActiveSection={setActiveSection} />
+            )}
+
+            {activeSection === 'delivery' && user && (
+              <Delivery styles={styles} currentUser={user} />
             )}
 
             {activeSection === 'pagamentos' && user && userRole === 'client' && (

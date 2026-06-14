@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { 
   Home, Scissors, Tag, Info, Phone,
   PawPrint, CalendarDays, Wallet, Package, 
-  ClipboardList, BarChart3, Users, History, Settings, CreditCard, ShoppingCart, Menu, X
+  ClipboardList, BarChart3, Users, History, Settings, CreditCard, ShoppingCart, Menu, X, Truck
 } from 'lucide-react';
 import type { UserRole } from '../supabaseClient';
 import { roleHierarchy } from '../supabaseClient';
@@ -48,6 +48,7 @@ export const Navigation: React.FC<NavigationProps> = ({ styles, activeSection, s
     { id: 'venda-avulsa', label: 'Venda Avulsa PDV',    icon: <ShoppingCart size={16} />,  requiresLogin: true },
     { id: 'pets',         label: 'Pets',                 icon: <PawPrint size={16} />,      requiresLogin: true },
     { id: 'agendamentos', label: 'Agendamentos',         icon: <CalendarDays size={16} />,  requiresLogin: true },
+    { id: 'delivery',     label: 'Delivery',             icon: <Truck size={16} />,         requiresLogin: true },
     { id: 'pagamentos',   label: 'Pagamentos',           icon: <CreditCard size={16} />,    requiresLogin: true, requiresClientOnly: true },
     { id: 'financeiro',   label: 'Financeiro / Caixa',  icon: <Wallet size={16} />,        requiresLogin: true, requiresManager: true },
     { id: 'estoque',      label: 'Estoque / Produtos',  icon: <Package size={16} />,       requiresLogin: true, requiresStockAccess: true },

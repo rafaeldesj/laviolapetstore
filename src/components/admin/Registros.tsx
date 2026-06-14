@@ -22,6 +22,9 @@ const actionBadgeColors: Record<string, { bg: string; text: string; border: stri
   'Exclusão de Usuário': { bg: 'rgba(255, 99, 132, 0.08)', text: 'hsl(0, 75%, 55%)', border: 'rgba(255, 99, 132, 0.25)' },
   'Exclusão de Pet': { bg: 'rgba(255, 99, 132, 0.08)', text: 'hsl(0, 75%, 55%)', border: 'rgba(255, 99, 132, 0.25)' },
   'Exclusão de Agendamento': { bg: 'rgba(255, 99, 132, 0.08)', text: 'hsl(0, 75%, 55%)', border: 'rgba(255, 99, 132, 0.25)' },
+
+  'Login': { bg: 'rgba(75, 192, 192, 0.08)', text: 'hsl(142, 60%, 40%)', border: 'rgba(75, 192, 192, 0.25)' },
+  'Logout': { bg: 'rgba(255, 159, 64, 0.08)', text: 'hsl(25, 95%, 50%)', border: 'rgba(255, 159, 64, 0.25)' },
 };
 
 const getBadgeStyle = (action: string) => {
@@ -70,7 +73,13 @@ export const Registros: React.FC<RegistrosProps> = ({ styles }) => {
     .sort((a, b) => a.name.localeCompare(b.name));
 
   const filteredLogs = logs.filter((log) => {
-    if (filterAction !== 'all' && log.action !== filterAction) return false;
+    if (filterAction !== 'all') {
+      if (filterAction === 'login_logout') {
+        if (log.action !== 'Login' && log.action !== 'Logout') return false;
+      } else if (log.action !== filterAction) {
+        return false;
+      }
+    }
     if (filterUser !== 'all' && log.user_email !== filterUser) return false;
 
     if (searchQuery.trim()) {
@@ -185,6 +194,7 @@ export const Registros: React.FC<RegistrosProps> = ({ styles }) => {
             style={{ ...styles.formInput, padding: '8px 10px', fontSize: '0.85rem', width: '100%' }}
           >
             <option value="all">Todas as Ações</option>
+            <option value="login_logout">Login e Logout</option>
             {actionTypes.map((action) => (
               <option key={action} value={action}>{action}</option>
             ))}

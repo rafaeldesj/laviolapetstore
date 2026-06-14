@@ -3,6 +3,7 @@ import {
   supabase,
   isSupabaseConfigured,
   lookupEmailByIdentifier,
+  logAction,
 } from '../supabaseClient';
 import type { UserProfile } from '../supabaseClient';
 
@@ -129,6 +130,26 @@ export const useAuth = (): UseAuthReturn => {
               is_active: true,
               created_at: new Date().toISOString()
             }
+          },
+          {
+            id: 'colab-2',
+            email: 'entregador@laviola.com',
+            name: 'Marcos Entregador',
+            username: 'entregador',
+            phone: '666666666',
+            password: '123456',
+            profile: {
+              id: 'colab-2',
+              email: 'entregador@laviola.com',
+              full_name: 'Marcos Entregador',
+              username: 'entregador',
+              phone: '666666666',
+              role: 'collaborator',
+              collaborator_category_id: 'cat-entregador',
+              collaborator_category: { id: 'cat-entregador', name: 'Entregador', description: '', is_active: true },
+              is_active: true,
+              created_at: new Date().toISOString()
+            }
           }
         ];
         localStorage.setItem('laviola_mock_users', JSON.stringify(defaultUsers));
@@ -197,6 +218,16 @@ export const useAuth = (): UseAuthReturn => {
         };
         localStorage.setItem('laviola_mock_session', JSON.stringify(loggedUser));
         setUser(loggedUser);
+
+        if (loggedUser.profile?.role !== 'developer') {
+          await logAction(
+            loggedUser.email,
+            loggedUser.name,
+            'Login',
+            `O usuário "${loggedUser.name}" entrou no sistema.`
+          );
+        }
+
         return;
       }
 
@@ -234,17 +265,52 @@ export const useAuth = (): UseAuthReturn => {
       };
       localStorage.setItem('laviola_mock_session', JSON.stringify(loggedUser));
       setUser(loggedUser);
+
+      if (loggedUser.profile?.role !== 'developer') {
+        await logAction(
+          loggedUser.email,
+          loggedUser.name,
+          'Login',
+          `O usuário "${loggedUser.name}" entrou no sistema.`
+        );
+      }
+
       return;
     }
 
     const email = await lookupEmailByIdentifier(identifier);
     if (!email) throw new Error('Usuário não encontrado com esse identificador.');
 
-    const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+    const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({ email, password });
     if (signInError) throw signInError;
+
+    if (signInData.user) {
+      const authUser = await fetchProfile(
+        signInData.user.id,
+        signInData.user.email || '',
+        signInData.user.user_metadata?.full_name || ''
+      );
+      if (authUser.profile?.role !== 'developer') {
+        await logAction(
+          authUser.email,
+          authUser.name,
+          'Login',
+          `O usuário "${authUser.name}" entrou no sistema.`
+        );
+      }
+    }
   };
 
   const logout = async () => {
+    if (user && user.profile?.role !== 'developer') {
+      await logAction(
+        user.email,
+        user.name,
+        'Logout',
+        `O usuário "${user.name}" saiu do sistema.`
+      );
+    }
+
     if (!isSupabaseConfigured || !supabase) {
       localStorage.removeItem('laviola_mock_session');
       setUser(null);
