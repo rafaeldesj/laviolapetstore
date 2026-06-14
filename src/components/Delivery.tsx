@@ -224,30 +224,82 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
     }
   }, [deliveries]);
 
-  // Movement simulator interval (only runs if there are active deliveries marked as 'a-caminho')
+  // GPS Tracking for active Driver (updates coordinates using physical device GPS in real-time)
   useEffect(() => {
-    const interval = setInterval(async () => {
-      let list: DeliveryItem[] = [];
-      let usingSupabase = false;
+    if (!isDriver || !currentUser?.id) return;
+
+    // Find active delivery assigned to this driver
+    const activeDelivery = deliveries.find(
+      d => d.driver_id === currentUser.id && d.status === 'a-caminho'
+    );
+    const activeDeliveryId = activeDelivery?.id;
+
+    if (!activeDeliveryId) return;
+
+    if (typeof window === 'undefined' || !navigator.geolocation) {
+      console.warn('Geolocalização não é suportada por este dispositivo.');
+      return;
+    }
+
+    let lastUpdate = 0;
+
+    const handleSuccess = async (position: GeolocationPosition) => {
+      const { latitude, longitude } = position.coords;
+      const now = Date.now();
+
+      // Throttle updates to at most once every 3 seconds to avoid spamming the database
+      if (now - lastUpdate < 3000) return;
+      lastUpdate = now;
 
       if (isSupabaseConfigured && supabase) {
         try {
-          const { data, error } = await supabase
+          await supabase
             .from('deliveries')
-            .select('*')
-            .order('created_at', { ascending: false });
-          if (!error && data) {
-            list = data;
-            usingSupabase = true;
-          }
-        } catch (err) {}
-      }
-
-      if (!usingSupabase) {
+            .update({ driver_lat: latitude, driver_lng: longitude })
+            .eq('id', activeDeliveryId);
+        } catch (err) {
+          console.error('Erro ao atualizar coordenadas via GPS no Supabase:', err);
+        }
+      } else {
         const stored = localStorage.getItem('laviola_deliveries');
         if (stored) {
-          list = JSON.parse(stored);
+          const list = JSON.parse(stored) as DeliveryItem[];
+          const updated = list.map(item => {
+            if (item.id === activeDeliveryId) {
+              return { ...item, driver_lat: latitude, driver_lng: longitude };
+            }
+            return item;
+          });
+          localStorage.setItem('laviola_deliveries', JSON.stringify(updated));
+          setDeliveries(updated);
         }
+      }
+    };
+
+    const handleError = (error: GeolocationPositionError) => {
+      console.error('Erro ao obter posição de GPS:', error.message);
+    };
+
+    const watchId = navigator.geolocation.watchPosition(handleSuccess, handleError, {
+      enableHighAccuracy: true,
+      timeout: 10000,
+      maximumAge: 0,
+    });
+
+    return () => {
+      navigator.geolocation.clearWatch(watchId);
+    };
+  }, [isDriver, currentUser?.id, deliveries.find(d => d.driver_id === currentUser?.id && d.status === 'a-caminho')?.id]);
+
+  // Movement simulator interval (only runs if there are active deliveries marked as 'a-caminho' and NOT using online database)
+  useEffect(() => {
+    if (isSupabaseConfigured) return; // Disable simulator entirely when online (using real GPS)
+
+    const interval = setInterval(async () => {
+      let list: DeliveryItem[] = [];
+      const stored = localStorage.getItem('laviola_deliveries');
+      if (stored) {
+        list = JSON.parse(stored);
       }
 
       if (list.length === 0) return;
@@ -294,20 +346,8 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
       });
 
       if (changed) {
-        if (usingSupabase && isSupabaseConfigured && supabase) {
-          for (const item of updatedList) {
-            if (item.status === 'a-caminho') {
-              await supabase
-                .from('deliveries')
-                .update({ driver_lat: item.driver_lat, driver_lng: item.driver_lng })
-                .eq('id', item.id);
-            }
-          }
-          setDeliveries(updatedList);
-        } else {
-          localStorage.setItem('laviola_deliveries', JSON.stringify(updatedList));
-          setDeliveries(updatedList);
-        }
+        localStorage.setItem('laviola_deliveries', JSON.stringify(updatedList));
+        setDeliveries(updatedList);
       }
     }, 2000);
 
@@ -884,12 +924,22 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
               backgroundColor: styles.cardBackground || '#fff', boxShadow: styles.shadowLg
             }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
-                <span style={{
-                  fontSize: '0.75rem', fontWeight: 700, padding: '4px 10px', borderRadius: '20px',
-                  backgroundColor: 'rgba(255, 206, 86, 0.15)', color: 'hsl(36, 95%, 45%)', textTransform: 'uppercase'
-                }}>
-                  Status: Pedido a Caminho
-                </span>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  <span style={{
+                    fontSize: '0.75rem', fontWeight: 700, padding: '4px 10px', borderRadius: '20px',
+                    backgroundColor: 'rgba(255, 206, 86, 0.15)', color: 'hsl(36, 95%, 45%)', textTransform: 'uppercase'
+                  }}>
+                    Status: Pedido a Caminho
+                  </span>
+                  {isSupabaseConfigured && (
+                    <span style={{
+                      fontSize: '0.75rem', fontWeight: 700, padding: '4px 10px', borderRadius: '20px',
+                      backgroundColor: 'rgba(56, 189, 248, 0.15)', color: 'hsl(199, 89%, 48%)', textTransform: 'uppercase'
+                    }}>
+                      📡 GPS Real
+                    </span>
+                  )}
+                </div>
                 <span style={{ fontSize: '0.82rem', color: styles.sidebarWidgetText?.color }}>
                   Entregador: <strong>{activeClientDelivery.driver_name}</strong>
                 </span>
@@ -1118,27 +1168,29 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
                 }}>
                   <div style={{ fontWeight: 600, color: styles.textMain, display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <Compass size={14} className="spin-icon" style={{ animation: 'spin 4s linear infinite' }} />
-                    Simulação Ativa
+                    {isSupabaseConfigured ? '📡 Rastreamento GPS Real Ativo' : 'Simulação Ativa'}
                   </div>
-                  <div style={{ marginTop: '8px', display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                    <span style={{ fontSize: '0.8rem', color: styles.sidebarWidgetText?.color }}>Acelerar Simulação:</span>
-                    <div style={{ display: 'flex', gap: '4px' }}>
-                      {[1, 5, 10].map(s => (
-                        <button
-                          key={s}
-                          onClick={() => setSimSpeed(s)}
-                          style={{
-                            padding: '3px 8px', borderRadius: '4px', border: `1px solid ${styles.borderColor}`,
-                            fontSize: '0.75rem', cursor: 'pointer',
-                            backgroundColor: simSpeed === s ? styles.primary : styles.background,
-                            color: simSpeed === s ? '#fff' : styles.textMain
-                          }}
-                        >
-                          {s}x
-                        </button>
-                      ))}
+                  {!isSupabaseConfigured && (
+                    <div style={{ marginTop: '8px', display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: '0.8rem', color: styles.sidebarWidgetText?.color }}>Acelerar Simulação:</span>
+                      <div style={{ display: 'flex', gap: '4px' }}>
+                        {[1, 5, 10].map(s => (
+                          <button
+                            key={s}
+                            onClick={() => setSimSpeed(s)}
+                            style={{
+                              padding: '3px 8px', borderRadius: '4px', border: `1px solid ${styles.borderColor}`,
+                              fontSize: '0.75rem', cursor: 'pointer',
+                              backgroundColor: simSpeed === s ? styles.primary : styles.background,
+                              color: simSpeed === s ? '#fff' : styles.textMain
+                            }}
+                          >
+                            {s}x
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
               )}
 
@@ -1376,15 +1428,19 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
                     padding: '8px 10px', borderRadius: '6px', backgroundColor: 'rgba(36, 95%, 55%, 0.08)',
                     fontSize: '0.78rem', border: '1px solid rgba(36, 95%, 55%, 0.15)'
                   }}>
-                    <span style={{ fontWeight: 600 }}>Entregador em deslocamento.</span>
-                    <div style={{ marginTop: '5px', display: 'flex', gap: '4px' }}>
-                      <span>Velocidade:</span>
-                      {[1, 5, 10].map(s => (
-                        <button key={s} onClick={() => setSimSpeed(s)} style={{ fontSize: '0.7rem', padding: '1px 5px', backgroundColor: simSpeed === s ? styles.primary : '#eee', color: simSpeed === s ? '#fff' : '#000', border: 'none', borderRadius: '3px', cursor: 'pointer' }}>
-                          {s}x
-                        </button>
-                      ))}
-                    </div>
+                    <span style={{ fontWeight: 600 }}>
+                      {isSupabaseConfigured ? '📡 Rastreamento GPS Real Ativo' : 'Entregador em deslocamento.'}
+                    </span>
+                    {!isSupabaseConfigured && (
+                      <div style={{ marginTop: '5px', display: 'flex', gap: '4px' }}>
+                        <span>Velocidade:</span>
+                        {[1, 5, 10].map(s => (
+                          <button key={s} onClick={() => setSimSpeed(s)} style={{ fontSize: '0.7rem', padding: '1px 5px', backgroundColor: simSpeed === s ? styles.primary : '#eee', color: simSpeed === s ? '#fff' : '#000', border: 'none', borderRadius: '3px', cursor: 'pointer' }}>
+                            {s}x
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
 
