@@ -65,6 +65,7 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterDriver, setFilterDriver] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [isLocationApproximate, setIsLocationApproximate] = useState(false);
 
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapInstanceRef = useRef<any>(null);
@@ -244,7 +245,15 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
     let lastUpdate = 0;
 
     const handleSuccess = async (position: GeolocationPosition) => {
-      const { latitude, longitude } = position.coords;
+      const { latitude, longitude, accuracy } = position.coords;
+
+      // Accuracy > 150 meters typically indicates OS Approximate Location is active
+      if (accuracy && accuracy > 150) {
+        setIsLocationApproximate(true);
+      } else {
+        setIsLocationApproximate(false);
+      }
+
       const now = Date.now();
 
       // Throttle updates to at most once every 3 seconds to avoid spamming the database
@@ -278,6 +287,8 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
 
     const handleError = (error: GeolocationPositionError) => {
       console.error('Erro ao obter posição de GPS:', error.message);
+      // If permission denied or other error, clear approximate warnings
+      setIsLocationApproximate(false);
     };
 
     const watchId = navigator.geolocation.watchPosition(handleSuccess, handleError, {
@@ -288,6 +299,7 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
 
     return () => {
       navigator.geolocation.clearWatch(watchId);
+      setIsLocationApproximate(false);
     };
   }, [isDriver, currentUser?.id, deliveries.find(d => d.driver_id === currentUser?.id && d.status === 'a-caminho')?.id]);
 
@@ -1081,6 +1093,21 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
             <h3 style={{ fontSize: '1rem', fontWeight: 700, color: styles.textMain }}>Suas Entregas</h3>
             
+            {isLocationApproximate && (
+              <div style={{
+                padding: '10px 12px',
+                backgroundColor: 'rgba(239, 68, 68, 0.08)',
+                color: 'hsl(0, 75%, 50%)',
+                border: '1px solid rgba(239, 68, 68, 0.2)',
+                borderRadius: '8px',
+                fontSize: '0.8rem',
+                fontWeight: 600,
+                lineHeight: '1.4'
+              }}>
+                ⚠️ <strong>Aviso: Localização Aproximada Ativada.</strong> Por favor, altere para <strong>"Local Exato"</strong> em seu navegador/dispositivo para que o GPS envie sua posição correta em tempo real.
+              </div>
+            )}
+
             {driverDeliveries.length === 0 ? (
               <p style={{ fontSize: '0.85rem', color: styles.sidebarWidgetText?.color }}>Não há entregas atribuídas a você.</p>
             ) : (
