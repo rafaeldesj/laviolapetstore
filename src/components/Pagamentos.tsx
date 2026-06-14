@@ -2,15 +2,18 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   CreditCard, CalendarDays, Clock, CheckCircle2, XCircle,
   AlertCircle, Loader2, PawPrint, RefreshCw, ChevronRight,
-  Lock, ShieldCheck, QrCode, Landmark, Smartphone, X
+  Lock, ShieldCheck, QrCode, Landmark, Smartphone, X, MapPin, Truck
 } from 'lucide-react';
-import { supabase, mockSupabaseDb, isSupabaseConfigured } from '../supabaseClient';
+import { supabase, mockSupabaseDb, isSupabaseConfigured, logAction } from '../supabaseClient';
 import type { Appointment } from '../supabaseClient';
 import type { AuthUser } from '../hooks/useAuth';
 
 interface PagamentosProps {
   styles: any;
   currentUser: AuthUser;
+  selectedProduct: { name: string; price: number } | null;
+  setSelectedProduct: (product: { name: string; price: number } | null) => void;
+  setActiveSection: (section: string) => void;
 }
 
 const serviceValueMap: Record<string, number> = {
@@ -78,9 +81,25 @@ const formatDate = (iso: string) => {
   } catch { return iso; }
 };
 
-export const Pagamentos: React.FC<PagamentosProps> = ({ styles, currentUser }) => {
+export const Pagamentos: React.FC<PagamentosProps> = ({ 
+  styles, 
+  currentUser,
+  selectedProduct,
+  setSelectedProduct,
+  setActiveSection
+}) => {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  
+  // Product checkout state variables
+  const [deliveryMethod, setDeliveryMethod] = useState<'retirada' | 'delivery'>('retirada');
+  const [deliveryAddress, setDeliveryAddress] = useState('');
+  const [selectedPreLoc, setSelectedPreLoc] = useState('');
+  const [isPayingProduct, setIsPayingProduct] = useState(false);
+  const [showProductSuccessModal, setShowProductSuccessModal] = useState(false);
+  const [productLat, setProductLat] = useState(-22.8973);
+  const [productLng, setProductLng] = useState(-43.5639);
+  const [prodPaymentMethod, setProdPaymentMethod] = useState<'pix' | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'todos' | 'concluidos' | 'agendados'>('todos');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -166,6 +185,349 @@ export const Pagamentos: React.FC<PagamentosProps> = ({ styles, currentUser }) =
   const totalEstimado = appointments
     .filter(a => a.status !== 'Cancelado')
     .reduce((sum, a) => sum + (serviceValueMap[a.service_type] || 70), 0);
+
+  const PREDEFINED_LOCATIONS = [
+    { name: 'Rua Arthur Rios, 1200', lat: -22.8995, lng: -43.5580 },
+    { name: 'Avenida Cesário de Melo, 2500', lat: -22.9025, lng: -43.5610 },
+    { name: 'Rua Viúva Dantas, 350', lat: -22.9050, lng: -43.5560 },
+    { name: 'Estrada da Caroba, 500', lat: -22.8920, lng: -43.5600 },
+    { name: 'Estrada do Cabuçu, 800', lat: -22.8912, lng: -43.5685 }
+  ];
+  const PETSHOP_COORDS = { lat: -22.8973, lng: -43.5639 };
+
+  // Render Product Checkout instead of Appointment payments if selectedProduct is set
+  if (selectedProduct) {
+    const frete = deliveryMethod === 'delivery' ? 10.00 : 0.00;
+    const total = selectedProduct.price + frete;
+
+    const handlePredefinedLoc = (e: React.ChangeEvent<HTMLSelectElement>) => {
+      const val = e.target.value;
+      setSelectedPreLoc(val);
+      if (!val) {
+        setDeliveryAddress('');
+        setProductLat(PETSHOP_COORDS.lat);
+        setProductLng(PETSHOP_COORDS.lng);
+        return;
+      }
+      const loc = PREDEFINED_LOCATIONS.find(l => l.name === val);
+      if (loc) {
+        setDeliveryAddress(loc.name + ' - Campo Grande, Rio de Janeiro - RJ');
+        setProductLat(loc.lat);
+        setProductLng(loc.lng);
+      }
+    };
+
+    const handlePayProduct = (e: React.FormEvent) => {
+      e.preventDefault();
+      if (deliveryMethod === 'delivery' && !deliveryAddress.trim()) {
+        alert('Por favor, informe o endereço para entrega.');
+        return;
+      }
+      if (!prodPaymentMethod) {
+        alert('Por favor, selecione uma forma de pagamento.');
+        return;
+      }
+      setIsPayingProduct(true);
+      setTimeout(() => {
+        setIsPayingProduct(false);
+        setShowProductSuccessModal(true);
+      }, 1500);
+    };
+
+    const handleConfirmSuccess = async () => {
+      if (deliveryMethod === 'delivery') {
+        const currentDeliveries = JSON.parse(localStorage.getItem('laviola_deliveries') || '[]');
+        const newDelivery = {
+          id: 'deliv-' + Math.random().toString(36).substring(2, 9),
+          client_id: currentUser.id,
+          client_name: currentUser.name,
+          client_address: deliveryAddress,
+          client_lat: productLat,
+          client_lng: productLng,
+          driver_id: '', // Empty means needs dispatch
+          driver_name: '',
+          driver_lat: PETSHOP_COORDS.lat,
+          driver_lng: PETSHOP_COORDS.lng,
+          status: 'agendada',
+          items: selectedProduct.name,
+          scheduled_time: 'A ser despachada',
+          created_at: new Date().toISOString()
+        };
+        currentDeliveries.unshift(newDelivery);
+        localStorage.setItem('laviola_deliveries', JSON.stringify(currentDeliveries));
+        
+        await logAction(
+          currentUser.email,
+          currentUser.name,
+          'Compra de Produto - Delivery',
+          `Comprou "${selectedProduct.name}" com entrega para: "${deliveryAddress}".`
+        );
+      } else {
+        await logAction(
+          currentUser.email,
+          currentUser.name,
+          'Compra de Produto - Retirada',
+          `Comprou "${selectedProduct.name}" para retirada na loja física.`
+        );
+      }
+
+      setSelectedProduct(null);
+      setShowProductSuccessModal(false);
+      
+      if (deliveryMethod === 'delivery') {
+        setActiveSection('delivery');
+      } else {
+        setActiveSection('inicio');
+      }
+    };
+
+    return (
+      <section style={styles.contentSection} aria-labelledby="product-checkout-heading">
+        <div style={styles.crudHeader}>
+          <div>
+            <h2 id="product-checkout-heading" style={styles.sectionTitle}>
+              <CreditCard size={20} style={{ display: 'inline', marginRight: '8px', verticalAlign: 'middle', color: styles.primary }} />
+              Finalizar Compra
+              <div style={styles.sectionTitleBar} />
+            </h2>
+            <p style={{ fontSize: '0.85rem', color: styles.sidebarWidgetText?.color, marginTop: '5px' }}>
+              Revise os detalhes do produto e escolha o método de entrega.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setSelectedProduct(null)}
+            style={{
+              ...styles.btnAcc(false),
+              display: 'flex', alignItems: 'center', gap: '6px'
+            }}
+          >
+            <X size={14} />
+            Voltar
+          </button>
+        </div>
+
+        <form onSubmit={handlePayProduct} style={{ display: 'flex', flexDirection: 'column', gap: '20px', marginTop: '24px' }}>
+          {/* Product Box */}
+          <div style={{
+            padding: '16px 20px', borderRadius: '12px', border: `1.5px solid ${styles.borderColor}`,
+            backgroundColor: styles.cardBackground || '#fff', boxShadow: styles.shadow
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+              <div>
+                <strong style={{ fontSize: '1.05rem', color: styles.textMain }}>{selectedProduct.name}</strong>
+                <span style={{ display: 'block', fontSize: '0.8rem', color: styles.sidebarWidgetText?.color, marginTop: '4px' }}>
+                  Quantidade: 1x · Pronta entrega
+                </span>
+              </div>
+              <strong style={{ fontSize: '1.2rem', color: styles.primary }}>R$ {selectedProduct.price.toFixed(2)}</strong>
+            </div>
+          </div>
+
+          {/* Delivery Method Selection */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <label style={{ fontSize: '0.9rem', fontWeight: 600, color: styles.textMain }}>Método de Entrega</label>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', flexWrap: 'wrap' }}>
+              {/* Option Retirada */}
+              <div 
+                onClick={() => setDeliveryMethod('retirada')}
+                style={{
+                  padding: '16px', borderRadius: '12px', cursor: 'pointer',
+                  border: `2px solid ${deliveryMethod === 'retirada' ? styles.primary : styles.borderColor}`,
+                  backgroundColor: deliveryMethod === 'retirada' ? 'rgba(54,162,235,0.04)' : (styles.cardBackground || '#fff'),
+                  transition: 'all 0.2s', boxShadow: styles.shadow
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: styles.primary }}>
+                  <MapPin size={18} />
+                  <strong style={{ fontSize: '0.95rem' }}>Retirada na Loja</strong>
+                </div>
+                <p style={{ fontSize: '0.78rem', color: styles.sidebarWidgetText?.color, marginTop: '6px', lineHeight: 1.4 }}>
+                  Retire grátis na Rua Dr. Ibraim Hannas, 406 - Campo Grande.
+                </p>
+              </div>
+
+              {/* Option Delivery */}
+              <div 
+                onClick={() => setDeliveryMethod('delivery')}
+                style={{
+                  padding: '16px', borderRadius: '12px', cursor: 'pointer',
+                  border: `2px solid ${deliveryMethod === 'delivery' ? styles.primary : styles.borderColor}`,
+                  backgroundColor: deliveryMethod === 'delivery' ? 'rgba(54,162,235,0.04)' : (styles.cardBackground || '#fff'),
+                  transition: 'all 0.2s', boxShadow: styles.shadow
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'hsl(36, 95%, 50%)' }}>
+                  <Truck size={18} />
+                  <strong style={{ fontSize: '0.95rem' }}>Entrega em Casa (Delivery)</strong>
+                </div>
+                <p style={{ fontSize: '0.78rem', color: styles.sidebarWidgetText?.color, marginTop: '6px', lineHeight: 1.4 }}>
+                  Receba no conforto do seu lar por uma taxa fixa de R$ 10,00.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Delivery Address Form Group (Only shows if Delivery selected) */}
+          {deliveryMethod === 'delivery' && (
+            <div style={{
+              padding: '16px 20px', borderRadius: '12px', border: `1px solid ${styles.borderColor}`,
+              backgroundColor: styles.cardBackground || '#fff', display: 'flex', flexDirection: 'column', gap: '12px',
+              animation: 'fadeIn 0.3s'
+            }}>
+              <label style={{ fontSize: '0.88rem', fontWeight: 600, color: styles.textMain }}>
+                Endereço para Entrega *
+              </label>
+              
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <span style={{ fontSize: '0.78rem', color: styles.sidebarWidgetText?.color }}>Selecione um Endereço Cadastrado para carregar as coordenadas:</span>
+                <select
+                  value={selectedPreLoc}
+                  onChange={handlePredefinedLoc}
+                  style={styles.formInput}
+                >
+                  <option value="">— Digitar novo endereço manualmente —</option>
+                  {PREDEFINED_LOCATIONS.map(loc => (
+                    <option key={loc.name} value={loc.name}>{loc.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <span style={{ fontSize: '0.78rem', color: styles.sidebarWidgetText?.color }}>Endereço Completo:</span>
+                <input
+                  type="text"
+                  placeholder="Rua, Número, Complemento, Bairro - Campo Grande"
+                  value={deliveryAddress}
+                  onChange={(e) => {
+                    setDeliveryAddress(e.target.value);
+                    // Reset predefined select if they edit manually
+                    setSelectedPreLoc('');
+                    // Default coordinate offset slightly from petshop
+                    setProductLat(PETSHOP_COORDS.lat + 0.004);
+                    setProductLng(PETSHOP_COORDS.lng - 0.003);
+                  }}
+                  style={styles.formInput}
+                  required
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Payment Method Section */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <label style={{ fontSize: '0.9rem', fontWeight: 600, color: styles.textMain }}>Forma de Pagamento</label>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
+              <div 
+                onClick={() => setProdPaymentMethod('pix')}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '12px', padding: '16px', borderRadius: '12px', cursor: 'pointer',
+                  border: `2px solid ${prodPaymentMethod === 'pix' ? 'hsl(160,60%,40%)' : styles.borderColor}`,
+                  background: prodPaymentMethod === 'pix' ? 'rgba(75,192,150,0.1)' : (styles.cardBackground || '#fff'),
+                  transition: 'all 0.18s ease', position: 'relative'
+                }}
+              >
+                <div style={{ color: 'hsl(160,60%,40%)' }}><QrCode size={24} /></div>
+                <div>
+                  <strong style={{ fontSize: '0.9rem', color: styles.textMain, display: 'block' }}>PIX</strong>
+                  <span style={{ fontSize: '0.72rem', color: styles.sidebarWidgetText?.color }}>Liberação instantânea</span>
+                </div>
+                {prodPaymentMethod === 'pix' && (
+                  <CheckCircle2 size={16} style={{ color: 'hsl(160,60%,40%)', marginLeft: 'auto' }} />
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Totals Summary */}
+          <div style={{
+            padding: '16px 20px', borderRadius: '12px', border: `1px solid ${styles.borderColor}`,
+            backgroundColor: styles.background, display: 'flex', flexDirection: 'column', gap: '8px'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', color: styles.sidebarWidgetText?.color }}>
+              <span>Subtotal</span>
+              <span>R$ {selectedProduct.price.toFixed(2)}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', color: styles.sidebarWidgetText?.color }}>
+              <span>Frete</span>
+              <span>{frete === 0 ? 'Grátis' : `R$ ${frete.toFixed(2)}`}</span>
+            </div>
+            <div style={{ height: '1px', backgroundColor: styles.borderColor, margin: '4px 0' }}></div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '1.1rem', fontWeight: 700, color: styles.textMain }}>
+              <span>Total a Pagar</span>
+              <span style={{ color: styles.primary }}>R$ {total.toFixed(2)}</span>
+            </div>
+          </div>
+
+          {/* Pay Button */}
+          <button
+            type="submit"
+            disabled={isPayingProduct}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'center',
+              padding: '14px 24px', borderRadius: '10px', border: 'none',
+              cursor: isPayingProduct ? 'not-allowed' : 'pointer', fontFamily: 'inherit', fontWeight: 700,
+              fontSize: '1rem', transition: 'all 0.2s',
+              background: isPayingProduct 
+                ? '#ccc' 
+                : 'linear-gradient(135deg, hsl(210, 85%, 45%), hsl(210, 85%, 35%))',
+              color: '#fff',
+              boxShadow: isPayingProduct ? 'none' : '0 4px 14px rgba(54, 162, 235, 0.35)'
+            }}
+          >
+            {isPayingProduct ? (
+              <>
+                <Loader2 size={18} className="spin-icon" style={{ animation: 'spin 1s linear infinite' }} />
+                Processando Transação PIX...
+              </>
+            ) : (
+              <>
+                <ShieldCheck size={18} />
+                Confirmar Pagamento Simulado via PIX
+              </>
+            )}
+          </button>
+        </form>
+
+        {/* Modal Sucesso */}
+        {showProductSuccessModal && (
+          <div style={styles.modalOverlay}>
+            <div style={{ ...styles.modalContent, maxWidth: '400px', textAlign: 'center', padding: '24px' }}>
+              <div style={{ width: '48px', height: '48px', borderRadius: '50%', backgroundColor: 'rgba(75,192,192,0.1)', color: 'hsl(142,60%,40%)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px' }}>
+                <CheckCircle2 size={28} />
+              </div>
+              <h3 style={{ fontSize: '1.2rem', fontWeight: 700, color: styles.textMain, margin: '0 0 10px' }}>
+                Pagamento Confirmado!
+              </h3>
+              <p style={{ fontSize: '0.85rem', color: styles.sidebarWidgetText?.color, lineHeight: 1.5, margin: '0 0 20px' }}>
+                Recebemos o pagamento de <strong>R$ {total.toFixed(2)}</strong> via PIX para o produto <strong>{selectedProduct.name}</strong>.
+                {deliveryMethod === 'delivery' 
+                  ? ' Seu pedido foi encaminhado para despacho de entrega. Você pode acompanhá-lo em tempo real agora no painel de Delivery.' 
+                  : ' O seu produto já está reservado! Retire-o no balcão da loja apresentando seu nome.'
+                }
+              </p>
+              <button
+                type="button"
+                onClick={handleConfirmSuccess}
+                style={{
+                  ...styles.btnAcc(false),
+                  width: '100%',
+                  justifyContent: 'center',
+                  background: styles.primary,
+                  color: '#fff',
+                  border: 'none',
+                  padding: '10px',
+                  fontWeight: 700
+                }}
+              >
+                Concluir
+              </button>
+            </div>
+          </div>
+        )}
+      </section>
+    );
+  }
 
   const tabs = [
     { id: 'todos',      label: 'Todos os Serviços' },

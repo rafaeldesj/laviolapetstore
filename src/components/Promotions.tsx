@@ -3,9 +3,21 @@ import { Tag, Sparkles, ShoppingBag, Truck } from 'lucide-react';
 
 interface PromotionsProps {
   styles: any;
+  setActiveSection: (section: string) => void;
+  isLoggedIn: boolean;
+  userRole?: string;
+  setSelectedProduct: (product: { name: string; price: number } | null) => void;
+  onLoginClick: () => void;
 }
 
-export const Promotions: React.FC<PromotionsProps> = ({ styles }) => {
+export const Promotions: React.FC<PromotionsProps> = ({ 
+  styles, 
+  setActiveSection, 
+  isLoggedIn, 
+  userRole, 
+  setSelectedProduct, 
+  onLoginClick 
+}) => {
   const [hoveredCard, setHoveredCard] = useState<number | null>(null);
 
   const promoItems = [
@@ -13,6 +25,7 @@ export const Promotions: React.FC<PromotionsProps> = ({ styles }) => {
       badge: 'Oferta Especial',
       title: 'Ração Quatree Carne (15kg)',
       price: 'R$ 119,90',
+      numericPrice: 119.90,
       description: 'Nutrição de alta qualidade para cães adultos com energia e sabor irresistíveis.',
       details: 'Disponível para pronta entrega.',
       icon: <ShoppingBag size={20} />
@@ -21,6 +34,7 @@ export const Promotions: React.FC<PromotionsProps> = ({ styles }) => {
       badge: 'Desconto Dinheiro/PIX',
       title: 'Ração Golden Fórmula (15kg)',
       price: 'R$ 149,99',
+      numericPrice: 149.99,
       description: 'Fórmula premium desenvolvida para cães exigentes, rica em nutrientes e vitaminas.',
       details: 'Valor exclusivo para retirada em loja ou pagamento via PIX/Dinheiro.',
       icon: <Tag size={20} />
@@ -28,12 +42,27 @@ export const Promotions: React.FC<PromotionsProps> = ({ styles }) => {
     {
       badge: 'Personalizado',
       title: 'Arranhadores para Gatos',
-      price: 'Sob Encomenda',
+      price: 'R$ 180,00',
+      numericPrice: 180.00,
       description: 'Modelos artesanais sob medida para o bem-estar e diversão do seu gato.',
-      details: 'Consulte tamanhos e designs disponíveis via WhatsApp.',
+      details: 'Disponível para pronta entrega ou encomenda.',
       icon: <Sparkles size={20} />
     }
   ];
+
+  const handleBuy = (item: any) => {
+    if (!isLoggedIn) {
+      alert('Por favor, faça login ou cadastre-se para realizar a compra deste produto.');
+      onLoginClick();
+      return;
+    }
+    if (userRole && userRole !== 'client') {
+      alert('Apenas clientes podem efetuar compras de produtos no painel online. Para vendas de colaboradores/gerentes, utilize a tela "Venda Avulsa PDV".');
+      return;
+    }
+    setSelectedProduct({ name: item.title, price: item.numericPrice });
+    setActiveSection('pagamentos');
+  };
 
   return (
     <section style={styles.contentSection} id="promocoes" aria-labelledby="promotions-heading">
@@ -73,9 +102,25 @@ export const Promotions: React.FC<PromotionsProps> = ({ styles }) => {
             <p style={{ fontSize: '1.4rem', fontWeight: 800, color: styles.logoSvg.color, margin: '8px 0' }}>
               {item.price}
             </p>
-            <p style={{ fontSize: '0.8rem', color: styles.sidebarWidgetText.color, fontStyle: 'italic' }}>
+            <p style={{ fontSize: '0.8rem', color: styles.sidebarWidgetText.color, fontStyle: 'italic', marginBottom: '15px' }}>
               {item.details}
             </p>
+            
+            <button
+              onClick={() => handleBuy(item)}
+              style={{
+                ...styles.btnAcc(hoveredCard === index),
+                width: '100%',
+                justifyContent: 'center',
+                marginTop: 'auto',
+                fontWeight: 700,
+                border: 'none',
+                backgroundColor: hoveredCard === index ? styles.primaryHover : styles.primary,
+                color: '#fff'
+              }}
+            >
+              Comprar Agora
+            </button>
           </article>
         ))}
       </div>

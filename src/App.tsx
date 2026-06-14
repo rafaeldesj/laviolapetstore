@@ -32,6 +32,7 @@ function App() {
   const [isSkipFocused, setIsSkipFocused] = useState<boolean>(false);
   const [activeSection, setActiveSection] = useState<string>('inicio');
   const [modalView, setModalView] = useState<ModalView>('none');
+  const [selectedProduct, setSelectedProduct] = useState<{ name: string; price: number } | null>(null);
 
   const { user, login, logout, setMockUser } = useAuth();
   const userRole = user?.profile?.role;
@@ -119,7 +120,14 @@ function App() {
             )}
 
             {activeSection === 'promocoes' && (
-              <Promotions styles={styles} />
+              <Promotions 
+                styles={styles} 
+                setActiveSection={setActiveSection}
+                isLoggedIn={!!user}
+                userRole={userRole}
+                setSelectedProduct={setSelectedProduct}
+                onLoginClick={() => setModalView('login')}
+              />
             )}
 
             {activeSection === 'venda-avulsa' && user && (
@@ -139,7 +147,13 @@ function App() {
             )}
 
             {activeSection === 'pagamentos' && user && userRole === 'client' && (
-              <Pagamentos styles={styles} currentUser={user} />
+              <Pagamentos 
+                styles={styles} 
+                currentUser={user} 
+                selectedProduct={selectedProduct}
+                setSelectedProduct={setSelectedProduct}
+                setActiveSection={setActiveSection}
+              />
             )}
 
             {activeSection === 'financeiro' && user && isManager && (

@@ -229,6 +229,28 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
 
     const mapContainer = mapContainerRef.current;
     
+    // Create Custom SVG icons (Circular flat vector markers matching site styles)
+    const petshopIcon = L.divIcon({
+      html: `<div style="background-color: hsl(210, 85%, 45%); width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; border: 2px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.3);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg></div>`,
+      className: 'custom-petshop-icon',
+      iconSize: [28, 28],
+      iconAnchor: [14, 14]
+    });
+
+    const clientIcon = L.divIcon({
+      html: `<div style="background-color: hsl(0, 75%, 50%); width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; border: 2px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.3);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"></path><circle cx="12" cy="10" r="3"></circle></svg></div>`,
+      className: 'custom-client-icon',
+      iconSize: [28, 28],
+      iconAnchor: [14, 14]
+    });
+
+    const driverIcon = L.divIcon({
+      html: `<div style="background-color: hsl(36, 95%, 55%); width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; border: 2px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.3);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3" width="15" height="13"></rect><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"></polygon><circle cx="5.5" cy="18.5" r="2.5"></circle><circle cx="18.5" cy="18.5" r="2.5"></circle></svg></div>`,
+      className: 'custom-driver-icon',
+      iconSize: [28, 28],
+      iconAnchor: [14, 14]
+    });
+
     // Create map instance if it does not exist
     if (!mapInstanceRef.current) {
       const initialCenter = [
@@ -246,28 +268,6 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
         attribution: 'Map data © Google'
       }).addTo(map);
 
-      // Create Custom SVG icons (Circular flat vector markers matching site styles)
-      const petshopIcon = L.divIcon({
-        html: `<div style="background-color: hsl(210, 85%, 45%); width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; border: 2px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.3);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg></div>`,
-        className: 'custom-petshop-icon',
-        iconSize: [28, 28],
-        iconAnchor: [14, 14]
-      });
-
-      const clientIcon = L.divIcon({
-        html: `<div style="background-color: hsl(0, 75%, 50%); width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; border: 2px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.3);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"></path><circle cx="12" cy="10" r="3"></circle></svg></div>`,
-        className: 'custom-client-icon',
-        iconSize: [28, 28],
-        iconAnchor: [14, 14]
-      });
-
-      const driverIcon = L.divIcon({
-        html: `<div style="background-color: hsl(36, 95%, 55%); width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; border: 2px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.3);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3" width="15" height="13"></rect><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"></polygon><circle cx="5.5" cy="18.5" r="2.5"></circle><circle cx="18.5" cy="18.5" r="2.5"></circle></svg></div>`,
-        className: 'custom-driver-icon',
-        iconSize: [28, 28],
-        iconAnchor: [14, 14]
-      });
-
       // Add petshop marker
       markersRef.current.petshop = L.marker([PETSHOP_COORDS.lat, PETSHOP_COORDS.lng], { icon: petshopIcon })
         .addTo(map)
@@ -278,14 +278,16 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
         .addTo(map)
         .bindPopup(`<b>Cliente: ${selectedDelivery.client_name}</b><br>${selectedDelivery.client_address}`);
 
-      // Add driver marker
-      markersRef.current.driver = L.marker([selectedDelivery.driver_lat, selectedDelivery.driver_lng], { icon: driverIcon })
-        .addTo(map)
-        .bindPopup(`<b>Entregador: ${selectedDelivery.driver_name}</b>`);
+      // Add driver marker if dispatched
+      if (selectedDelivery.driver_id) {
+        markersRef.current.driver = L.marker([selectedDelivery.driver_lat, selectedDelivery.driver_lng], { icon: driverIcon })
+          .addTo(map)
+          .bindPopup(`<b>Entregador: ${selectedDelivery.driver_name}</b>`);
+      }
 
       // Add route polyline
       routeLineRef.current = L.polyline([
-        [PETSHOP_COORDS.lat, PETSHOP_COORDS.lng],
+        [selectedDelivery.driver_id ? selectedDelivery.driver_lat : PETSHOP_COORDS.lat, selectedDelivery.driver_id ? selectedDelivery.driver_lng : PETSHOP_COORDS.lng],
         [selectedDelivery.client_lat, selectedDelivery.client_lng]
       ], { color: '#3b82f6', weight: 4, opacity: 0.6, dashArray: '8, 8' }).addTo(map);
 
@@ -297,9 +299,22 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
       map.fitBounds(bounds, { padding: [40, 40] });
     } else {
       // If map already exists, just update driver & client coordinates dynamically
+      const map = mapInstanceRef.current;
       
-      if (markersRef.current.driver) {
-        markersRef.current.driver.setLatLng([selectedDelivery.driver_lat, selectedDelivery.driver_lng]);
+      if (selectedDelivery.driver_id) {
+        if (markersRef.current.driver) {
+          markersRef.current.driver.setLatLng([selectedDelivery.driver_lat, selectedDelivery.driver_lng]);
+          markersRef.current.driver.setPopupContent(`<b>Entregador: ${selectedDelivery.driver_name}</b>`);
+        } else {
+          markersRef.current.driver = L.marker([selectedDelivery.driver_lat, selectedDelivery.driver_lng], { icon: driverIcon })
+            .addTo(map)
+            .bindPopup(`<b>Entregador: ${selectedDelivery.driver_name}</b>`);
+        }
+      } else {
+        if (markersRef.current.driver) {
+          map.removeLayer(markersRef.current.driver);
+          markersRef.current.driver = null;
+        }
       }
       
       if (markersRef.current.client) {
@@ -309,7 +324,7 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
       // Adjust line route representation from driver to client
       if (routeLineRef.current) {
         routeLineRef.current.setLatLngs([
-          [selectedDelivery.driver_lat, selectedDelivery.driver_lng],
+          [selectedDelivery.driver_id ? selectedDelivery.driver_lat : PETSHOP_COORDS.lat, selectedDelivery.driver_id ? selectedDelivery.driver_lng : PETSHOP_COORDS.lng],
           [selectedDelivery.client_lat, selectedDelivery.client_lng]
         ]);
       }
@@ -318,7 +333,7 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
     return () => {
       // No cleanup on coordinates tick to preserve view/zoom state. Cleanup happens only when unmounting or changing selectedDelivery.
     };
-  }, [selectedDelivery?.id]);
+  }, [selectedDelivery?.id, selectedDelivery?.driver_id]);
 
   // Side-effect cleanup when selected delivery is closed/swapped
   useEffect(() => {
@@ -362,6 +377,40 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
   };
 
   // Actions
+  const handleDispatch = async (deliveryId: string, driverId: string) => {
+    if (!driverId) return;
+    const driver = drivers.find(d => d.id === driverId);
+    if (!driver) return;
+
+    const updated = deliveries.map(d => {
+      if (d.id === deliveryId) {
+        return {
+          ...d,
+          driver_id: driverId,
+          driver_name: driver.name,
+          scheduled_time: 'Hoje às ' + new Date(Date.now() + 30 * 60 * 1000).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+        };
+      }
+      return d;
+    });
+
+    localStorage.setItem('laviola_deliveries', JSON.stringify(updated));
+    setDeliveries(updated);
+
+    // Update selectedDelivery reference if it's currently selected
+    if (selectedDelivery?.id === deliveryId) {
+      const refreshed = updated.find(d => d.id === deliveryId) || null;
+      setSelectedDelivery(refreshed);
+    }
+
+    await logAction(
+      currentUser?.email || '',
+      currentUser?.name || 'Gerente',
+      'Despacho de Entrega',
+      `Entrega ID: ${deliveryId} despachada para o entregador "${driver.name}".`
+    );
+  };
+
   const handleCreateDelivery = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formClientId || !formDriverId || !formAddress || !formItems || !formScheduledTime) {
@@ -992,7 +1041,29 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
                             </div>
                           </td>
                           <td style={{ padding: '12px 8px' }}>{d.items}</td>
-                          <td style={{ padding: '12px 8px' }}>{d.driver_name}</td>
+                          <td style={{ padding: '12px 8px' }}>
+                            {d.driver_id ? (
+                              d.driver_name
+                            ) : (
+                              <select
+                                value=""
+                                onChange={(e) => handleDispatch(d.id, e.target.value)}
+                                style={{
+                                  ...styles.formInput,
+                                  padding: '4px 8px',
+                                  fontSize: '0.8rem',
+                                  borderColor: styles.primary,
+                                  backgroundColor: styles.cardBackground,
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                <option value="">— Despachar —</option>
+                                {drivers.map(drv => (
+                                  <option key={drv.id} value={drv.id}>{drv.name}</option>
+                                ))}
+                              </select>
+                            )}
+                          </td>
                           <td style={{ padding: '12px 8px', color: styles.sidebarWidgetText?.color }}>{d.scheduled_time}</td>
                           <td style={{ padding: '12px 8px' }}>
                             <span style={{
