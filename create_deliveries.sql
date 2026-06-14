@@ -16,6 +16,7 @@ CREATE TABLE public.deliveries (
   status TEXT NOT NULL CHECK (status IN ('agendada', 'a-caminho', 'concluida')),
   items TEXT NOT NULL,
   scheduled_time TEXT NOT NULL,
+  support_reason TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 

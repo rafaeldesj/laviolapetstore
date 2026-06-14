@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Truck, PlusCircle, Search, CheckCircle2, 
-  Map, Compass, Play, X, Eye, Trash2
+  Map, Compass, Play, X, Eye, Trash2,
+  AlertTriangle, LifeBuoy
 } from 'lucide-react';
 import { logAction, supabase, isSupabaseConfigured } from '../supabaseClient';
 import type { AuthUser } from '../hooks/useAuth';
@@ -29,6 +30,7 @@ export interface DeliveryItem {
   items: string;
   scheduled_time: string;
   created_at: string;
+  support_reason?: string | null;
 }
 
 const PETSHOP_COORDS = { lat: -22.9122, lng: -43.5606 }; // Rua Dr. Ibraim Hannas, 406 - Campo Grande
@@ -40,6 +42,17 @@ const PREDEFINED_LOCATIONS = [
   { name: 'Rua Viúva Dantas, 350', lat: -22.9050, lng: -43.5560 },
   { name: 'Estrada da Caroba, 500', lat: -22.8920, lng: -43.5600 },
   { name: 'Estrada do Cabuçu, 800', lat: -22.8912, lng: -43.5685 }
+];
+
+const SUPPORT_REASONS = [
+  "Local fechado, ninguém atende",
+  "Problemas com o pagamento do cliente",
+  "O veículo parou de funcionar",
+  "Sofri um acidente no percurso",
+  "Endereço incorreto / não localizado",
+  "Cliente recusou receber o produto",
+  "Produto quebrado, derramado ou danificado",
+  "Sem sinal de internet / GPS oscilando"
 ];
 
 export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
@@ -66,6 +79,7 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
   const [filterDriver, setFilterDriver] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [isLocationApproximate, setIsLocationApproximate] = useState(false);
+  const [supportModalDelivery, setSupportModalDelivery] = useState<DeliveryItem | null>(null);
 
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapInstanceRef = useRef<any>(null);
@@ -823,6 +837,80 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
     window.open(`https://www.google.com/maps/dir/?api=1&destination=${delivery.client_lat},${delivery.client_lng}`, '_blank');
   };
 
+  const handleRequestSupport = async (delivery: DeliveryItem, reason: string) => {
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { error } = await supabase
+          .from('deliveries')
+          .update({ support_reason: reason })
+          .eq('id', delivery.id);
+
+        if (!error) {
+          const { data } = await supabase.from('deliveries').select('*').order('created_at', { ascending: false });
+          if (data) setDeliveries(data);
+        }
+      } catch (err) {
+        console.error('Error requesting support on Supabase:', err);
+      }
+    } else {
+      const updated = deliveries.map(d => {
+        if (d.id === delivery.id) {
+          return { ...d, support_reason: reason };
+        }
+        return d;
+      });
+      localStorage.setItem('laviola_deliveries', JSON.stringify(updated));
+      setDeliveries(updated);
+    }
+
+    await logAction(
+      currentUser?.email || '',
+      currentUser?.name || 'Entregador',
+      'Solicitação de Suporte',
+      `O entregador "${currentUser?.name}" solicitou suporte para a entrega ID: ${delivery.id}. Motivo: "${reason}".`
+    );
+
+    setSupportModalDelivery(null);
+    alert('Suporte solicitado com sucesso! A equipe entrará em contato.');
+  };
+
+  const handleResolveSupport = async (deliveryId: string) => {
+    if (!confirm('Deseja marcar este suporte como resolvido? A sinalização de alerta será limpa.')) return;
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { error } = await supabase
+          .from('deliveries')
+          .update({ support_reason: null })
+          .eq('id', deliveryId);
+
+        if (!error) {
+          const { data } = await supabase.from('deliveries').select('*').order('created_at', { ascending: false });
+          if (data) setDeliveries(data);
+        }
+      } catch (err) {
+        console.error('Error resolving support on Supabase:', err);
+      }
+    } else {
+      const updated = deliveries.map(d => {
+        if (d.id === deliveryId) {
+          return { ...d, support_reason: null };
+        }
+        return d;
+      });
+      localStorage.setItem('laviola_deliveries', JSON.stringify(updated));
+      setDeliveries(updated);
+    }
+
+    await logAction(
+      currentUser?.email || '',
+      currentUser?.name || 'Gerente',
+      'Suporte Resolvido',
+      `Suporte para a entrega ID: ${deliveryId} marcado como resolvido.`
+    );
+    alert('Suporte resolvido com sucesso!');
+  };
+
   // Filter deliveries list for management view
   const getFilteredDeliveries = () => {
     return deliveries.filter(d => {
@@ -974,6 +1062,19 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
               <p style={{ fontSize: '0.85rem', color: styles.sidebarWidgetText?.color, marginTop: '4px' }}>
                 Itens: {activeClientDelivery.items}
               </p>
+
+              {activeClientDelivery.support_reason && (
+                <div style={{
+                  marginTop: '10px', padding: '10px 12px', backgroundColor: 'rgba(239, 68, 68, 0.08)',
+                  border: '1px solid rgba(239, 68, 68, 0.15)', borderRadius: '6px', fontSize: '0.82rem',
+                  color: 'hsl(0, 75%, 45%)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px'
+                }}>
+                  <AlertTriangle size={14} /> 
+                  <span>
+                    Dificuldade relatada pelo entregador: "{activeClientDelivery.support_reason}". Nosso suporte já está analisando para resolver.
+                  </span>
+                </div>
+              )}
 
               {/* Progress and Distance details */}
               {(() => {
@@ -1141,7 +1242,18 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
                       Itens: {d.items}
                     </div>
 
-                    <div style={{ display: 'flex', gap: '8px', marginTop: '8px', borderTop: `1px solid ${styles.borderColor}`, paddingTop: '10px' }}>
+                    {d.support_reason && (
+                      <div style={{
+                        marginTop: '5px', padding: '6px 10px', borderRadius: '6px',
+                        backgroundColor: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.15)',
+                        fontSize: '0.78rem', color: 'hsl(0, 75%, 50%)', fontWeight: 600,
+                        display: 'flex', alignItems: 'center', gap: '6px'
+                      }}>
+                        <AlertTriangle size={12} /> Suporte solicitado: "{d.support_reason}"
+                      </div>
+                    )}
+
+                    <div style={{ display: 'flex', gap: '8px', marginTop: '8px', borderTop: `1px solid ${styles.borderColor}`, paddingTop: '10px', flexWrap: 'wrap' }}>
                       {d.status === 'agendada' && (
                         <button
                           onClick={() => handleStartDeliveryAndNavigate(d)}
@@ -1155,7 +1267,7 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
                       )}
                       
                       {d.status === 'a-caminho' && (
-                        <div style={{ display: 'flex', gap: '8px' }}>
+                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                           <button
                             onClick={() => handleFinishDelivery(d)}
                             style={{
@@ -1173,6 +1285,15 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
                             }}
                           >
                             <Map size={12} style={{ marginRight: '4px' }} /> Iniciar Entrega
+                          </button>
+                          <button
+                            onClick={() => setSupportModalDelivery(d)}
+                            style={{
+                              ...styles.btnAcc(false), padding: '6px 12px', fontSize: '0.8rem',
+                              backgroundColor: 'hsl(0, 75%, 50%)', color: '#fff', border: 'none'
+                            }}
+                          >
+                            <LifeBuoy size={12} style={{ marginRight: '4px' }} /> Solicitar Suporte
                           </button>
                         </div>
                       )}
@@ -1390,6 +1511,16 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
                             <div style={{ fontSize: '0.75rem', fontWeight: 400, color: styles.sidebarWidgetText?.color, marginTop: '2px' }}>
                               {d.client_address}
                             </div>
+                            {d.support_reason && (
+                              <div style={{
+                                marginTop: '4px', padding: '3px 6px', borderRadius: '4px',
+                                backgroundColor: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.15)',
+                                fontSize: '0.72rem', color: '#ef4444', fontWeight: 600,
+                                display: 'inline-flex', alignItems: 'center', gap: '4px'
+                              }}>
+                                <AlertTriangle size={10} /> Suporte: "{d.support_reason}"
+                              </div>
+                            )}
                           </td>
                           <td style={{ padding: '12px 6px' }}>{d.items}</td>
                           <td style={{ padding: '12px 6px' }}>
@@ -1426,7 +1557,17 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
                               {badg.label}
                             </span>
                           </td>
-                          <td style={{ padding: '12px 6px', display: 'flex', gap: '6px', justifyContent: 'center', height: '100%', alignItems: 'center', border: 'none' }}>
+                           <td style={{ padding: '12px 6px', display: 'flex', gap: '6px', justifyContent: 'center', height: '100%', alignItems: 'center', border: 'none' }}>
+                            {d.support_reason && (
+                              <button
+                                onClick={() => handleResolveSupport(d.id)}
+                                title="Resolver Suporte (Limpar Alerta)"
+                                className="btn-action-icon"
+                                style={{ backgroundColor: 'rgba(34, 197, 94, 0.15)', color: '#22c55e' }}
+                              >
+                                <CheckCircle2 size={13} />
+                              </button>
+                            )}
                             <button
                               onClick={() => setSelectedDelivery(isSelected ? null : d)}
                               title="Visualizar no Mapa"
@@ -1668,7 +1809,85 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
               </div>
 
             </form>
+          </div>
+        </div>
+      )}
+      {/* ======================================= */}
+      {/* 4. MODAL DE SOLICITAÇÃO DE SUPORTE      */}
+      {/* ======================================= */}
+      {supportModalDelivery && (
+        <div style={styles.modalOverlay}>
+          <div style={{ ...styles.modalContent, maxWidth: '400px' }} role="dialog" aria-modal="true" aria-labelledby="support-modal-title">
+            <div style={styles.modalHeader}>
+              <h2 id="support-modal-title" style={styles.modalTitle}>
+                <LifeBuoy size={20} style={{ display: 'inline', marginRight: '6px', verticalAlign: 'middle', color: 'hsl(0, 75%, 50%)' }} />
+                Solicitar Suporte
+              </h2>
+              <button
+                onClick={() => setSupportModalDelivery(null)}
+                style={{
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  color: styles.sidebarWidgetText?.color || '#999', display: 'flex', alignItems: 'center', padding: 0
+                }}
+                aria-label="Fechar"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            
+            <p style={{ fontSize: '0.85rem', color: styles.sidebarWidgetText?.color || '#666', marginBottom: '16px' }}>
+              Selecione a ocorrência que melhor descreve o problema atual com a entrega:
+            </p>
 
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '320px', overflowY: 'auto', paddingRight: '4px' }}>
+              {SUPPORT_REASONS.map(reason => (
+                <button
+                  key={reason}
+                  onClick={() => handleRequestSupport(supportModalDelivery, reason)}
+                  style={{
+                    textAlign: 'left',
+                    padding: '10px 12px',
+                    borderRadius: '8px',
+                    border: `1px solid ${styles.borderColor}`,
+                    backgroundColor: styles.background,
+                    color: styles.textMain,
+                    fontSize: '0.82rem',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    transition: 'all 0.2s',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.borderColor = styles.primary;
+                    e.currentTarget.style.backgroundColor = `${styles.primary}08`;
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.borderColor = styles.borderColor;
+                    e.currentTarget.style.backgroundColor = styles.background;
+                  }}
+                >
+                  {reason}
+                </button>
+              ))}
+            </div>
+
+            <div style={{ ...styles.modalActions, marginTop: '20px' }}>
+              <button
+                onClick={() => setSupportModalDelivery(null)}
+                style={{
+                  width: '100%',
+                  padding: '10px 16px',
+                  borderRadius: '8px',
+                  border: `1px solid ${styles.borderColor}`,
+                  background: 'none',
+                  color: styles.textMain,
+                  cursor: 'pointer',
+                  fontSize: '0.85rem',
+                  fontWeight: 600
+                }}
+              >
+                Cancelar
+              </button>
+            </div>
           </div>
         </div>
       )}
