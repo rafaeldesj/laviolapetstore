@@ -250,9 +250,9 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
     fetchRealUsers();
   }, []);
 
-  // Poll deliveries state from Supabase / localStorage every 3 seconds to keep it synced
+  // Realtime subscription + fast polling fallback for instant synchronization
   useEffect(() => {
-    const interval = setInterval(async () => {
+    const fetchLatestDeliveries = async () => {
       if (isSupabaseConfigured && supabase) {
         try {
           const { data, error } = await supabase
@@ -261,19 +261,48 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
             .order('created_at', { ascending: false });
           if (!error && data) {
             setDeliveries(data);
-            return;
           }
         } catch (err) {
           // Silent catch
         }
+      } else {
+        const stored = localStorage.getItem('laviola_deliveries');
+        if (stored) {
+          setDeliveries(JSON.parse(stored));
+        }
       }
-      
-      const stored = localStorage.getItem('laviola_deliveries');
-      if (stored) {
-        setDeliveries(JSON.parse(stored));
+    };
+
+    // 1. Supabase Realtime Channel
+    let channel: any = null;
+    if (isSupabaseConfigured && supabase) {
+      try {
+        channel = supabase
+          .channel('deliveries-realtime')
+          .on(
+            'postgres_changes',
+            { event: '*', schema: 'public', table: 'deliveries' },
+            () => {
+              fetchLatestDeliveries();
+            }
+          )
+          .subscribe();
+      } catch (err) {
+        console.warn('Realtime subscription failed:', err);
       }
-    }, 3000);
-    return () => clearInterval(interval);
+    }
+
+    // 2. Fast Polling (1 second) to guarantee instant feeling and offline fallback synchronization
+    const interval = setInterval(() => {
+      fetchLatestDeliveries();
+    }, 1000);
+
+    return () => {
+      clearInterval(interval);
+      if (channel && supabase) {
+        supabase.removeChannel(channel);
+      }
+    };
   }, []);
 
   // Sync selected delivery reference when the list updates
