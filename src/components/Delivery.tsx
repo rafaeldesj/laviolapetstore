@@ -806,6 +806,11 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
     );
   };
 
+  const handleStartDeliveryAndNavigate = (delivery: DeliveryItem) => {
+    handleStartDelivery(delivery);
+    window.open(`https://www.google.com/maps/dir/?api=1&destination=${delivery.client_lat},${delivery.client_lng}`, '_blank');
+  };
+
   // Filter deliveries list for management view
   const getFilteredDeliveries = () => {
     return deliveries.filter(d => {
@@ -848,8 +853,14 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
   const clientDeliveries = deliveries.filter(d => d.client_id === currentUser?.id);
   const activeClientDelivery = clientDeliveries.find(d => d.status === 'a-caminho');
 
-  // Current driver context deliveries
-  const driverDeliveries = deliveries.filter(d => d.driver_id === currentUser?.id);
+  // Current driver context deliveries (filter: only show active ongoing order if exists, otherwise show pending scheduled ones)
+  let driverDeliveries = deliveries.filter(d => d.driver_id === currentUser?.id);
+  const activeDriverDelivery = driverDeliveries.find(d => d.status === 'a-caminho');
+  if (activeDriverDelivery) {
+    driverDeliveries = [activeDriverDelivery];
+  } else {
+    driverDeliveries = driverDeliveries.filter(d => d.status === 'agendada');
+  }
 
   return (
     <section style={styles.contentSection} aria-labelledby="delivery-heading">
@@ -1106,26 +1117,37 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
                     <div style={{ display: 'flex', gap: '8px', marginTop: '8px', borderTop: `1px solid ${styles.borderColor}`, paddingTop: '10px' }}>
                       {d.status === 'agendada' && (
                         <button
-                          onClick={() => handleStartDelivery(d)}
+                          onClick={() => handleStartDeliveryAndNavigate(d)}
                           style={{
                             ...styles.btnAcc(false), padding: '6px 12px', fontSize: '0.8rem',
                             backgroundColor: 'hsl(36, 95%, 50%)', color: '#fff', border: 'none'
                           }}
                         >
-                          <Play size={12} /> Iniciar Transporte
+                          <Play size={12} style={{ marginRight: '4px' }} /> Iniciar Entrega
                         </button>
                       )}
                       
                       {d.status === 'a-caminho' && (
-                        <button
-                          onClick={() => handleFinishDelivery(d)}
-                          style={{
-                            ...styles.btnAcc(false), padding: '6px 12px', fontSize: '0.8rem',
-                            backgroundColor: 'hsl(142, 60%, 45%)', color: '#fff', border: 'none'
-                          }}
-                        >
-                          <CheckCircle2 size={12} /> Marcar como Entregue
-                        </button>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <button
+                            onClick={() => handleFinishDelivery(d)}
+                            style={{
+                              ...styles.btnAcc(false), padding: '6px 12px', fontSize: '0.8rem',
+                              backgroundColor: 'hsl(142, 60%, 45%)', color: '#fff', border: 'none'
+                            }}
+                          >
+                            <CheckCircle2 size={12} style={{ marginRight: '4px' }} /> Marcar como Entregue
+                          </button>
+                          <button
+                            onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${d.client_lat},${d.client_lng}`, '_blank')}
+                            style={{
+                              ...styles.btnAcc(false), padding: '6px 12px', fontSize: '0.8rem',
+                              backgroundColor: '#4285F4', color: '#fff', border: 'none'
+                            }}
+                          >
+                            <Map size={12} style={{ marginRight: '4px' }} /> Iniciar Entrega
+                          </button>
+                        </div>
                       )}
 
                       <button
