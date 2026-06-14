@@ -657,19 +657,28 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
           })
           .eq('id', deliveryId);
         
-        if (!error) {
-          const { data } = await supabase.from('deliveries').select('*').order('created_at', { ascending: false });
-          if (data) {
-            setDeliveries(data);
-            if (selectedDelivery?.id === deliveryId) {
-              setSelectedDelivery(data.find(d => d.id === deliveryId) || null);
-            }
-          }
-          await logAction(currentUser?.email || '', currentUser?.name || 'Gerente', 'Despacho de Entrega', `Entrega ID: ${deliveryId} despachada.`);
+        if (error) {
+          alert('Erro ao despachar entrega no Supabase: ' + error.message);
           return;
         }
-      } catch (err) {
+
+        const { data, error: fetchError } = await supabase.from('deliveries').select('*').order('created_at', { ascending: false });
+        if (fetchError) {
+          alert('Erro ao atualizar dados do Supabase: ' + fetchError.message);
+          return;
+        }
+        if (data) {
+          setDeliveries(data);
+          if (selectedDelivery?.id === deliveryId) {
+            setSelectedDelivery(data.find(d => d.id === deliveryId) || null);
+          }
+        }
+        await logAction(currentUser?.email || '', currentUser?.name || 'Gerente', 'Despacho de Entrega', `Entrega ID: ${deliveryId} despachada.`);
+        return;
+      } catch (err: any) {
         console.error('Error dispatching to Supabase:', err);
+        alert('Erro inesperado: ' + err.message);
+        return;
       }
     }
 
@@ -731,22 +740,31 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
     if (isSupabaseConfigured && supabase) {
       try {
         const { error } = await supabase.from('deliveries').insert(newDelivery);
-        if (!error) {
-          const { data } = await supabase.from('deliveries').select('*').order('created_at', { ascending: false });
-          if (data) setDeliveries(data);
-          setIsFormOpen(false);
-          setFormClientId('');
-          setFormDriverId('');
-          setFormAddress('');
-          setFormItems('');
-          setFormScheduledTime('');
-          setFormLat(PETSHOP_COORDS.lat);
-          setFormLng(PETSHOP_COORDS.lng);
-          await logAction(currentUser?.email || '', currentUser?.name || 'Gerente', 'Agendamento de Entrega', `Nova entrega criada.`);
+        if (error) {
+          alert('Erro ao criar entrega no Supabase: ' + error.message);
           return;
         }
-      } catch (err) {
+
+        const { data, error: fetchError } = await supabase.from('deliveries').select('*').order('created_at', { ascending: false });
+        if (fetchError) {
+          alert('Erro ao carregar entregas do Supabase: ' + fetchError.message);
+          return;
+        }
+        if (data) setDeliveries(data);
+        setIsFormOpen(false);
+        setFormClientId('');
+        setFormDriverId('');
+        setFormAddress('');
+        setFormItems('');
+        setFormScheduledTime('');
+        setFormLat(PETSHOP_COORDS.lat);
+        setFormLng(PETSHOP_COORDS.lng);
+        await logAction(currentUser?.email || '', currentUser?.name || 'Gerente', 'Agendamento de Entrega', `Nova entrega criada.`);
+        return;
+      } catch (err: any) {
         console.error('Error creating delivery on Supabase:', err);
+        alert('Erro inesperado: ' + err.message);
+        return;
       }
     }
 
@@ -778,15 +796,24 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
     if (isSupabaseConfigured && supabase) {
       try {
         const { error } = await supabase.from('deliveries').delete().eq('id', id);
-        if (!error) {
-          const { data } = await supabase.from('deliveries').select('*').order('created_at', { ascending: false });
-          if (data) setDeliveries(data);
-          if (selectedDelivery?.id === id) setSelectedDelivery(null);
-          await logAction(currentUser?.email || '', currentUser?.name || 'Gerente', 'Exclusão de Entrega', `Entrega ID: ${id} excluída do painel.`);
+        if (error) {
+          alert('Erro ao remover entrega no Supabase: ' + error.message);
           return;
         }
-      } catch (err) {
+
+        const { data, error: fetchError } = await supabase.from('deliveries').select('*').order('created_at', { ascending: false });
+        if (fetchError) {
+          alert('Erro ao atualizar lista do Supabase: ' + fetchError.message);
+          return;
+        }
+        if (data) setDeliveries(data);
+        if (selectedDelivery?.id === id) setSelectedDelivery(null);
+        await logAction(currentUser?.email || '', currentUser?.name || 'Gerente', 'Exclusão de Entrega', `Entrega ID: ${id} excluída do painel.`);
+        return;
+      } catch (err: any) {
         console.error('Error deleting delivery on Supabase:', err);
+        alert('Erro inesperado: ' + err.message);
+        return;
       }
     }
 
@@ -816,17 +843,26 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
           })
           .eq('id', delivery.id);
 
-        if (!error) {
-          const { data } = await supabase.from('deliveries').select('*').order('created_at', { ascending: false });
-          if (data) {
-            setDeliveries(data);
-            setSelectedDelivery(data.find(d => d.id === delivery.id) || null);
-          }
-          await logAction(currentUser?.email || '', currentUser?.name || 'Entregador', 'Entrega Iniciada', `Entrega do cliente "${delivery.client_name}" foi iniciada e está a caminho.`);
+        if (error) {
+          alert('Erro ao iniciar entrega no Supabase: ' + error.message);
           return;
         }
-      } catch (err) {
+
+        const { data, error: fetchError } = await supabase.from('deliveries').select('*').order('created_at', { ascending: false });
+        if (fetchError) {
+          alert('Erro ao atualizar dados do Supabase: ' + fetchError.message);
+          return;
+        }
+        if (data) {
+          setDeliveries(data);
+          setSelectedDelivery(data.find(d => d.id === delivery.id) || null);
+        }
+        await logAction(currentUser?.email || '', currentUser?.name || 'Entregador', 'Entrega Iniciada', `Entrega do cliente "${delivery.client_name}" foi iniciada e está a caminho.`);
+        return;
+      } catch (err: any) {
         console.error('Error starting delivery on Supabase:', err);
+        alert('Erro inesperado: ' + err.message);
+        return;
       }
     }
 
@@ -868,17 +904,26 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
           })
           .eq('id', delivery.id);
 
-        if (!error) {
-          const { data } = await supabase.from('deliveries').select('*').order('created_at', { ascending: false });
-          if (data) {
-            setDeliveries(data);
-            setSelectedDelivery(data.find(d => d.id === delivery.id) || null);
-          }
-          await logAction(currentUser?.email || '', currentUser?.name || 'Entregador', 'Entrega Concluída', `Entrega para o cliente "${delivery.client_name}" finalizada com sucesso.`);
+        if (error) {
+          alert('Erro ao finalizar entrega no Supabase: ' + error.message);
           return;
         }
-      } catch (err) {
+
+        const { data, error: fetchError } = await supabase.from('deliveries').select('*').order('created_at', { ascending: false });
+        if (fetchError) {
+          alert('Erro ao atualizar dados do Supabase: ' + fetchError.message);
+          return;
+        }
+        if (data) {
+          setDeliveries(data);
+          setSelectedDelivery(data.find(d => d.id === delivery.id) || null);
+        }
+        await logAction(currentUser?.email || '', currentUser?.name || 'Entregador', 'Entrega Concluída', `Entrega para o cliente "${delivery.client_name}" finalizada com sucesso.`);
+        return;
+      } catch (err: any) {
         console.error('Error finishing delivery on Supabase:', err);
+        alert('Erro inesperado: ' + err.message);
+        return;
       }
     }
 
@@ -918,19 +963,28 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
           })
           .eq('id', delivery.id);
 
-        if (!error) {
-          const { data } = await supabase.from('deliveries').select('*').order('created_at', { ascending: false });
-          if (data) {
-            setDeliveries(data);
-            if (selectedDelivery?.id === delivery.id) {
-              setSelectedDelivery(null);
-            }
-          }
-          await logAction(currentUser?.email || '', currentUser?.name || 'Entregador', 'Retorno Confirmado', `O entregador confirmou o retorno à base para a entrega cancelada ID: ${delivery.id}.`);
+        if (error) {
+          alert('Erro ao confirmar retorno no Supabase: ' + error.message);
           return;
         }
-      } catch (err) {
+
+        const { data, error: fetchError } = await supabase.from('deliveries').select('*').order('created_at', { ascending: false });
+        if (fetchError) {
+          alert('Erro ao atualizar dados do Supabase: ' + fetchError.message);
+          return;
+        }
+        if (data) {
+          setDeliveries(data);
+          if (selectedDelivery?.id === delivery.id) {
+            setSelectedDelivery(null);
+          }
+        }
+        await logAction(currentUser?.email || '', currentUser?.name || 'Entregador', 'Retorno Confirmado', `O entregador confirmou o retorno à base para a entrega cancelada ID: ${delivery.id}.`);
+        return;
+      } catch (err: any) {
         console.error('Error confirming return on Supabase:', err);
+        alert('Erro inesperado: ' + err.message);
+        return;
       }
     }
 
@@ -972,12 +1026,21 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
           .update({ support_reason: reason })
           .eq('id', delivery.id);
 
-        if (!error) {
-          const { data } = await supabase.from('deliveries').select('*').order('created_at', { ascending: false });
-          if (data) setDeliveries(data);
+        if (error) {
+          alert('Erro ao solicitar suporte no Supabase: ' + error.message);
+          return;
         }
-      } catch (err) {
+
+        const { data, error: fetchError } = await supabase.from('deliveries').select('*').order('created_at', { ascending: false });
+        if (fetchError) {
+          alert('Erro ao atualizar dados do Supabase: ' + fetchError.message);
+          return;
+        }
+        if (data) setDeliveries(data);
+      } catch (err: any) {
         console.error('Error requesting support on Supabase:', err);
+        alert('Erro inesperado: ' + err.message);
+        return;
       }
     } else {
       const updated = deliveries.map(d => {
@@ -1011,12 +1074,21 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
           .update({ support_reason: null, support_decision: null })
           .eq('id', deliveryId);
 
-        if (!error) {
-          const { data } = await supabase.from('deliveries').select('*').order('created_at', { ascending: false });
-          if (data) setDeliveries(data);
+        if (error) {
+          alert('Erro ao resolver suporte no Supabase: ' + error.message);
+          return;
         }
-      } catch (err) {
+
+        const { data, error: fetchError } = await supabase.from('deliveries').select('*').order('created_at', { ascending: false });
+        if (fetchError) {
+          alert('Erro ao atualizar dados do Supabase: ' + fetchError.message);
+          return;
+        }
+        if (data) setDeliveries(data);
+      } catch (err: any) {
         console.error('Error resolving support on Supabase:', err);
+        alert('Erro inesperado: ' + err.message);
+        return;
       }
     } else {
       const updated = deliveries.map(d => {
@@ -1053,12 +1125,21 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
           .update(updateData)
           .eq('id', deliveryId);
 
-        if (!error) {
-          const { data } = await supabase.from('deliveries').select('*').order('created_at', { ascending: false });
-          if (data) setDeliveries(data);
+        if (error) {
+          alert('Erro ao salvar decisão de suporte no Supabase: ' + error.message);
+          return;
         }
-      } catch (err) {
+
+        const { data, error: fetchError } = await supabase.from('deliveries').select('*').order('created_at', { ascending: false });
+        if (fetchError) {
+          alert('Erro ao atualizar dados do Supabase: ' + fetchError.message);
+          return;
+        }
+        if (data) setDeliveries(data);
+      } catch (err: any) {
         console.error('Error saving support decision on Supabase:', err);
+        alert('Erro inesperado: ' + err.message);
+        return;
       }
     } else {
       const updated = deliveries.map(d => {
