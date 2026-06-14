@@ -594,7 +594,6 @@ export const Pagamentos: React.FC<PagamentosProps> = ({
 
     const handleConfirmSuccess = async () => {
       if (deliveryMethod === 'delivery') {
-        const currentDeliveries = JSON.parse(localStorage.getItem('laviola_deliveries') || '[]');
         const newDelivery = {
           id: 'deliv-' + Math.random().toString(36).substring(2, 9),
           client_id: currentUser.id,
@@ -606,11 +605,38 @@ export const Pagamentos: React.FC<PagamentosProps> = ({
           driver_name: '',
           driver_lat: PETSHOP_COORDS.lat,
           driver_lng: PETSHOP_COORDS.lng,
-          status: 'agendada',
+          status: 'agendada' as const,
           items: selectedProduct.name,
           scheduled_time: 'A ser despachada',
           created_at: new Date().toISOString()
         };
+
+        if (isSupabaseConfigured && supabase) {
+          try {
+            const { error } = await supabase.from('deliveries').insert(newDelivery);
+            if (!error) {
+              await logAction(
+                currentUser.email,
+                currentUser.name,
+                'Compra de Produto - Delivery',
+                `Comprou "${selectedProduct.name}" com entrega para: "${deliveryAddress}".`
+              );
+              // Store locally as fallback
+              const currentDeliveries = JSON.parse(localStorage.getItem('laviola_deliveries') || '[]');
+              currentDeliveries.unshift(newDelivery);
+              localStorage.setItem('laviola_deliveries', JSON.stringify(currentDeliveries));
+              
+              setSelectedProduct(null);
+              setShowProductSuccessModal(false);
+              setActiveSection('delivery');
+              return;
+            }
+          } catch (err) {
+            console.error('Error inserting delivery to Supabase:', err);
+          }
+        }
+
+        const currentDeliveries = JSON.parse(localStorage.getItem('laviola_deliveries') || '[]');
         currentDeliveries.unshift(newDelivery);
         localStorage.setItem('laviola_deliveries', JSON.stringify(currentDeliveries));
         

@@ -77,52 +77,70 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
   const isClient = role === 'client';
 
   // Seed default data if empty in localStorage on mount
+  // Load and Seed deliveries
   useEffect(() => {
-    let storedDeliveries = localStorage.getItem('laviola_deliveries');
-    if (storedDeliveries && (storedDeliveries.includes('Marcos') || storedDeliveries.includes('colab-2'))) {
-      localStorage.removeItem('laviola_deliveries');
-      storedDeliveries = null;
-    }
-    if (!storedDeliveries) {
-      const defaultDeliveries: DeliveryItem[] = [
-        {
-          id: 'deliv-1',
-          client_id: 'colab-1', // João Silva
-          client_name: 'João Silva',
-          client_address: 'Rua Arthur Rios, 1200 - Campo Grande',
-          client_lat: -22.8995,
-          client_lng: -43.5580,
-          driver_id: '4155f554-a955-442a-af69-75288a66a4d7', 
-          driver_name: 'Jacques Vasconcellos',
-          driver_lat: -22.8995, // already arrived
-          driver_lng: -43.5580,
-          status: 'concluida',
-          items: 'Shampoo Pet Clean + Coleira Azul M',
-          scheduled_time: 'Hoje às 11:30',
-          created_at: new Date(Date.now() - 4 * 3600000).toISOString()
-        },
-        {
-          id: 'deliv-2',
-          client_id: 'colab-1',
-          client_name: 'João Silva',
-          client_address: 'Avenida Cesário de Melo, 2500 - Campo Grande',
-          client_lat: -22.9025,
-          client_lng: -43.5610,
-          driver_id: '', // Unassigned so the user can test dispatching
-          driver_name: '',
-          driver_lat: PETSHOP_COORDS.lat,
-          driver_lng: PETSHOP_COORDS.lng,
-          status: 'agendada',
-          items: 'Ração Golden Cães Adultos 15kg',
-          scheduled_time: 'A ser despachada',
-          created_at: new Date().toISOString()
+    const fetchDeliveries = async () => {
+      if (isSupabaseConfigured && supabase) {
+        try {
+          const { data, error } = await supabase
+            .from('deliveries')
+            .select('*')
+            .order('created_at', { ascending: false });
+          if (!error && data) {
+            setDeliveries(data);
+            return;
+          }
+        } catch (err) {
+          console.warn('Supabase deliveries not configured yet, falling back to localStorage.', err);
         }
-      ];
-      localStorage.setItem('laviola_deliveries', JSON.stringify(defaultDeliveries));
-      setDeliveries(defaultDeliveries);
-    } else {
-      setDeliveries(JSON.parse(storedDeliveries));
-    }
+      }
+      
+      let storedDeliveries = localStorage.getItem('laviola_deliveries');
+      if (storedDeliveries && (storedDeliveries.includes('Marcos') || storedDeliveries.includes('colab-2'))) {
+        localStorage.removeItem('laviola_deliveries');
+        storedDeliveries = null;
+      }
+      if (!storedDeliveries) {
+        const defaultDeliveries: DeliveryItem[] = [
+          {
+            id: 'deliv-1',
+            client_id: 'colab-1', // João Silva
+            client_name: 'João Silva',
+            client_address: 'Rua Arthur Rios, 1200 - Campo Grande',
+            client_lat: -22.8995,
+            client_lng: -43.5580,
+            driver_id: '4155f554-a955-442a-af69-75288a66a4d7', 
+            driver_name: 'Jacques Vasconcellos',
+            driver_lat: -22.8995, // already arrived
+            driver_lng: -43.5580,
+            status: 'concluida',
+            items: 'Shampoo Pet Clean + Coleira Azul M',
+            scheduled_time: 'Hoje às 11:30',
+            created_at: new Date(Date.now() - 4 * 3600000).toISOString()
+          },
+          {
+            id: 'deliv-2',
+            client_id: 'colab-1',
+            client_name: 'João Silva',
+            client_address: 'Avenida Cesário de Melo, 2500 - Campo Grande',
+            client_lat: -22.9025,
+            client_lng: -43.5610,
+            driver_id: '', // Unassigned so the user can test dispatching
+            driver_name: '',
+            driver_lat: PETSHOP_COORDS.lat,
+            driver_lng: PETSHOP_COORDS.lng,
+            status: 'agendada',
+            items: 'Ração Golden Cães Adultos 15kg',
+            scheduled_time: 'A ser despachada',
+            created_at: new Date().toISOString()
+          }
+        ];
+        localStorage.setItem('laviola_deliveries', JSON.stringify(defaultDeliveries));
+        setDeliveries(defaultDeliveries);
+      } else {
+        setDeliveries(JSON.parse(storedDeliveries));
+      }
+    };
 
     const fetchRealUsers = async () => {
       if (isSupabaseConfigured && supabase) {
@@ -166,18 +184,33 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
       setDrivers(driverList);
     };
 
+    fetchDeliveries();
     fetchRealUsers();
   }, []);
 
-  // Poll deliveries state from localStorage every 2 seconds to make it real-time across tabs
+  // Poll deliveries state from Supabase / localStorage every 3 seconds to keep it synced
   useEffect(() => {
-    const interval = setInterval(() => {
+    const interval = setInterval(async () => {
+      if (isSupabaseConfigured && supabase) {
+        try {
+          const { data, error } = await supabase
+            .from('deliveries')
+            .select('*')
+            .order('created_at', { ascending: false });
+          if (!error && data) {
+            setDeliveries(data);
+            return;
+          }
+        } catch (err) {
+          // Silent catch
+        }
+      }
+      
       const stored = localStorage.getItem('laviola_deliveries');
       if (stored) {
-        const parsed = JSON.parse(stored) as DeliveryItem[];
-        setDeliveries(parsed);
+        setDeliveries(JSON.parse(stored));
       }
-    }, 2000);
+    }, 3000);
     return () => clearInterval(interval);
   }, []);
 
@@ -193,10 +226,31 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
 
   // Movement simulator interval (only runs if there are active deliveries marked as 'a-caminho')
   useEffect(() => {
-    const interval = setInterval(() => {
-      const stored = localStorage.getItem('laviola_deliveries');
-      if (!stored) return;
-      const list = JSON.parse(stored) as DeliveryItem[];
+    const interval = setInterval(async () => {
+      let list: DeliveryItem[] = [];
+      let usingSupabase = false;
+
+      if (isSupabaseConfigured && supabase) {
+        try {
+          const { data, error } = await supabase
+            .from('deliveries')
+            .select('*')
+            .order('created_at', { ascending: false });
+          if (!error && data) {
+            list = data;
+            usingSupabase = true;
+          }
+        } catch (err) {}
+      }
+
+      if (!usingSupabase) {
+        const stored = localStorage.getItem('laviola_deliveries');
+        if (stored) {
+          list = JSON.parse(stored);
+        }
+      }
+
+      if (list.length === 0) return;
       let changed = false;
 
       const updatedList = list.map(item => {
@@ -240,8 +294,20 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
       });
 
       if (changed) {
-        localStorage.setItem('laviola_deliveries', JSON.stringify(updatedList));
-        setDeliveries(updatedList);
+        if (usingSupabase && isSupabaseConfigured && supabase) {
+          for (const item of updatedList) {
+            if (item.status === 'a-caminho') {
+              await supabase
+                .from('deliveries')
+                .update({ driver_lat: item.driver_lat, driver_lng: item.driver_lng })
+                .eq('id', item.id);
+            }
+          }
+          setDeliveries(updatedList);
+        } else {
+          localStorage.setItem('laviola_deliveries', JSON.stringify(updatedList));
+          setDeliveries(updatedList);
+        }
       }
     }, 2000);
 
@@ -436,13 +502,42 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
     const driver = drivers.find(d => d.id === driverId);
     if (!driver) return;
 
+    const scheduledTime = 'Hoje às ' + new Date(Date.now() + 30 * 60 * 1000).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { error } = await supabase
+          .from('deliveries')
+          .update({
+            driver_id: driverId,
+            driver_name: driver.name,
+            scheduled_time: scheduledTime
+          })
+          .eq('id', deliveryId);
+        
+        if (!error) {
+          const { data } = await supabase.from('deliveries').select('*').order('created_at', { ascending: false });
+          if (data) {
+            setDeliveries(data);
+            if (selectedDelivery?.id === deliveryId) {
+              setSelectedDelivery(data.find(d => d.id === deliveryId) || null);
+            }
+          }
+          await logAction(currentUser?.email || '', currentUser?.name || 'Gerente', 'Despacho de Entrega', `Entrega ID: ${deliveryId} despachada.`);
+          return;
+        }
+      } catch (err) {
+        console.error('Error dispatching to Supabase:', err);
+      }
+    }
+
     const updated = deliveries.map(d => {
       if (d.id === deliveryId) {
         return {
           ...d,
           driver_id: driverId,
           driver_name: driver.name,
-          scheduled_time: 'Hoje às ' + new Date(Date.now() + 30 * 60 * 1000).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+          scheduled_time: scheduledTime
         };
       }
       return d;
@@ -451,7 +546,6 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
     localStorage.setItem('laviola_deliveries', JSON.stringify(updated));
     setDeliveries(updated);
 
-    // Update selectedDelivery reference if it's currently selected
     if (selectedDelivery?.id === deliveryId) {
       const refreshed = updated.find(d => d.id === deliveryId) || null;
       setSelectedDelivery(refreshed);
@@ -492,6 +586,28 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
       created_at: new Date().toISOString()
     };
 
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { error } = await supabase.from('deliveries').insert(newDelivery);
+        if (!error) {
+          const { data } = await supabase.from('deliveries').select('*').order('created_at', { ascending: false });
+          if (data) setDeliveries(data);
+          setIsFormOpen(false);
+          setFormClientId('');
+          setFormDriverId('');
+          setFormAddress('');
+          setFormItems('');
+          setFormScheduledTime('');
+          setFormLat(PETSHOP_COORDS.lat);
+          setFormLng(PETSHOP_COORDS.lng);
+          await logAction(currentUser?.email || '', currentUser?.name || 'Gerente', 'Agendamento de Entrega', `Nova entrega criada.`);
+          return;
+        }
+      } catch (err) {
+        console.error('Error creating delivery on Supabase:', err);
+      }
+    }
+
     const updated = [newDelivery, ...deliveries];
     localStorage.setItem('laviola_deliveries', JSON.stringify(updated));
     setDeliveries(updated);
@@ -516,6 +632,22 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
 
   const handleDeleteDelivery = async (id: string) => {
     if (!confirm('Deseja realmente remover esta entrega do sistema?')) return;
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { error } = await supabase.from('deliveries').delete().eq('id', id);
+        if (!error) {
+          const { data } = await supabase.from('deliveries').select('*').order('created_at', { ascending: false });
+          if (data) setDeliveries(data);
+          if (selectedDelivery?.id === id) setSelectedDelivery(null);
+          await logAction(currentUser?.email || '', currentUser?.name || 'Gerente', 'Exclusão de Entrega', `Entrega ID: ${id} excluída do painel.`);
+          return;
+        }
+      } catch (err) {
+        console.error('Error deleting delivery on Supabase:', err);
+      }
+    }
+
     const updated = deliveries.filter(d => d.id !== id);
     localStorage.setItem('laviola_deliveries', JSON.stringify(updated));
     setDeliveries(updated);
@@ -531,6 +663,31 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
   };
 
   const handleStartDelivery = async (delivery: DeliveryItem) => {
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { error } = await supabase
+          .from('deliveries')
+          .update({
+            status: 'a-caminho',
+            driver_lat: PETSHOP_COORDS.lat,
+            driver_lng: PETSHOP_COORDS.lng
+          })
+          .eq('id', delivery.id);
+
+        if (!error) {
+          const { data } = await supabase.from('deliveries').select('*').order('created_at', { ascending: false });
+          if (data) {
+            setDeliveries(data);
+            setSelectedDelivery(data.find(d => d.id === delivery.id) || null);
+          }
+          await logAction(currentUser?.email || '', currentUser?.name || 'Entregador', 'Entrega Iniciada', `Entrega do cliente "${delivery.client_name}" foi iniciada e está a caminho.`);
+          return;
+        }
+      } catch (err) {
+        console.error('Error starting delivery on Supabase:', err);
+      }
+    }
+
     const updated = deliveries.map(d => {
       if (d.id === delivery.id) {
         return {
@@ -558,6 +715,31 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
   };
 
   const handleFinishDelivery = async (delivery: DeliveryItem) => {
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { error } = await supabase
+          .from('deliveries')
+          .update({
+            status: 'concluida',
+            driver_lat: delivery.client_lat,
+            driver_lng: delivery.client_lng
+          })
+          .eq('id', delivery.id);
+
+        if (!error) {
+          const { data } = await supabase.from('deliveries').select('*').order('created_at', { ascending: false });
+          if (data) {
+            setDeliveries(data);
+            setSelectedDelivery(data.find(d => d.id === delivery.id) || null);
+          }
+          await logAction(currentUser?.email || '', currentUser?.name || 'Entregador', 'Entrega Concluída', `Entrega para o cliente "${delivery.client_name}" finalizada com sucesso.`);
+          return;
+        }
+      } catch (err) {
+        console.error('Error finishing delivery on Supabase:', err);
+      }
+    }
+
     const updated = deliveries.map(d => {
       if (d.id === delivery.id) {
         return {
