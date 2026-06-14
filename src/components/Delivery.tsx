@@ -26,11 +26,13 @@ export interface DeliveryItem {
   driver_name: string;
   driver_lat: number;
   driver_lng: number;
-  status: 'agendada' | 'a-caminho' | 'concluida';
+  status: 'agendada' | 'a-caminho' | 'concluida' | 'cancelada';
   items: string;
   scheduled_time: string;
   created_at: string;
   support_reason?: string | null;
+  support_decision?: string | null;
+  driver_returned?: boolean | null;
 }
 
 const PETSHOP_COORDS = { lat: -22.9122, lng: -43.5606 }; // Rua Dr. Ibraim Hannas, 406 - Campo Grande
@@ -54,6 +56,48 @@ const SUPPORT_REASONS = [
   "Produto quebrado, derramado ou danificado",
   "Sem sinal de internet / GPS oscilando"
 ];
+
+const DECISIONS_BY_REASON: Record<string, string[]> = {
+  "Local fechado, ninguém atende": [
+    "Aguardar 10 minutos no local e tentar contato telefônico",
+    "Deixar com vizinho autorizado",
+    "Entrega cancelada. Retorne à base"
+  ],
+  "Problemas com o pagamento do cliente": [
+    "Solicitar pagamento via Pix/Link e aguardar confirmação",
+    "Permitir pagamento na próxima entrega (autorizado pelo financeiro)",
+    "Entrega cancelada. Retorne à base"
+  ],
+  "O veículo parou de funcionar": [
+    "Aguardar no local, outro entregador irá buscar a mercadoria",
+    "Aguardar reboque / assistência mecânica",
+    "Entrega cancelada. Retorne à base"
+  ],
+  "Sofri um acidente no percurso": [
+    "Priorizar socorro médico. Aguardar resgate no local",
+    "Aguardar reboque e suporte da empresa no local",
+    "Entrega cancelada. Retorne à base"
+  ],
+  "Endereço incorreto / não localizado": [
+    "Entrar em contato com o cliente para obter ponto de referência",
+    "Buscar endereço correto no Google Maps / perguntar na vizinhança",
+    "Entrega cancelada. Retorne à base"
+  ],
+  "Cliente recusou receber o produto": [
+    "Verificar motivo da recusa com o cliente e reportar ao gerente",
+    "Entrega cancelada. Retorne à base"
+  ],
+  "Produto quebrado, derramado ou danificado": [
+    "Retornar à base para efetuar a troca do produto",
+    "Entregar itens não danificados e gerar cupom de desconto",
+    "Entrega cancelada. Retorne à base"
+  ],
+  "Sem sinal de internet / GPS oscilando": [
+    "Prosseguir com a entrega seguindo o endereço físico anotado",
+    "Aguardar sinal em local seguro / reiniciar aplicativo",
+    "Entrega cancelada. Retorne à base"
+  ]
+};
 
 export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
   const [deliveries, setDeliveries] = useState<DeliveryItem[]>([]);
@@ -80,6 +124,9 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [isLocationApproximate, setIsLocationApproximate] = useState(false);
   const [supportModalDelivery, setSupportModalDelivery] = useState<DeliveryItem | null>(null);
+  const [managerSupportModalDelivery, setManagerSupportModalDelivery] = useState<DeliveryItem | null>(null);
+  const [selectedDecisionOption, setSelectedDecisionOption] = useState<string>('');
+  const [customDecisionText, setCustomDecisionText] = useState<string>('');
 
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapInstanceRef = useRef<any>(null);
@@ -832,6 +879,57 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
     );
   };
 
+  const handleConfirmReturnToBase = async (delivery: DeliveryItem) => {
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { error } = await supabase
+          .from('deliveries')
+          .update({
+            driver_returned: true
+          })
+          .eq('id', delivery.id);
+
+        if (!error) {
+          const { data } = await supabase.from('deliveries').select('*').order('created_at', { ascending: false });
+          if (data) {
+            setDeliveries(data);
+            if (selectedDelivery?.id === delivery.id) {
+              setSelectedDelivery(null);
+            }
+          }
+          await logAction(currentUser?.email || '', currentUser?.name || 'Entregador', 'Retorno Confirmado', `O entregador confirmou o retorno à base para a entrega cancelada ID: ${delivery.id}.`);
+          return;
+        }
+      } catch (err) {
+        console.error('Error confirming return on Supabase:', err);
+      }
+    }
+
+    const updated = deliveries.map(d => {
+      if (d.id === delivery.id) {
+        return {
+          ...d,
+          driver_returned: true
+        };
+      }
+      return d;
+    });
+
+    localStorage.setItem('laviola_deliveries', JSON.stringify(updated));
+    setDeliveries(updated);
+    
+    if (selectedDelivery?.id === delivery.id) {
+      setSelectedDelivery(null);
+    }
+
+    await logAction(
+      currentUser?.email || '',
+      currentUser?.name || 'Entregador',
+      'Retorno Confirmado',
+      `O entregador confirmou o retorno à base para a entrega cancelada ID: ${delivery.id}.`
+    );
+  };
+
   const handleStartDeliveryAndNavigate = (delivery: DeliveryItem) => {
     handleStartDelivery(delivery);
     window.open(`https://www.google.com/maps/dir/?api=1&destination=${delivery.client_lat},${delivery.client_lng}`, '_blank');
@@ -875,13 +973,13 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
   };
 
   const handleResolveSupport = async (deliveryId: string) => {
-    if (!confirm('Deseja marcar este suporte como resolvido? A sinalização de alerta será limpa.')) return;
+    if (!confirm('Deseja marcar este suporte como resolvido? A sinalização de alerta e instruções serão limpas.')) return;
 
     if (isSupabaseConfigured && supabase) {
       try {
         const { error } = await supabase
           .from('deliveries')
-          .update({ support_reason: null })
+          .update({ support_reason: null, support_decision: null })
           .eq('id', deliveryId);
 
         if (!error) {
@@ -894,7 +992,7 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
     } else {
       const updated = deliveries.map(d => {
         if (d.id === deliveryId) {
-          return { ...d, support_reason: null };
+          return { ...d, support_reason: null, support_decision: null };
         }
         return d;
       });
@@ -909,6 +1007,55 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
       `Suporte para a entrega ID: ${deliveryId} marcado como resolvido.`
     );
     alert('Suporte resolvido com sucesso!');
+  };
+
+  const handleSaveSupportDecision = async (deliveryId: string, decision: string, isCancellation: boolean) => {
+    const updateData: any = {
+      support_decision: decision
+    };
+    if (isCancellation) {
+      updateData.status = 'cancelada';
+    }
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { error } = await supabase
+          .from('deliveries')
+          .update(updateData)
+          .eq('id', deliveryId);
+
+        if (!error) {
+          const { data } = await supabase.from('deliveries').select('*').order('created_at', { ascending: false });
+          if (data) setDeliveries(data);
+        }
+      } catch (err) {
+        console.error('Error saving support decision on Supabase:', err);
+      }
+    } else {
+      const updated = deliveries.map(d => {
+        if (d.id === deliveryId) {
+          return {
+            ...d,
+            ...updateData
+          };
+        }
+        return d;
+      });
+      localStorage.setItem('laviola_deliveries', JSON.stringify(updated));
+      setDeliveries(updated);
+    }
+
+    await logAction(
+      currentUser?.email || '',
+      currentUser?.name || 'Gerente',
+      'Decisão de Suporte',
+      `Decisão tomada para a entrega ID: ${deliveryId}. Instrução: "${decision}".`
+    );
+
+    setManagerSupportModalDelivery(null);
+    setSelectedDecisionOption('');
+    setCustomDecisionText('');
+    alert('Decisão de suporte registrada e enviada ao entregador com sucesso!');
   };
 
   // Filter deliveries list for management view
@@ -937,6 +1084,8 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
         return { label: 'A Caminho', bg: 'rgba(255, 206, 86, 0.08)', text: 'hsl(36, 95%, 45%)', border: 'rgba(255, 206, 86, 0.2)' };
       case 'concluida':
         return { label: 'Concluída', bg: 'rgba(75, 192, 192, 0.08)', text: 'hsl(142, 60%, 40%)', border: 'rgba(75, 192, 192, 0.2)' };
+      case 'cancelada':
+        return { label: 'Cancelada', bg: 'rgba(239, 68, 68, 0.08)', text: 'hsl(0, 75%, 50%)', border: 'rgba(239, 68, 68, 0.2)' };
       default:
         return { label: status, bg: 'rgba(0,0,0,0.05)', text: '#333', border: '#ddd' };
     }
@@ -951,11 +1100,15 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
 
   // Current client context deliveries
   const clientDeliveries = deliveries.filter(d => d.client_id === currentUser?.id);
-  const activeClientDelivery = clientDeliveries.find(d => d.status === 'a-caminho');
+  const activeClientDelivery = clientDeliveries.find(
+    d => d.status === 'a-caminho' || (d.status === 'cancelada' && !d.driver_returned)
+  );
 
-  // Current driver context deliveries (filter: only show active ongoing order if exists, otherwise show pending scheduled ones)
+  // Current driver context deliveries (filter: only show active ongoing or canceled but not returned order if exists, otherwise show pending scheduled ones)
   let driverDeliveries = deliveries.filter(d => d.driver_id === currentUser?.id);
-  const activeDriverDelivery = driverDeliveries.find(d => d.status === 'a-caminho');
+  const activeDriverDelivery = driverDeliveries.find(
+    d => d.status === 'a-caminho' || (d.status === 'cancelada' && !d.driver_returned)
+  );
   if (activeDriverDelivery) {
     driverDeliveries = [activeDriverDelivery];
   } else {
@@ -1036,12 +1189,21 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
             }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                  <span style={{
-                    fontSize: '0.75rem', fontWeight: 700, padding: '4px 10px', borderRadius: '20px',
-                    backgroundColor: 'rgba(255, 206, 86, 0.15)', color: 'hsl(36, 95%, 45%)', textTransform: 'uppercase'
-                  }}>
-                    Status: Pedido a Caminho
-                  </span>
+                  {activeClientDelivery.status === 'cancelada' ? (
+                    <span style={{
+                      fontSize: '0.75rem', fontWeight: 700, padding: '4px 10px', borderRadius: '20px',
+                      backgroundColor: 'rgba(239, 68, 68, 0.15)', color: 'hsl(0, 75%, 50%)', textTransform: 'uppercase'
+                    }}>
+                      Status: Entrega Cancelada
+                    </span>
+                  ) : (
+                    <span style={{
+                      fontSize: '0.75rem', fontWeight: 700, padding: '4px 10px', borderRadius: '20px',
+                      backgroundColor: 'rgba(255, 206, 86, 0.15)', color: 'hsl(36, 95%, 45%)', textTransform: 'uppercase'
+                    }}>
+                      Status: Pedido a Caminho
+                    </span>
+                  )}
                   {isSupabaseConfigured && (
                     <span style={{
                       fontSize: '0.75rem', fontWeight: 700, padding: '4px 10px', borderRadius: '20px',
@@ -1057,13 +1219,31 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
               </div>
 
               <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: styles.textMain, marginTop: '12px' }}>
-                Acompanhe seu Pedido
+                {activeClientDelivery.status === 'cancelada' ? 'Informação sobre sua Entrega' : 'Acompanhe seu Pedido'}
               </h3>
               <p style={{ fontSize: '0.85rem', color: styles.sidebarWidgetText?.color, marginTop: '4px' }}>
                 Itens: {activeClientDelivery.items}
               </p>
 
-              {activeClientDelivery.support_reason && (
+              {activeClientDelivery.status === 'cancelada' ? (
+                <div style={{
+                  marginTop: '10px', padding: '12px 14px', backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                  border: '1px solid rgba(239, 68, 68, 0.25)', borderRadius: '8px', fontSize: '0.85rem',
+                  color: 'hsl(0, 75%, 45%)', fontWeight: 700, display: 'flex', flexDirection: 'column', gap: '4px'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <AlertTriangle size={16} /> 
+                    <span>ENTREGA CANCELADA - RETORNANDO À BASE</span>
+                  </div>
+                  <p style={{ fontWeight: 500, fontSize: '0.8rem', color: styles.sidebarWidgetText?.color || '#555', marginTop: '4px' }}>
+                    Esta entrega foi cancelada pelo suporte. O entregador está retornando ao petshop com a mercadoria.
+                    {activeClientDelivery.support_decision && (
+                      <span> Motivo/Instrução: <strong>"{activeClientDelivery.support_decision}"</strong>.</span>
+                    )}
+                    Por favor, entre em contato com a loja para reagendar ou tirar dúvidas.
+                  </p>
+                </div>
+              ) : activeClientDelivery.support_reason && (
                 <div style={{
                   marginTop: '10px', padding: '10px 12px', backgroundColor: 'rgba(239, 68, 68, 0.08)',
                   border: '1px solid rgba(239, 68, 68, 0.15)', borderRadius: '6px', fontSize: '0.82rem',
@@ -1071,7 +1251,12 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
                 }}>
                   <AlertTriangle size={14} /> 
                   <span>
-                    Dificuldade relatada pelo entregador: "{activeClientDelivery.support_reason}". Nosso suporte já está analisando para resolver.
+                    Dificuldade relatada pelo entregador: "{activeClientDelivery.support_reason}". 
+                    {activeClientDelivery.support_decision ? (
+                      <span> Instrução do suporte: <strong>"{activeClientDelivery.support_decision}"</strong>.</span>
+                    ) : (
+                      <span> Nosso suporte já está analisando para resolver.</span>
+                    )}
                   </span>
                 </div>
               )}
@@ -1253,6 +1438,24 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
                       </div>
                     )}
 
+                    {d.support_decision && (
+                      <div style={{
+                        marginTop: '5px', padding: '10px 12px', borderRadius: '8px',
+                        backgroundColor: d.status === 'cancelada' ? 'rgba(239, 68, 68, 0.08)' : 'rgba(59, 130, 246, 0.08)',
+                        border: d.status === 'cancelada' ? '1px solid rgba(239, 68, 68, 0.2)' : '1px solid rgba(59, 130, 246, 0.2)',
+                        fontSize: '0.82rem', color: d.status === 'cancelada' ? 'hsl(0, 75%, 45%)' : 'hsl(217, 91%, 35%)',
+                        fontWeight: 700, display: 'flex', flexDirection: 'column', gap: '4px'
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', color: d.status === 'cancelada' ? 'hsl(0, 75%, 50%)' : 'hsl(217, 91%, 45%)' }}>
+                          <LifeBuoy size={12} /> 
+                          <span>INSTRUÇÃO DO SUPORTE:</span>
+                        </div>
+                        <div style={{ fontSize: '0.85rem', fontStyle: 'italic', fontWeight: 600 }}>
+                          "{d.support_decision}"
+                        </div>
+                      </div>
+                    )}
+
                     <div style={{ display: 'flex', gap: '8px', marginTop: '8px', borderTop: `1px solid ${styles.borderColor}`, paddingTop: '10px', flexWrap: 'wrap' }}>
                       {d.status === 'agendada' && (
                         <button
@@ -1298,6 +1501,19 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
                         </div>
                       )}
 
+                      {d.status === 'cancelada' && (
+                        <button
+                          onClick={() => handleConfirmReturnToBase(d)}
+                          style={{
+                            ...styles.btnAcc(false), padding: '6px 12px', fontSize: '0.8rem',
+                            backgroundColor: 'hsl(0, 75%, 50%)', color: '#fff', border: 'none',
+                            fontWeight: 'bold'
+                          }}
+                        >
+                          <CheckCircle2 size={12} style={{ marginRight: '4px' }} /> Confirmar Retorno à Base
+                        </button>
+                      )}
+                      
                       <button
                         onClick={() => setSelectedDelivery(isSelected ? null : d)}
                         style={{
@@ -1512,12 +1728,21 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
                               {d.client_address}
                             </div>
                             {d.support_reason && (
-                              <div style={{
-                                marginTop: '4px', padding: '3px 6px', borderRadius: '4px',
-                                backgroundColor: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.15)',
-                                fontSize: '0.72rem', color: '#ef4444', fontWeight: 600,
-                                display: 'inline-flex', alignItems: 'center', gap: '4px'
-                              }}>
+                              <div 
+                                onClick={() => {
+                                  setManagerSupportModalDelivery(d);
+                                  setSelectedDecisionOption('');
+                                  setCustomDecisionText('');
+                                }}
+                                style={{
+                                  marginTop: '4px', padding: '3px 6px', borderRadius: '4px',
+                                  backgroundColor: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.15)',
+                                  fontSize: '0.72rem', color: '#ef4444', fontWeight: 600,
+                                  display: 'inline-flex', alignItems: 'center', gap: '4px',
+                                  cursor: 'pointer'
+                                }}
+                                title="Clique para tomar uma decisão de suporte"
+                              >
                                 <AlertTriangle size={10} /> Suporte: "{d.support_reason}"
                               </div>
                             )}
@@ -1560,12 +1785,16 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
                            <td style={{ padding: '12px 6px', display: 'flex', gap: '6px', justifyContent: 'center', height: '100%', alignItems: 'center', border: 'none' }}>
                             {d.support_reason && (
                               <button
-                                onClick={() => handleResolveSupport(d.id)}
-                                title="Resolver Suporte (Limpar Alerta)"
+                                onClick={() => {
+                                  setManagerSupportModalDelivery(d);
+                                  setSelectedDecisionOption('');
+                                  setCustomDecisionText('');
+                                }}
+                                title="Tomar Decisão de Suporte / Resolver"
                                 className="btn-action-icon"
-                                style={{ backgroundColor: 'rgba(34, 197, 94, 0.15)', color: '#22c55e' }}
+                                style={{ backgroundColor: 'rgba(239, 68, 68, 0.15)', color: '#ef4444' }}
                               >
-                                <CheckCircle2 size={13} />
+                                <LifeBuoy size={13} />
                               </button>
                             )}
                             <button
@@ -1886,6 +2115,137 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
                 }}
               >
                 Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================= */}
+      {/* 5. MODAL DE DECISÃO DO SUPORTE (GERENTE) */}
+      {/* ======================================= */}
+      {managerSupportModalDelivery && (
+        <div style={styles.modalOverlay}>
+          <div style={{ ...styles.modalContent, maxWidth: '450px' }} role="dialog" aria-modal="true" aria-labelledby="manager-support-modal-title">
+            <div style={styles.modalHeader}>
+              <h2 id="manager-support-modal-title" style={styles.modalTitle}>
+                <LifeBuoy size={20} style={{ display: 'inline', marginRight: '6px', verticalAlign: 'middle', color: styles.primary }} />
+                Decisão do Suporte
+              </h2>
+              <button
+                onClick={() => setManagerSupportModalDelivery(null)}
+                style={{
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  color: styles.sidebarWidgetText?.color || '#999', display: 'flex', alignItems: 'center', padding: 0
+                }}
+                aria-label="Fechar"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '0.85rem' }}>
+              <div>
+                <span style={{ color: styles.sidebarWidgetText?.color || '#666' }}>Entregador:</span> <strong>{managerSupportModalDelivery.driver_name}</strong>
+              </div>
+              <div>
+                <span style={{ color: styles.sidebarWidgetText?.color || '#666' }}>Problema Relatado:</span>
+                <div style={{
+                  marginTop: '4px', padding: '10px', backgroundColor: 'rgba(239, 68, 68, 0.06)',
+                  border: '1px solid rgba(239, 68, 68, 0.12)', borderRadius: '6px',
+                  color: '#ef4444', fontWeight: 600
+                }}>
+                  "{managerSupportModalDelivery.support_reason}"
+                </div>
+              </div>
+
+              <div style={styles.formGroup}>
+                <label style={styles.formLabel}>Selecione uma decisão recomendada:</label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '6px' }}>
+                  {managerSupportModalDelivery.support_reason && 
+                   (DECISIONS_BY_REASON[managerSupportModalDelivery.support_reason] || []).map(option => (
+                    <label key={option} style={{
+                      display: 'flex', alignItems: 'center', gap: '8px', padding: '8px',
+                      borderRadius: '6px', border: `1px solid ${selectedDecisionOption === option ? styles.primary : styles.borderColor}`,
+                      cursor: 'pointer', backgroundColor: selectedDecisionOption === option ? `${styles.primary}08` : 'transparent',
+                      color: styles.textMain
+                    }}>
+                      <input
+                        type="radio"
+                        name="support-decision-opt"
+                        checked={selectedDecisionOption === option}
+                        onChange={() => {
+                          setSelectedDecisionOption(option);
+                          setCustomDecisionText('');
+                        }}
+                      />
+                      <span>{option}</span>
+                    </label>
+                  ))}
+                  <label style={{
+                    display: 'flex', alignItems: 'center', gap: '8px', padding: '8px',
+                    borderRadius: '6px', border: `1px solid ${selectedDecisionOption === 'custom' ? styles.primary : styles.borderColor}`,
+                    cursor: 'pointer', backgroundColor: selectedDecisionOption === 'custom' ? `${styles.primary}08` : 'transparent',
+                    color: styles.textMain
+                  }}>
+                    <input
+                      type="radio"
+                      name="support-decision-opt"
+                      checked={selectedDecisionOption === 'custom'}
+                      onChange={() => setSelectedDecisionOption('custom')}
+                    />
+                    <span>Outra instrução personalizada...</span>
+                  </label>
+                </div>
+              </div>
+
+              {selectedDecisionOption === 'custom' && (
+                <div style={styles.formGroup}>
+                  <label htmlFor="custom-instruction" style={styles.formLabel}>Digite a instrução personalizada:</label>
+                  <textarea
+                    id="custom-instruction"
+                    rows={3}
+                    placeholder="Ex: Vá ao ponto de encontro alternativo na praça principal..."
+                    value={customDecisionText}
+                    onChange={(e) => setCustomDecisionText(e.target.value)}
+                    style={{ ...styles.formInput, width: '100%', resize: 'vertical', marginTop: '4px', fontFamily: 'inherit' }}
+                  />
+                </div>
+              )}
+            </div>
+
+            <div style={{ ...styles.modalActions, marginTop: '20px', display: 'flex', gap: '10px' }}>
+              <button
+                type="button"
+                onClick={() => handleResolveSupport(managerSupportModalDelivery.id)}
+                style={{
+                  flex: 1, padding: '10px 14px', borderRadius: '8px',
+                  backgroundColor: 'rgba(34, 197, 94, 0.12)', color: '#22c55e', border: '1px solid rgba(34, 197, 94, 0.25)',
+                  cursor: 'pointer', fontSize: '0.85rem', fontWeight: 700
+                }}
+                title="Marcar o suporte como totalmente resolvido (limpa a ocorrência do motorista)"
+              >
+                Resolver Suporte
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  const finalDecision = selectedDecisionOption === 'custom' ? customDecisionText : selectedDecisionOption;
+                  if (!finalDecision) {
+                    alert('Por favor, selecione ou digite uma decisão.');
+                    return;
+                  }
+                  const isCancel = finalDecision.toLowerCase().includes('cancelad') || finalDecision.toLowerCase().includes('retornar à base');
+                  handleSaveSupportDecision(managerSupportModalDelivery.id, finalDecision, isCancel);
+                }}
+                className="btn-save"
+                style={{
+                  flex: 1, padding: '10px 14px', borderRadius: '8px', border: 'none',
+                  fontSize: '0.85rem', fontWeight: 700
+                }}
+              >
+                Enviar Decisão
               </button>
             </div>
           </div>

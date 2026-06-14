@@ -13,10 +13,12 @@ CREATE TABLE public.deliveries (
   driver_name TEXT,
   driver_lat DOUBLE PRECISION,
   driver_lng DOUBLE PRECISION,
-  status TEXT NOT NULL CHECK (status IN ('agendada', 'a-caminho', 'concluida')),
+  status TEXT NOT NULL CHECK (status IN ('agendada', 'a-caminho', 'concluida', 'cancelada')),
   items TEXT NOT NULL,
   scheduled_time TEXT NOT NULL,
   support_reason TEXT,
+  support_decision TEXT,
+  driver_returned BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
