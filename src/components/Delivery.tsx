@@ -128,10 +128,17 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
   const [selectedDecisionOption, setSelectedDecisionOption] = useState<string>('');
   const [customDecisionText, setCustomDecisionText] = useState<string>('');
 
+  const [trackingDelivery, setTrackingDelivery] = useState<DeliveryItem | null>(null);
+
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapInstanceRef = useRef<any>(null);
   const routeLineRef = useRef<any>(null);
   const markersRef = useRef<{ petshop?: any; driver?: any; client?: any }>({});
+
+  const trackingMapContainerRef = useRef<HTMLDivElement | null>(null);
+  const trackingMapInstanceRef = useRef<any>(null);
+  const trackingRouteLineRef = useRef<any>(null);
+  const trackingMarkersRef = useRef<{ petshop?: any; driver?: any; client?: any }>({});
 
   const role = currentUser?.profile?.role || 'client';
   const isManager = role === 'developer' || role === 'owner' || role === 'manager';
@@ -311,6 +318,16 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
       const current = deliveries.find(d => d.id === selectedDelivery.id);
       if (current) {
         setSelectedDelivery(current);
+      }
+    }
+  }, [deliveries]);
+
+  // Sync tracking delivery reference when the list updates
+  useEffect(() => {
+    if (trackingDelivery) {
+      const current = deliveries.find(d => d.id === trackingDelivery.id);
+      if (current) {
+        setTrackingDelivery(current);
       }
     }
   }, [deliveries]);
@@ -608,6 +625,157 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
       }
     };
   }, [selectedDelivery === null]);
+
+  // Leaflet Map for real-time tracking modal
+  useEffect(() => {
+    let active = true;
+
+    // If Leaflet library L is not loaded yet, or container is missing, or tracking is disabled, cleanup and skip
+    if (typeof window === 'undefined' || !(window as any).L || !trackingMapContainerRef.current || !trackingDelivery) {
+      if (trackingMapInstanceRef.current) {
+        try {
+          trackingMapInstanceRef.current.remove();
+        } catch (e) {
+          console.warn('Error removing map instance:', e);
+        }
+        trackingMapInstanceRef.current = null;
+        trackingMarkersRef.current = {};
+        trackingRouteLineRef.current = null;
+      }
+      return;
+    }
+
+    const mapContainer = trackingMapContainerRef.current;
+    
+    // Create Custom SVG icons (Circular flat vector markers matching site styles)
+    const petshopIcon = L.divIcon({
+      html: `<div style="background-color: hsl(210, 85%, 45%); width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; border: 2px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.3);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg></div>`,
+      className: 'custom-petshop-icon',
+      iconSize: [28, 28],
+      iconAnchor: [14, 14]
+    });
+
+    const clientIcon = L.divIcon({
+      html: `<div style="background-color: hsl(0, 75%, 50%); width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; border: 2px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.3);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"></path><circle cx="12" cy="10" r="3"></circle></svg></div>`,
+      className: 'custom-client-icon',
+      iconSize: [28, 28],
+      iconAnchor: [14, 14]
+    });
+
+    const driverIcon = L.divIcon({
+      html: `<div style="background-color: hsl(36, 95%, 55%); width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; border: 2px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.3);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3" width="15" height="13"></rect><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"></polygon><circle cx="5.5" cy="18.5" r="2.5"></circle><circle cx="18.5" cy="18.5" r="2.5"></circle></svg></div>`,
+      className: 'custom-driver-icon',
+      iconSize: [28, 28],
+      iconAnchor: [14, 14]
+    });
+
+    const setupMap = async () => {
+      // Fetch OSRM route from shop to client
+      let routeCoords: [number, number][] = [
+        [PETSHOP_COORDS.lat, PETSHOP_COORDS.lng],
+        [trackingDelivery.client_lat, trackingDelivery.client_lng]
+      ];
+
+      try {
+        const url = `https://router.project-osrm.org/route/v1/driving/${PETSHOP_COORDS.lng},${PETSHOP_COORDS.lat};${trackingDelivery.client_lng},${trackingDelivery.client_lat}?overview=full&geometries=geojson`;
+        const res = await fetch(url);
+        if (res.ok && active) {
+          const data = await res.json();
+          if (data.routes && data.routes.length > 0) {
+            const coords = data.routes[0].geometry.coordinates;
+            routeCoords = coords.map((c: any) => [c[1], c[0]]);
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching OSRM route in tracking modal:', err);
+      }
+
+      if (!active) return;
+
+      // Create map instance if it does not exist
+      if (!trackingMapInstanceRef.current) {
+        const initialCenter = [
+          (PETSHOP_COORDS.lat + trackingDelivery.client_lat) / 2,
+          (PETSHOP_COORDS.lng + trackingDelivery.client_lng) / 2
+        ];
+
+        const map = L.map(mapContainer).setView(initialCenter, 15);
+        trackingMapInstanceRef.current = map;
+
+        // Google Maps standard roadmap tiles
+        L.tileLayer('https://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
+          maxZoom: 20,
+          subdomains: ['mt0', 'mt1', 'mt2', 'mt3'],
+          attribution: 'Map data © Google'
+        }).addTo(map);
+
+        // Add petshop marker (Store / Loja / Origem)
+        trackingMarkersRef.current.petshop = L.marker([PETSHOP_COORDS.lat, PETSHOP_COORDS.lng], { icon: petshopIcon })
+          .addTo(map)
+          .bindPopup('<b>Petshop La Viola (Loja / Origem)</b><br>Ponto de partida da entrega');
+
+        // Add client marker (Destino)
+        trackingMarkersRef.current.client = L.marker([trackingDelivery.client_lat, trackingDelivery.client_lng], { icon: clientIcon })
+          .addTo(map)
+          .bindPopup(`<b>Destino (Cliente): ${trackingDelivery.client_name}</b><br>${trackingDelivery.client_address}`);
+
+        // Add driver marker if dispatched
+        if (trackingDelivery.driver_id) {
+          trackingMarkersRef.current.driver = L.marker([trackingDelivery.driver_lat, trackingDelivery.driver_lng], { icon: driverIcon })
+            .addTo(map)
+            .bindPopup(`<b>Entregador (Tempo Real): ${trackingDelivery.driver_name}</b>`);
+        }
+
+        // Add route polyline using street coordinates
+        trackingRouteLineRef.current = L.polyline(routeCoords, { color: '#3b82f6', weight: 4, opacity: 0.8 }).addTo(map);
+
+        // Fit map bounds to show both shop and destination
+        const bounds = L.latLngBounds([
+          [PETSHOP_COORDS.lat, PETSHOP_COORDS.lng],
+          [trackingDelivery.client_lat, trackingDelivery.client_lng]
+        ]);
+        map.fitBounds(bounds, { padding: [40, 40] });
+      } else {
+        // If map already exists, just update driver & client coordinates dynamically
+        const map = trackingMapInstanceRef.current;
+        
+        if (trackingDelivery.driver_id) {
+          if (trackingMarkersRef.current.driver) {
+            trackingMarkersRef.current.driver.setLatLng([trackingDelivery.driver_lat, trackingDelivery.driver_lng]);
+            trackingMarkersRef.current.driver.setPopupContent(`<b>Entregador (Tempo Real): ${trackingDelivery.driver_name}</b>`);
+          } else {
+            trackingMarkersRef.current.driver = L.marker([trackingDelivery.driver_lat, trackingDelivery.driver_lng], { icon: driverIcon })
+              .addTo(map)
+              .bindPopup(`<b>Entregador (Tempo Real): ${trackingDelivery.driver_name}</b>`);
+          }
+        } else {
+          if (trackingMarkersRef.current.driver) {
+            map.removeLayer(trackingMarkersRef.current.driver);
+            trackingMarkersRef.current.driver = null;
+          }
+        }
+        
+        if (trackingMarkersRef.current.client) {
+          trackingMarkersRef.current.client.setLatLng([trackingDelivery.client_lat, trackingDelivery.client_lng]);
+        }
+
+        // Adjust line route representation from driver to client using street coordinates
+        if (trackingRouteLineRef.current) {
+          trackingRouteLineRef.current.setLatLngs(routeCoords);
+        }
+      }
+    };
+
+    // We wrap setupMap in a short timeout to make sure Leaflet maps containers are fully mounted in React modal and have computed layout widths/heights
+    const timer = setTimeout(() => {
+      if (active) setupMap();
+    }, 150);
+
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [trackingDelivery?.id, trackingDelivery?.driver_id, trackingDelivery?.driver_lat, trackingDelivery?.driver_lng]);
 
   // Form Predefined coordinates picker helper
   const handlePredefinedLocationChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -1228,6 +1396,13 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
   return (
     <section style={styles.contentSection} aria-labelledby="delivery-heading">
       <style>{`
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+        .spin-icon {
+          animation: spin 6s linear infinite;
+        }
         .leaflet-container {
           width: 100%;
           height: 380px;
@@ -1892,7 +2067,7 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
                               {badg.label}
                             </span>
                           </td>
-                           <td style={{ padding: '12px 6px', display: 'flex', gap: '6px', justifyContent: 'center', height: '100%', alignItems: 'center', border: 'none' }}>
+                            <td style={{ padding: '12px 6px', display: 'flex', gap: '6px', justifyContent: 'center', height: '100%', alignItems: 'center', border: 'none' }}>
                             {d.support_reason && (
                               <button
                                 onClick={() => {
@@ -1907,6 +2082,14 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
                                 <LifeBuoy size={13} />
                               </button>
                             )}
+                            <button
+                              onClick={() => setTrackingDelivery(d)}
+                              title="Rastrear em Tempo Real"
+                              className="btn-action-icon"
+                              style={{ backgroundColor: trackingDelivery?.id === d.id ? `${styles.primary}20` : 'transparent', color: trackingDelivery?.id === d.id ? styles.primary : styles.textMain }}
+                            >
+                              <Compass size={13} />
+                            </button>
                             <button
                               onClick={() => setSelectedDelivery(isSelected ? null : d)}
                               title="Visualizar no Mapa"
@@ -2356,6 +2539,149 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
                 }}
               >
                 Enviar Decisão
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================= */}
+      {/* 6. MODAL DE RASTREAMENTO EM TEMPO REAL  */}
+      {/* ======================================= */}
+      {trackingDelivery && (
+        <div style={styles.modalOverlay}>
+          <div style={{ ...styles.modalContent, maxWidth: '800px', width: '90%', maxHeight: '90vh', overflowY: 'auto' }} role="dialog" aria-modal="true" aria-labelledby="tracking-modal-title">
+            <div style={styles.modalHeader}>
+              <h2 id="tracking-modal-title" style={{ ...styles.modalTitle, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Compass size={22} className="spin-icon" style={{ color: styles.primary, animation: trackingDelivery.status === 'a-caminho' ? 'spin 6s linear infinite' : 'none' }} />
+                Rastreamento em Tempo Real
+              </h2>
+              <button
+                onClick={() => setTrackingDelivery(null)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  color: styles.sidebarWidgetText?.color || '#999',
+                  display: 'flex',
+                  alignItems: 'center',
+                  padding: 0
+                }}
+                aria-label="Fechar"
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: window.innerWidth >= 768 ? '1fr 2fr' : '1fr', gap: '20px', margin: '10px 0' }}>
+              {/* Informações da Entrega */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '0.85rem' }}>
+                <div style={{ padding: '12px', backgroundColor: styles.background, borderRadius: '8px', border: `1px solid ${styles.borderColor}` }}>
+                  <div style={{ fontWeight: 700, color: styles.textMain, fontSize: '0.95rem', marginBottom: '8px' }}>
+                    Detalhes do Pedido
+                  </div>
+                  <div style={{ marginBottom: '6px' }}><span style={{ color: styles.sidebarWidgetText?.color }}>Cliente:</span> <strong>{trackingDelivery.client_name}</strong></div>
+                  <div style={{ marginBottom: '6px' }}><span style={{ color: styles.sidebarWidgetText?.color }}>Itens:</span> <strong>{trackingDelivery.items}</strong></div>
+                  <div style={{ marginBottom: '6px' }}><span style={{ color: styles.sidebarWidgetText?.color }}>Entregador:</span> <strong>{trackingDelivery.driver_name || 'Não atribuído'}</strong></div>
+                  <div style={{ marginBottom: '6px' }}><span style={{ color: styles.sidebarWidgetText?.color }}>Horário:</span> <strong>{trackingDelivery.scheduled_time}</strong></div>
+                </div>
+
+                <div style={{ padding: '12px', backgroundColor: styles.background, borderRadius: '8px', border: `1px solid ${styles.borderColor}` }}>
+                  <div style={{ fontWeight: 700, color: styles.textMain, fontSize: '0.95rem', marginBottom: '8px' }}>
+                    Pontos do Roteiro
+                  </div>
+                  <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', marginBottom: '8px' }}>
+                    <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'hsl(210, 85%, 45%)', marginTop: '5px' }}></span>
+                    <div>
+                      <strong>Origem (Loja):</strong> Petshop La Viola
+                      <div style={{ fontSize: '0.75rem', color: styles.sidebarWidgetText?.color }}>Rua Dr. Ibraim Hannas, 406</div>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', marginBottom: '8px' }}>
+                    <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'hsl(36, 95%, 55%)', marginTop: '5px' }}></span>
+                    <div>
+                      <strong>Entregador:</strong> {trackingDelivery.driver_name || 'Nenhum'}
+                      <div style={{ fontSize: '0.75rem', color: styles.sidebarWidgetText?.color }}>
+                        {trackingDelivery.status === 'a-caminho' ? 'Em deslocamento (Tempo real)' : trackingDelivery.status === 'concluida' ? 'Entrega concluída no destino' : 'Aguardando despacho na loja'}
+                      </div>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
+                    <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'hsl(0, 75%, 50%)', marginTop: '5px' }}></span>
+                    <div>
+                      <strong>Destino (Cliente):</strong> {trackingDelivery.client_name}
+                      <div style={{ fontSize: '0.75rem', color: styles.sidebarWidgetText?.color }}>{trackingDelivery.client_address}</div>
+                    </div>
+                  </div>
+                </div>
+
+                {trackingDelivery.status === 'a-caminho' && (
+                  <div style={{ padding: '12px', backgroundColor: 'rgba(75, 192, 192, 0.08)', borderRadius: '8px', border: '1px solid rgba(75, 192, 192, 0.2)' }}>
+                    {(() => {
+                      const dist = calculateDistance(
+                        trackingDelivery.driver_lat, trackingDelivery.driver_lng,
+                        trackingDelivery.client_lat, trackingDelivery.client_lng
+                      );
+                      const totalDist = calculateDistance(
+                        PETSHOP_COORDS.lat, PETSHOP_COORDS.lng,
+                        trackingDelivery.client_lat, trackingDelivery.client_lng
+                      );
+                      const percentDone = totalDist > 0 ? Math.min(100, Math.max(0, ((totalDist - dist) / totalDist) * 100)) : 0;
+                      return (
+                        <>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 600, color: 'hsl(142, 60%, 35%)', marginBottom: '5px' }}>
+                            <span>Distância Restante</span>
+                            <span>{(dist / 1000).toFixed(2)} km</span>
+                          </div>
+                          <div className="progress-bar-container" style={{ margin: '5px 0' }}>
+                            <div className="progress-bar-fill" style={{ width: `${percentDone}%`, backgroundColor: 'hsl(142, 60%, 45%)' }}></div>
+                          </div>
+                          <div style={{ fontSize: '0.75rem', color: styles.sidebarWidgetText?.color, fontStyle: 'italic', marginTop: '5px' }}>
+                            Simulador/GPS atualizando em tempo real.
+                          </div>
+                        </>
+                      );
+                    })()}
+                  </div>
+                )}
+              </div>
+
+              {/* Mapa */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <div ref={trackingMapContainerRef} style={{ height: '400px', width: '100%', borderRadius: '12px', border: `1px solid ${styles.borderColor}`, overflow: 'hidden' }}></div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.78rem', color: styles.sidebarWidgetText?.color }}>
+                  <span>Dica: Use os controles do mapa para zoom e navegação.</span>
+                  {trackingDelivery.status === 'a-caminho' && !isSupabaseConfigured && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span>Velocidade da simulação:</span>
+                      {[1, 5, 10].map(s => (
+                        <button key={s} onClick={() => setSimSpeed(s)} style={{ fontSize: '0.75rem', padding: '2px 6px', backgroundColor: simSpeed === s ? styles.primary : styles.background, color: simSpeed === s ? '#fff' : styles.textMain, border: `1px solid ${styles.borderColor}`, borderRadius: '4px', cursor: 'pointer' }}>
+                          {s}x
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div style={{ ...styles.modalActions, marginTop: '10px' }}>
+              <button
+                type="button"
+                onClick={() => setTrackingDelivery(null)}
+                style={{
+                  padding: '10px 20px',
+                  borderRadius: '8px',
+                  border: `1px solid ${styles.borderColor}`,
+                  background: 'none',
+                  color: styles.textMain,
+                  cursor: 'pointer',
+                  fontSize: '0.85rem',
+                  fontWeight: 600,
+                  marginLeft: 'auto'
+                }}
+              >
+                Fechar Painel
               </button>
             </div>
           </div>
