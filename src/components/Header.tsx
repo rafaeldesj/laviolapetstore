@@ -42,7 +42,7 @@ export const Header: React.FC<HeaderProps> = ({
       {/* Logo */}
       <div style={styles.siteLogo}>
         <PawPrint style={styles.logoSvg} aria-hidden="true" />
-        <h1 style={styles.logoTitle}>La Viola Petshop</h1>
+        <h1 style={styles.logoTitle}>La Viola Petshop <span style={{fontSize: '0.9rem', color: '#ffd700'}}>✨ v2.0</span></h1>
       </div>
 
       {/* Auth area — compresses on mobile */}
