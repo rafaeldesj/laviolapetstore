@@ -115,6 +115,15 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
   const [formItems, setFormItems] = useState('');
   const [formScheduledTime, setFormScheduledTime] = useState('');
 
+  // New Client Modal states
+  const [isClientModalOpen, setIsClientModalOpen] = useState(false);
+  const [newClientFullName, setNewClientFullName] = useState('');
+  const [newClientEmail, setNewClientEmail] = useState('');
+  const [newClientUsername, setNewClientUsername] = useState('');
+  const [newClientPhone, setNewClientPhone] = useState('');
+  const [newClientPassword, setNewClientPassword] = useState('');
+  const [isSavingClient, setIsSavingClient] = useState(false);
+
   // Simulation settings
   const [simSpeed, setSimSpeed] = useState<number>(1); // 1x, 5x, 10x speed factor
 
@@ -956,6 +965,97 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
       'Agendamento de Entrega',
       `Nova entrega agendada para o cliente "${newDelivery.client_name}" com o entregador "${newDelivery.driver_name}".`
     );
+  };
+
+  const handleCreateClient = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newClientFullName.trim() || !newClientEmail.trim() || !newClientUsername.trim() || !newClientPassword) {
+      alert('Preencha todos os campos obrigatórios.');
+      return;
+    }
+
+    setIsSavingClient(true);
+    try {
+      if (isSupabaseConfigured && supabase) {
+        const { createClient } = await import('@supabase/supabase-js');
+        const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
+        const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+        const tempClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        const { data, error: signUpError } = await tempClient.auth.signUp({
+          email: newClientEmail.trim(),
+          password: newClientPassword,
+          options: {
+            data: {
+              full_name: newClientFullName.trim(),
+              username: newClientUsername.trim(),
+              phone: newClientPhone.trim(),
+            },
+          },
+        });
+
+        if (signUpError) throw signUpError;
+
+        if (data.user) {
+          const { error: updateError } = await supabase
+            .from('profiles')
+            .update({ role: 'client' })
+            .eq('id', data.user.id);
+          if (updateError) console.error('Erro ao atualizar cargo:', updateError);
+
+          const newClient = { id: data.user.id, name: newClientFullName.trim() };
+          setClients(prev => [...prev, newClient]);
+          setFormClientId(newClient.id);
+        }
+      } else {
+        const mockUsers = JSON.parse(localStorage.getItem('laviola_mock_users') || '[]');
+        const newId = Math.random().toString(36).substring(2, 9);
+        const newProfile = {
+          id: newId,
+          email: newClientEmail.trim(),
+          full_name: newClientFullName.trim(),
+          username: newClientUsername.trim(),
+          phone: newClientPhone.trim(),
+          role: 'client',
+          is_active: true,
+          created_at: new Date().toISOString()
+        };
+
+        mockUsers.push({
+          id: newId,
+          email: newClientEmail.trim(),
+          name: newClientFullName.trim(),
+          username: newClientUsername.trim(),
+          phone: newClientPhone.trim(),
+          password: newClientPassword,
+          profile: newProfile
+        });
+
+        localStorage.setItem('laviola_mock_users', JSON.stringify(mockUsers));
+        const newClient = { id: newId, name: newClientFullName.trim() };
+        setClients(prev => [...prev, newClient]);
+        setFormClientId(newId);
+      }
+
+      await logAction(
+        currentUser?.email || '',
+        currentUser?.name || 'Gerente',
+        'Criação de Cliente',
+        `Um novo cliente "${newClientFullName}" foi criado via módulo de Delivery.`
+      );
+
+      setIsClientModalOpen(false);
+      setNewClientFullName('');
+      setNewClientEmail('');
+      setNewClientUsername('');
+      setNewClientPhone('');
+      setNewClientPassword('');
+      alert('Cliente criado com sucesso!');
+    } catch (err: any) {
+      alert(err.message || 'Erro ao criar cliente.');
+    } finally {
+      setIsSavingClient(false);
+    }
   };
 
   const handleDeleteDelivery = async (id: string) => {
@@ -2198,12 +2298,18 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
                   id="form-client"
                   value={formClientId}
                   onChange={(e) => {
-                    setFormClientId(e.target.value);
+                    if (e.target.value === 'NEW_CLIENT') {
+                      setIsClientModalOpen(true);
+                      setFormClientId('');
+                    } else {
+                      setFormClientId(e.target.value);
+                    }
                   }}
                   style={styles.formInput}
                   required
                 >
                   <option value="">— Selecione o Cliente —</option>
+                  <option value="NEW_CLIENT" style={{ fontWeight: 'bold', color: 'var(--primary, #007bff)' }}>+ Cadastrar Novo Cliente</option>
                   {clients.map(c => (
                     <option key={c.id} value={c.id}>{c.name}</option>
                   ))}
@@ -2684,6 +2790,50 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
                 Fechar Painel
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================= */}
+      {/* MODAL: CRIAR NOVO CLIENTE               */}
+      {/* ======================================= */}
+      {isClientModalOpen && (
+        <div style={{ ...styles.modalOverlay, zIndex: 9999 }}>
+          <div style={{ ...styles.modalContent, maxWidth: '500px' }} role="dialog" aria-modal="true" aria-labelledby="create-client-title">
+            <div style={styles.modalHeader}>
+              <h2 id="create-client-title" style={styles.modalTitle}>Novo Cliente</h2>
+              <button onClick={() => setIsClientModalOpen(false)} style={styles.modalCloseBtn(false)} aria-label="Fechar">✕</button>
+            </div>
+            <form onSubmit={handleCreateClient} style={styles.modalForm}>
+              <div style={styles.formGroup}>
+                <label style={styles.formLabel}>Nome Completo *</label>
+                <input type="text" value={newClientFullName} onChange={e => setNewClientFullName(e.target.value)} style={styles.formInput} required />
+              </div>
+              <div style={styles.formGroup}>
+                <label style={styles.formLabel}>E-mail *</label>
+                <input type="email" value={newClientEmail} onChange={e => setNewClientEmail(e.target.value)} style={styles.formInput} required />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+                <div style={styles.formGroup}>
+                  <label style={styles.formLabel}>Login (Username) *</label>
+                  <input type="text" value={newClientUsername} onChange={e => setNewClientUsername(e.target.value)} style={styles.formInput} required />
+                </div>
+                <div style={styles.formGroup}>
+                  <label style={styles.formLabel}>Celular</label>
+                  <input type="tel" value={newClientPhone} onChange={e => setNewClientPhone(e.target.value)} style={styles.formInput} />
+                </div>
+              </div>
+              <div style={styles.formGroup}>
+                <label style={styles.formLabel}>Senha *</label>
+                <input type="password" value={newClientPassword} onChange={e => setNewClientPassword(e.target.value)} style={styles.formInput} required minLength={6} />
+              </div>
+              <div style={styles.modalActions}>
+                <button type="button" onClick={() => setIsClientModalOpen(false)} style={{ padding: '10px 16px', borderRadius: '8px', border: `1px solid ${styles.borderColor}`, background: 'none', color: styles.textMain, cursor: 'pointer', fontSize: '0.85rem' }}>Cancelar</button>
+                <button type="submit" disabled={isSavingClient} className="btn-save" style={{ padding: '10px 20px', borderRadius: '8px', border: 'none', fontSize: '0.85rem', fontWeight: 700 }}>
+                  {isSavingClient ? 'Salvando...' : 'Criar Cliente'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
