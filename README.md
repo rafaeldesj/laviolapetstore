@@ -1,73 +1,67 @@
-# React + TypeScript + Vite
+# 🐾 La Viola Petshop — Sistema de Gestão
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Sistema completo de gestão para petshop, desenvolvido com React + TypeScript + Vite.
 
-Currently, two official plugins are available:
+## 🌐 Acesso
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- **Produção:** [laviolapetstore.web.app](https://laviolapetstore.web.app)
+- **Repositório:** [github.com/rafaeldesj/laviolapetstore](https://github.com/rafaeldesj/laviolapetstore)
 
-## React Compiler
+## 🛠️ Stack Tecnológico
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+| Camada | Tecnologia |
+|---|---|
+| Frontend | React 19 + TypeScript + Vite |
+| Autenticação | Firebase Authentication |
+| Banco de Dados | Firebase Firestore (dados gerais) |
+| Financeiro | Supabase (transações financeiras) |
+| Hospedagem | Firebase Hosting |
+| CI/CD | GitHub Actions |
 
-## Expanding the ESLint configuration
+## 🚀 Como rodar localmente
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm install
+npm run dev
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## 📦 Deploy
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+O deploy é **automático**: qualquer push para `main` dispara o GitHub Actions que faz o build e publica no Firebase Hosting.
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+git add .
+git commit -m "sua mensagem"
+git push
 ```
+
+## 🔐 Variáveis de Ambiente
+
+Crie um arquivo `.env.local` na raiz com:
+
+```env
+VITE_SUPABASE_URL=...
+VITE_SUPABASE_ANON_KEY=...
+VITE_FIREBASE_API_KEY=...
+VITE_FIREBASE_AUTH_DOMAIN=...
+VITE_FIREBASE_PROJECT_ID=...
+VITE_FIREBASE_STORAGE_BUCKET=...
+VITE_FIREBASE_MESSAGING_SENDER_ID=...
+VITE_FIREBASE_APP_ID=...
+```
+
+## 📋 Módulos do Sistema
+
+- **Dashboard** — Visão geral do negócio
+- **Agendamentos** — Gestão de banho, tosa e consultas
+- **Pets** — Cadastro e prontuário de animais
+- **Estoque / Produtos** — Controle de mercadorias
+- **Venda Avulsa PDV** — Ponto de venda com leitor de código de barras
+- **Financeiro / Caixa** — Controle financeiro
+- **Delivery** — Gestão de entregas
+- **Relatórios** — Análises e exportações
+- **Usuários** — Gestão de equipe com controle de cargos (RBAC)
+
+---
+
+© 2025 La Viola Petshop — Todos os direitos reservados
