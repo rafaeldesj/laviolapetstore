@@ -1,5 +1,15 @@
 {
   "projects": {
     "default": "laviolapetstore-e8de9"
-  }
+  },
+  "targets": {
+    "laviolapetstore-e8de9": {
+      "hosting": {
+        "laviola": [
+          "laviolapetstore"
+        ]
+      }
+    }
+  },
+  "etags": {}
 }
