@@ -48,7 +48,7 @@ export const Estoque: React.FC<EstoqueProps> = ({ styles }) => {
     setIsLoading(true);
     setErrorMsg(null);
     try {
-      if (isSupabaseConfigured && supabase) {
+      if (false && supabase) {
         const { data, error } = await supabase
           .from('products')
           .select('*')
@@ -119,7 +119,7 @@ export const Estoque: React.FC<EstoqueProps> = ({ styles }) => {
     try {
       if (editingProduct) {
         // Edit Mode
-        if (isSupabaseConfigured && supabase) {
+        if (false && supabase) {
           const { error } = await supabase.from('products').update(productData).eq('id', editingProduct.id);
           if (error) throw error;
         } else {
@@ -134,7 +134,7 @@ export const Estoque: React.FC<EstoqueProps> = ({ styles }) => {
         );
       } else {
         // Add Mode
-        if (isSupabaseConfigured && supabase) {
+        if (false && supabase) {
           const { error } = await supabase.from('products').insert(productData);
           if (error) throw error;
         } else {
@@ -165,7 +165,7 @@ export const Estoque: React.FC<EstoqueProps> = ({ styles }) => {
     setIsLoading(true);
     setErrorMsg(null);
     try {
-      if (isSupabaseConfigured && supabase) {
+      if (false && supabase) {
         const { error } = await supabase.from('products').delete().eq('id', product.id);
         if (error) throw error;
       } else {

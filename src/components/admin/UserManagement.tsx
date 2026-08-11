@@ -285,7 +285,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
     }
 
     try {
-      if (isSupabaseConfigured && supabase) {
+      if (false && supabase) {
         const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
         const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
@@ -409,7 +409,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
     setErrorMsg(null);
 
     try {
-      if (isSupabaseConfigured && supabase) {
+      if (false && supabase) {
         if (resetPasswordUser.id === currentUser.id) {
           const { error } = await supabase.auth.updateUser({ password: resetPasswordVal });
           if (error) throw error;

@@ -84,7 +84,7 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
     setIsLoading(true);
     setErrorMsg(null);
     try {
-      if (isSupabaseConfigured && supabase) {
+      if (false && supabase) {
         let query = supabase.from('appointments').select('*, pets(*)');
         if (!isStaffMode) {
           query = query.eq('owner_id', currentUser.id);
@@ -116,7 +116,7 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
 
   const fetchPets = async () => {
     try {
-      if (isSupabaseConfigured && supabase) {
+      if (false && supabase) {
         if (isStaffMode) {
           const { data: petsData, error: petsError } = await supabase.from('pets').select('*');
           if (petsError) throw petsError;
@@ -467,7 +467,7 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
         if (evt.matchedPet) {
           petId = evt.matchedPet.id;
         } else {
-          if (isSupabaseConfigured && supabase) {
+          if (false && supabase) {
             const { data, error } = await supabase.from('pets').insert({
               name: evt.detectedPetName,
               species: 'Outro',
@@ -508,7 +508,7 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
           notes: (evt.description || '').trim() || 'Importado do Google Agenda'
         };
 
-        if (isSupabaseConfigured && supabase) {
+        if (false && supabase) {
           const { error } = await supabase.from('appointments').insert(appointmentData);
           if (error) throw error;
         } else {
@@ -572,7 +572,7 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
     };
 
     try {
-      if (isSupabaseConfigured && supabase) {
+      if (false && supabase) {
         const { error } = await supabase.from('appointments').insert(newAppointmentData);
         if (error) throw error;
       } else {
@@ -604,7 +604,7 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
     const petName = appToUpdate ? appToUpdate.pet_name : 'Pet';
     const service = appToUpdate ? appToUpdate.service_type : 'Serviço';
     try {
-      if (isSupabaseConfigured && supabase) {
+      if (false && supabase) {
         const { error } = await supabase
           .from('appointments')
           .update({ status: newStatus })
@@ -639,7 +639,7 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
     const petName = appToDelete ? appToDelete.pet_name : 'Pet';
     const service = appToDelete ? appToDelete.service_type : 'Serviço';
     try {
-      if (isSupabaseConfigured && supabase) {
+      if (false && supabase) {
         const { error } = await supabase.from('appointments').delete().eq('id', appointmentId);
         if (error) throw error;
       } else {

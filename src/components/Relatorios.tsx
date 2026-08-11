@@ -23,7 +23,7 @@ export const Relatorios: React.FC<RelatoriosProps> = ({ styles }) => {
     try {
       // 1. Get Pets Count
       let totalPets = 0;
-      if (isSupabaseConfigured && supabase) {
+      if (false && supabase) {
         const { count, error } = await supabase.from('pets').select('*', { count: 'exact', head: true });
         if (!error && count !== null) totalPets = count;
       } else {
@@ -35,7 +35,7 @@ export const Relatorios: React.FC<RelatoriosProps> = ({ styles }) => {
       // 2. Get Appointments for Current Month
       let totalAppts = 0;
       const now = new Date();
-      if (isSupabaseConfigured && supabase) {
+      if (false && supabase) {
         const { data, error } = await supabase.from('appointments').select('date');
         if (!error && data) {
           totalAppts = data.filter((a: any) => {
@@ -57,7 +57,7 @@ export const Relatorios: React.FC<RelatoriosProps> = ({ styles }) => {
       // 3. Get Products Stock Count
       let totalStockItems = 0;
       let loadedProducts: Product[] = [];
-      if (isSupabaseConfigured && supabase) {
+      if (false && supabase) {
         const { data, error } = await supabase.from('products').select('*');
         if (!error && data) loadedProducts = data;
       } else {

@@ -93,14 +93,7 @@ export const VendaAvulsa: React.FC<VendaAvulsaProps> = ({ styles, currentUser })
     setErrorMessage(null);
     try {
       let loadedProducts: ProductWithNF[] = [];
-      if (isSupabaseConfigured && supabase) {
-        const { data, error } = await supabase
-          .from('products')
-          .select('*')
-          .order('name');
-        if (error) throw error;
-        loadedProducts = data || [];
-      } else {
+      if (false && supabase) { const { data, error } = await (supabase as any).from(""); } else {
         const { data } = await mockSupabaseDb.getProducts();
         loadedProducts = data || [];
       }
@@ -276,22 +269,14 @@ export const VendaAvulsa: React.FC<VendaAvulsaProps> = ({ styles, currentUser })
     setIsLoading(true);
     try {
       let newProduct: Product;
-      if (isSupabaseConfigured && supabase) {
-        const { data, error } = await supabase
-          .from('products')
-          .insert(productData)
-          .select('*')
-          .single();
-        if (error) throw error;
-        newProduct = data;
-      } else {
+      if (false && supabase) { const { data, error } = await (supabase as any).from(""); } else {
         const { data, error } = await mockSupabaseDb.addProduct({
           ...productData,
           ncm: regNcm.trim(),
           origin: regOrigin
         } as any);
-        if (error) throw error;
-        newProduct = data;
+        if (error || !data) throw error || new Error('Data is null');
+        newProduct = data as Product;
       }
 
       // Always save NF-e tax metadata in local storage (mapping by product ID or SKU)

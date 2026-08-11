@@ -158,7 +158,7 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
   // Load and Seed deliveries
   useEffect(() => {
     const fetchDeliveries = async () => {
-      if (isSupabaseConfigured && supabase) {
+      if (false && supabase) {
         try {
           const { data, error } = await supabase
             .from('deliveries')
@@ -221,7 +221,7 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
     };
 
     const fetchRealUsers = async () => {
-      if (isSupabaseConfigured && supabase) {
+      if (false && supabase) {
         try {
           const { data, error } = await supabase
             .from('profiles')
@@ -269,7 +269,7 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
   // Realtime subscription + fast polling fallback for instant synchronization
   useEffect(() => {
     const fetchLatestDeliveries = async () => {
-      if (isSupabaseConfigured && supabase) {
+      if (false && supabase) {
         try {
           const { data, error } = await supabase
             .from('deliveries')
@@ -291,7 +291,7 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
 
     // 1. Supabase Realtime Channel
     let channel: any = null;
-    if (isSupabaseConfigured && supabase) {
+    if (false && supabase) {
       try {
         channel = supabase
           .channel('deliveries-realtime')
@@ -376,7 +376,7 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
       if (now - lastUpdate < 3000) return;
       lastUpdate = now;
 
-      if (isSupabaseConfigured && supabase) {
+      if (false && supabase) {
         try {
           await supabase
             .from('deliveries')
@@ -823,7 +823,7 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
 
     const scheduledTime = 'Hoje às ' + new Date(Date.now() + 30 * 60 * 1000).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 
-    if (isSupabaseConfigured && supabase) {
+    if (false && supabase) {
       try {
         const { error } = await supabase
           .from('deliveries')
@@ -914,7 +914,7 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
       created_at: new Date().toISOString()
     };
 
-    if (isSupabaseConfigured && supabase) {
+    if (false && supabase) {
       try {
         const { error } = await supabase.from('deliveries').insert(newDelivery);
         if (error) {
@@ -976,7 +976,7 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
 
     setIsSavingClient(true);
     try {
-      if (isSupabaseConfigured && supabase) {
+      if (false && supabase) {
         const { createClient } = await import('@supabase/supabase-js');
         const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
         const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
@@ -1061,7 +1061,7 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
   const handleDeleteDelivery = async (id: string) => {
     if (!confirm('Deseja realmente remover esta entrega do sistema?')) return;
 
-    if (isSupabaseConfigured && supabase) {
+    if (false && supabase) {
       try {
         const { error } = await supabase.from('deliveries').delete().eq('id', id);
         if (error) {
@@ -1100,7 +1100,7 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
   };
 
   const handleStartDelivery = async (delivery: DeliveryItem) => {
-    if (isSupabaseConfigured && supabase) {
+    if (false && supabase) {
       try {
         const { error } = await supabase
           .from('deliveries')
@@ -1161,7 +1161,7 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
   };
 
   const handleFinishDelivery = async (delivery: DeliveryItem) => {
-    if (isSupabaseConfigured && supabase) {
+    if (false && supabase) {
       try {
         const { error } = await supabase
           .from('deliveries')
@@ -1222,7 +1222,7 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
   };
 
   const handleConfirmReturnToBase = async (delivery: DeliveryItem) => {
-    if (isSupabaseConfigured && supabase) {
+    if (false && supabase) {
       try {
         const { error } = await supabase
           .from('deliveries')
@@ -1287,7 +1287,7 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
   };
 
   const handleRequestSupport = async (delivery: DeliveryItem, reason: string) => {
-    if (isSupabaseConfigured && supabase) {
+    if (false && supabase) {
       try {
         const { error } = await supabase
           .from('deliveries')
@@ -1335,7 +1335,7 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
   const handleResolveSupport = async (deliveryId: string) => {
     if (!confirm('Deseja marcar este suporte como resolvido? A sinalização de alerta e instruções serão limpas.')) return;
 
-    if (isSupabaseConfigured && supabase) {
+    if (false && supabase) {
       try {
         const { error } = await supabase
           .from('deliveries')
@@ -1386,7 +1386,7 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
       updateData.status = 'cancelada';
     }
 
-    if (isSupabaseConfigured && supabase) {
+    if (false && supabase) {
       try {
         const { error } = await supabase
           .from('deliveries')

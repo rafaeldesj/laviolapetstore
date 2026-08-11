@@ -40,7 +40,7 @@ export const PetCrud: React.FC<PetCrudProps> = ({ userId, styles }) => {
     setIsLoading(true);
     setErrorMsg(null);
     try {
-      if (isSupabaseConfigured && supabase) {
+      if (false && supabase) {
         const { data, error } = await supabase
           .from('pets')
           .select('*')
@@ -70,7 +70,7 @@ export const PetCrud: React.FC<PetCrudProps> = ({ userId, styles }) => {
     const newPetData = { name, species, breed, age };
 
     try {
-      if (isSupabaseConfigured && supabase) {
+      if (false && supabase) {
         const { error } = await supabase
           .from('pets')
           .insert({ ...newPetData, owner_id: userId });
@@ -107,7 +107,7 @@ export const PetCrud: React.FC<PetCrudProps> = ({ userId, styles }) => {
     const updatedData = { name, species, breed, age };
 
     try {
-      if (isSupabaseConfigured && supabase) {
+      if (false && supabase) {
         const { error } = await supabase
           .from('pets')
           .update(updatedData)
@@ -141,7 +141,7 @@ export const PetCrud: React.FC<PetCrudProps> = ({ userId, styles }) => {
     const petToDelete = pets.find(p => p.id === petId);
     const petName = petToDelete ? petToDelete.name : 'Pet';
     try {
-      if (isSupabaseConfigured && supabase) {
+      if (false && supabase) {
         const { error } = await supabase
           .from('pets')
           .delete()

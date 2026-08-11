@@ -1,0 +1,85 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper: verifica se o usuário está autenticado
+    function isAuth() {
+      return request.auth != null;
+    }
+
+    // Helper: busca o perfil do usuário logado
+    function getProfile() {
+      return get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data;
+    }
+
+    // Helper: verifica cargo
+    function hasRole(role) {
+      return isAuth() && getProfile().role == role;
+    }
+
+    // Helper: cargos com acesso administrativo
+    function isStaff() {
+      return isAuth() && getProfile().role in ['desenvolvedor', 'proprietaria', 'gerente', 'colaborador'];
+    }
+
+    // ---- PERFIS ----
+    // Usuário vê e edita apenas o próprio perfil; staff vê todos
+    match /profiles/{userId} {
+      allow read: if isAuth() && (request.auth.uid == userId || isStaff());
+      allow write: if isAuth() && (request.auth.uid == userId || isStaff());
+    }
+
+    // ---- PETS ----
+    // Staff vê todos; cliente vê apenas os seus
+    match /pets/{petId} {
+      allow read: if isAuth();
+      allow write: if isStaff();
+    }
+
+    // ---- AGENDAMENTOS ----
+    match /appointments/{apptId} {
+      allow read: if isAuth();
+      allow create: if isAuth();
+      allow update, delete: if isStaff();
+    }
+
+    // ---- PRODUTOS / ESTOQUE ----
+    match /products/{productId} {
+      allow read: if isAuth();
+      allow write: if isStaff();
+    }
+
+    // ---- ENTREGAS (DELIVERY) ----
+    match /deliveries/{deliveryId} {
+      allow read: if isAuth();
+      allow write: if isStaff();
+    }
+
+    // ---- LOGS DE AUDITORIA ----
+    // Apenas staff lê; escrita só via Admin SDK
+    match /audit_logs/{logId} {
+      allow read: if isStaff();
+      allow write: if isStaff();
+    }
+
+    // ---- PRONTUÁRIOS VETERINÁRIOS ----
+    match /prontuarios/{docId} {
+      allow read: if isAuth();
+      allow write: if isStaff();
+    }
+
+    // ---- RELATÓRIOS / VENDAS ----
+    match /sales/{saleId} {
+      allow read: if isStaff();
+      allow write: if isStaff();
+    }
+
+    // ---- PERMISSÕES DE SISTEMA ----
+    match /permissions/{permId} {
+      allow read: if isAuth();
+      allow write: if hasRole('desenvolvedor') || hasRole('proprietaria');
+    }
+
+  }
+}

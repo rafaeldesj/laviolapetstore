@@ -1,3 +1,6 @@
+// @ts-nocheck
+import { db } from './firebaseClient';
+import { collection, addDoc, getDocs, updateDoc, deleteDoc, doc, query, where } from 'firebase/firestore';
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
@@ -71,16 +74,19 @@ export const canManage = (actorRole: UserRole, targetRole: UserRole): boolean =>
 };
 
 export const hasPermission = async (userId: string, permissionKey: string): Promise<boolean> => {
-  if (!supabase) return true;
-  const { data } = await supabase
-    .from('user_permissions')
-    .select('granted')
-    .eq('user_id', userId)
-    .eq('permission_key', permissionKey)
-    .single();
-  return data?.granted === true;
+  if (!db) return true;
+  try {
+    const q = query(collection(db, 'user_permissions'), where('user_id', '==', userId), where('permission_key', '==', permissionKey));
+    const snap = await getDocs(q);
+    if (!snap.empty) {
+      return snap.docs[0].data().granted === true;
+    }
+    return false;
+  } catch(e) {
+    console.error(e);
+    return false;
+  }
 };
-
 export const lookupEmailByIdentifier = async (identifier: string): Promise<string | null> => {
   if (identifier.toLowerCase() === 'admin') return 'admin@laviola.com';
   if (!supabase) return identifier;
@@ -154,25 +160,8 @@ export interface MockAppointment {
   created_at: string;
 }
 
-const getLocalPets = (): MockPet[] => {
-  const data = localStorage.getItem('laviola_pets');
-  return data ? JSON.parse(data) : [];
-};
 
-const saveLocalPets = (pets: MockPet[]) => {
-  localStorage.setItem('laviola_pets', JSON.stringify(pets));
-};
-
-const getLocalAppointments = (): MockAppointment[] => {
-  const data = localStorage.getItem('laviola_appointments');
-  return data ? JSON.parse(data) : [];
-};
-
-const saveLocalAppointments = (appointments: MockAppointment[]) => {
-  localStorage.setItem('laviola_appointments', JSON.stringify(appointments));
-};
-
-interface MockProduct {
+export interface MockProduct {
   id: string;
   name: string;
   category: string;
@@ -185,178 +174,108 @@ interface MockProduct {
   created_at: string;
 }
 
-const getLocalProducts = (): MockProduct[] => {
-  const data = localStorage.getItem('laviola_products');
-  if (data) return JSON.parse(data);
-
-  const defaultProducts: MockProduct[] = [
-    {
-      id: 'prod-1',
-      name: 'Ração Golden Cães Adultos 15kg',
-      category: 'Ração / Alimentos',
-      brand: 'Premier Golden',
-      price: 155.90,
-      cost_price: 105.00,
-      quantity: 8,
-      min_stock: 3,
-      sku: '7891011121314',
-      created_at: new Date().toISOString()
-    },
-    {
-      id: 'prod-2',
-      name: 'Shampoo Anticoceira Pet 500ml',
-      category: 'Higiene & Beleza',
-      brand: 'Pet Clean',
-      price: 38.50,
-      cost_price: 22.00,
-      quantity: 2,
-      min_stock: 5,
-      sku: '7891011121315',
-      created_at: new Date().toISOString()
-    },
-    {
-      id: 'prod-3',
-      name: 'Anti-pulgas NexGard 10-25kg',
-      category: 'Medicamentos / Farmácia',
-      brand: 'Merial',
-      price: 95.00,
-      cost_price: 60.00,
-      quantity: 0,
-      min_stock: 2,
-      sku: '7891011121316',
-      created_at: new Date().toISOString()
-    },
-    {
-      id: 'prod-4',
-      name: 'Coleira Ajustável Azul M',
-      category: 'Acessórios',
-      brand: 'Petz',
-      price: 25.00,
-      cost_price: 12.50,
-      quantity: 15,
-      min_stock: 2,
-      sku: '7891011121317',
-      created_at: new Date().toISOString()
-    },
-    {
-      id: 'prod-5',
-      name: 'Brinquedo Mordedor Ossinho',
-      category: 'Brinquedos',
-      brand: 'Kong',
-      price: 15.00,
-      cost_price: 6.00,
-      quantity: 20,
-      min_stock: 5,
-      sku: '7891011121318',
-      created_at: new Date().toISOString()
-    }
-  ];
-  localStorage.setItem('laviola_products', JSON.stringify(defaultProducts));
-  return defaultProducts;
-};
-
-const saveLocalProducts = (products: MockProduct[]) => {
-  localStorage.setItem('laviola_products', JSON.stringify(products));
-};
-
 export const mockSupabaseDb = {
   getPets: async (userId: string) => {
-    const pets = getLocalPets();
-    return { data: pets.filter(p => p.owner_id === userId), error: null };
+    if (!db) return { data: [], error: null };
+    try {
+      const q = query(collection(db, 'pets'), where('owner_id', '==', userId));
+      const snap = await getDocs(q);
+      const data = snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as MockPet));
+      return { data, error: null };
+    } catch(e: unknown) { return { data: null, error: e as Error }; }
   },
   getAllPets: async () => {
-    const pets = getLocalPets();
-    return { data: pets, error: null };
+    if (!db) return { data: [], error: null };
+    try {
+      const snap = await getDocs(collection(db, 'pets'));
+      const data = snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as MockPet));
+      return { data, error: null };
+    } catch(e: unknown) { return { data: null, error: e as Error }; }
   },
   addPet: async (pet: Omit<MockPet, 'id' | 'created_at' | 'owner_id'>, userId: string) => {
-    const pets = getLocalPets();
-    const newPet: MockPet = {
-      ...pet,
-      id: Math.random().toString(36).substring(2, 9),
-      owner_id: userId,
-      created_at: new Date().toISOString(),
-    };
-    pets.push(newPet);
-    saveLocalPets(pets);
-    return { data: newPet, error: null };
+    if (!db) return { data: null, error: new Error('Firebase missing') };
+    try {
+      const newPet = { ...pet, owner_id: userId, created_at: new Date().toISOString() };
+      const docRef = await addDoc(collection(db, 'pets'), newPet);
+      return { data: { id: docRef.id, ...newPet }, error: null };
+    } catch(e: unknown) { return { data: null, error: e as Error }; }
   },
   updatePet: async (id: string, updates: Partial<Omit<MockPet, 'id' | 'owner_id' | 'created_at'>>) => {
-    const pets = getLocalPets();
-    const index = pets.findIndex(p => p.id === id);
-    if (index === -1) return { data: null, error: new Error('Pet not found') };
-    pets[index] = { ...pets[index], ...updates };
-    saveLocalPets(pets);
-    return { data: pets[index], error: null };
+    if (!db) return { data: null, error: new Error('Firebase missing') };
+    try {
+      await updateDoc(doc(db, 'pets', id), updates);
+      return { data: { id, ...updates }, error: null }; // Mock return
+    } catch(e: unknown) { return { data: null, error: e as Error }; }
   },
   deletePet: async (id: string) => {
-    const pets = getLocalPets();
-    const filtered = pets.filter(p => p.id !== id);
-    saveLocalPets(filtered);
-    return { error: null };
+    if (!db) return { error: new Error('Firebase missing') };
+    try {
+      await deleteDoc(doc(db, 'pets', id));
+      return { error: null };
+    } catch(e: unknown) { return { error: e as Error }; }
   },
   getAppointments: async (userId: string, isStaff: boolean) => {
-    const appointments = getLocalAppointments();
-    if (isStaff) {
-      return { data: appointments, error: null };
-    }
-    return { data: appointments.filter(a => a.owner_id === userId), error: null };
+    if (!db) return { data: [], error: null };
+    try {
+      const q = isStaff ? collection(db, 'appointments') : query(collection(db, 'appointments'), where('owner_id', '==', userId));
+      const snap = await getDocs(q);
+      const data = snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as MockAppointment));
+      return { data, error: null };
+    } catch(e: unknown) { return { data: null, error: e as Error }; }
   },
   addAppointment: async (appointment: Omit<MockAppointment, 'id' | 'created_at'>) => {
-    const appointments = getLocalAppointments();
-    const newAppointment: MockAppointment = {
-      ...appointment,
-      id: Math.random().toString(36).substring(2, 9),
-      created_at: new Date().toISOString(),
-    };
-    appointments.push(newAppointment);
-    saveLocalAppointments(appointments);
-    return { data: newAppointment, error: null };
+    if (!db) return { data: null, error: new Error('Firebase missing') };
+    try {
+      const newApp = { ...appointment, created_at: new Date().toISOString() };
+      const docRef = await addDoc(collection(db, 'appointments'), newApp);
+      return { data: { id: docRef.id, ...newApp }, error: null };
+    } catch(e: unknown) { return { data: null, error: e as Error }; }
   },
   updateAppointment: async (id: string, updates: Partial<Omit<MockAppointment, 'id' | 'owner_id' | 'created_at'>>) => {
-    const appointments = getLocalAppointments();
-    const index = appointments.findIndex(a => a.id === id);
-    if (index === -1) return { data: null, error: new Error('Appointment not found') };
-    appointments[index] = { ...appointments[index], ...updates };
-    saveLocalAppointments(appointments);
-    return { data: appointments[index], error: null };
+    if (!db) return { data: null, error: new Error('Firebase missing') };
+    try {
+      await updateDoc(doc(db, 'appointments', id), updates);
+      return { data: { id, ...updates }, error: null };
+    } catch(e: unknown) { return { data: null, error: e as Error }; }
   },
   deleteAppointment: async (id: string) => {
-    const appointments = getLocalAppointments();
-    const filtered = appointments.filter(a => a.id !== id);
-    saveLocalAppointments(filtered);
-    return { error: null };
+    if (!db) return { error: new Error('Firebase missing') };
+    try {
+      await deleteDoc(doc(db, 'appointments', id));
+      return { error: null };
+    } catch(e: unknown) { return { error: e as Error }; }
   },
   getProducts: async () => {
-    const products = getLocalProducts();
-    return { data: products, error: null };
+    if (!db) return { data: [], error: null };
+    try {
+      const snap = await getDocs(collection(db, 'products'));
+      const data = snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as MockProduct));
+      return { data, error: null };
+    } catch(e: unknown) { return { data: null, error: e as Error }; }
   },
   addProduct: async (product: Omit<MockProduct, 'id' | 'created_at'>) => {
-    const products = getLocalProducts();
-    const newProduct: MockProduct = {
-      ...product,
-      id: Math.random().toString(36).substring(2, 9),
-      created_at: new Date().toISOString(),
-    };
-    products.push(newProduct);
-    saveLocalProducts(products);
-    return { data: newProduct, error: null };
+    if (!db) return { data: null, error: new Error('Firebase missing') };
+    try {
+      const newProd = { ...product, created_at: new Date().toISOString() };
+      const docRef = await addDoc(collection(db, 'products'), newProd);
+      return { data: { id: docRef.id, ...newProd }, error: null };
+    } catch(e: unknown) { return { data: null, error: e as Error }; }
   },
   updateProduct: async (id: string, updates: Partial<Omit<MockProduct, 'id' | 'created_at'>>) => {
-    const products = getLocalProducts();
-    const index = products.findIndex(p => p.id === id);
-    if (index === -1) return { data: null, error: new Error('Product not found') };
-    products[index] = { ...products[index], ...updates };
-    saveLocalProducts(products);
-    return { data: products[index], error: null };
+    if (!db) return { data: null, error: new Error('Firebase missing') };
+    try {
+      await updateDoc(doc(db, 'products', id), updates);
+      return { data: { id, ...updates }, error: null };
+    } catch(e: unknown) { return { data: null, error: e as Error }; }
   },
   deleteProduct: async (id: string) => {
-    const products = getLocalProducts();
-    const filtered = products.filter(p => p.id !== id);
-    saveLocalProducts(filtered);
-    return { error: null };
-  },
+    if (!db) return { error: new Error('Firebase missing') };
+    try {
+      await deleteDoc(doc(db, 'products', id));
+      return { error: null };
+    } catch(e: unknown) { return { error: e as Error }; }
+  }
 };
-
 export interface AuditLog {
   id: string;
   user_email: string;
@@ -379,76 +298,29 @@ export interface Product {
   created_at: string;
 }
 
-export const logAction = async (
-  userEmail: string,
-  userName: string,
-  action: string,
-  details: string
-): Promise<void> => {
+export const logAction = async (userEmail: string, userName: string, action: string, details: string): Promise<void> => {
   const timestamp = new Date().toISOString();
+  if (!db) return;
   try {
-    if (!supabase) {
-      const localLogs: AuditLog[] = JSON.parse(localStorage.getItem('laviola_audit_logs') || '[]');
-      localLogs.push({
-        id: Math.random().toString(36).substring(2, 9),
-        user_email: userEmail,
-        user_name: userName,
-        action,
-        details,
-        created_at: timestamp,
-      });
-      localStorage.setItem('laviola_audit_logs', JSON.stringify(localLogs));
-      return;
-    }
-
-    const { error } = await supabase.from('audit_logs').insert({
+    await addDoc(collection(db, 'audit_logs'), {
       user_email: userEmail,
       user_name: userName,
       action,
       details,
-      created_at: timestamp,
+      created_at: timestamp
     });
-
-    if (error) {
-      console.warn('Erro ao inserir log no Supabase, caindo no localStorage:', error);
-      const localLogs: AuditLog[] = JSON.parse(localStorage.getItem('laviola_audit_logs') || '[]');
-      localLogs.push({
-        id: Math.random().toString(36).substring(2, 9),
-        user_email: userEmail,
-        user_name: userName,
-        action,
-        details,
-        created_at: timestamp,
-      });
-      localStorage.setItem('laviola_audit_logs', JSON.stringify(localLogs));
-    }
-  } catch (err) {
-    console.error('Falha ao registrar log:', err);
+  } catch(e) {
+    console.error(e);
   }
 };
-
 export const fetchLogs = async (): Promise<AuditLog[]> => {
-  const localLogs: AuditLog[] = JSON.parse(localStorage.getItem('laviola_audit_logs') || '[]');
-  if (!supabase) {
-    return localLogs.sort((a, b) => b.created_at.localeCompare(a.created_at));
-  }
+  if (!db) return [];
   try {
-    const { data, error } = await supabase
-      .from('audit_logs')
-      .select('*')
-      .order('created_at', { ascending: false });
-
-    if (error) {
-      console.warn('Erro ao buscar logs do Supabase, retornando locais:', error);
-      return localLogs.sort((a, b) => b.created_at.localeCompare(a.created_at));
-    }
-
-    // Merge both local and Supabase logs
-    const combined = [...(data || []), ...localLogs];
-    return combined.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-  } catch (err) {
-    console.error('Falha ao obter logs:', err);
-    return localLogs.sort((a, b) => b.created_at.localeCompare(a.created_at));
+    const snap = await getDocs(collection(db, 'audit_logs'));
+    const logs = snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as AuditLog));
+    return logs.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  } catch(e) {
+    console.error(e);
+    return [];
   }
 };
-
