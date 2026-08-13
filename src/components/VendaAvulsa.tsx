@@ -51,12 +51,18 @@ export const VendaAvulsa: React.FC<VendaAvulsaProps> = ({ styles, currentUser })
   const [addressNumber, setAddressNumber] = useState<string>('');
   const [addressNeighborhood, setAddressNeighborhood] = useState<string>('');
   const [addressReference, setAddressReference] = useState<string>('');
+  const [addressLat, setAddressLat] = useState<number | undefined>(undefined);
+  const [addressLng, setAddressLng] = useState<number | undefined>(undefined);
+  const [deliveryAsap, setDeliveryAsap] = useState<boolean>(true);
+  const [deliveryTime, setDeliveryTime] = useState<string>('');
 
   const handleMapAddressSelect = (addr: MapAddress) => {
     setAddressStreet(addr.street);
     setAddressNumber(addr.number || '');
     setAddressNeighborhood(addr.neighborhood);
     setAddressReference(addr.complement || '');
+    setAddressLat(addr.lat);
+    setAddressLng(addr.lng);
   };
 
   // Register on the fly States
@@ -379,6 +385,9 @@ export const VendaAvulsa: React.FC<VendaAvulsaProps> = ({ styles, currentUser })
         number: addressNumber.trim(),
         neighborhood: addressNeighborhood.trim(),
         reference: addressReference.trim(),
+        lat: addressLat,
+        lng: addressLng,
+        time: deliveryAsap ? 'O mais breve possível' : deliveryTime
       } : null,
       type: deliveryType,
       nfe_ready: true // Flag to state this sale has all necessary NF-e info prefilled
@@ -413,9 +422,37 @@ export const VendaAvulsa: React.FC<VendaAvulsaProps> = ({ styles, currentUser })
       );
 
       // Save sale transaction locally for NF-e reference
+      const saleId = Math.random().toString(36).substring(2, 9);
       const localSales = JSON.parse(localStorage.getItem('laviola_pdv_sales') || '[]');
-      localSales.push({ id: Math.random().toString(36).substring(2, 9), ...salePayload });
+      localSales.push({ id: saleId, ...salePayload });
       localStorage.setItem('laviola_pdv_sales', JSON.stringify(localSales));
+
+      // Create a DeliveryItem if it's a delivery
+      if (deliveryType === 'delivery') {
+        const fullAddress = `${addressStreet.trim()}, ${addressNumber.trim()} - ${addressNeighborhood.trim()}`;
+        const scheduledTime = deliveryAsap ? 'O mais breve possível' : deliveryTime;
+        
+        const newDelivery = {
+          id: `deliv-${saleId}`,
+          client_id: clientCPF ? `cpf-${clientCPF}` : 'avulso',
+          client_name: clientName.trim() || 'Consumidor Avulso',
+          client_address: fullAddress,
+          client_lat: addressLat || -22.9122, // fallback to petshop coord if missing
+          client_lng: addressLng || -43.5606, // fallback
+          driver_id: '',
+          driver_name: '',
+          driver_lat: -22.9122,
+          driver_lng: -43.5606,
+          status: 'agendada',
+          items: itemsString,
+          scheduled_time: scheduledTime,
+          created_at: new Date().toISOString()
+        };
+
+        const localDeliveries = JSON.parse(localStorage.getItem('laviola_deliveries') || '[]');
+        localDeliveries.push(newDelivery);
+        localStorage.setItem('laviola_deliveries', JSON.stringify(localDeliveries));
+      }
 
       setLastSaleSummary(salePayload);
       setCheckoutSuccess(true);
@@ -850,15 +887,15 @@ export const VendaAvulsa: React.FC<VendaAvulsaProps> = ({ styles, currentUser })
                             type="text"
                             placeholder="Rua/Avenida *"
                             value={addressStreet}
-                            onChange={(e) => setAddressStreet(e.target.value)}
-                            style={{ ...styles.formInput, width: '100%', fontSize: '0.8rem', padding: '6px 8px', marginBottom: 0 }}
+                            readOnly
+                            style={{ ...styles.formInput, width: '100%', fontSize: '0.8rem', padding: '6px 8px', marginBottom: 0, backgroundColor: styles.isDark ? '#334155' : '#f1f5f9', cursor: 'not-allowed', color: styles.isDark ? '#94a3b8' : '#64748b' }}
                           />
                           <input
                             type="text"
                             placeholder="Número *"
                             value={addressNumber}
-                            onChange={(e) => setAddressNumber(e.target.value)}
-                            style={{ ...styles.formInput, width: '100%', fontSize: '0.8rem', padding: '6px 8px', marginBottom: 0 }}
+                            readOnly
+                            style={{ ...styles.formInput, width: '100%', fontSize: '0.8rem', padding: '6px 8px', marginBottom: 0, backgroundColor: styles.isDark ? '#334155' : '#f1f5f9', cursor: 'not-allowed', color: styles.isDark ? '#94a3b8' : '#64748b' }}
                           />
                         </div>
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginTop: '10px' }}>
@@ -866,8 +903,8 @@ export const VendaAvulsa: React.FC<VendaAvulsaProps> = ({ styles, currentUser })
                             type="text"
                             placeholder="Bairro *"
                             value={addressNeighborhood}
-                            onChange={(e) => setAddressNeighborhood(e.target.value)}
-                            style={{ ...styles.formInput, width: '100%', fontSize: '0.8rem', padding: '6px 8px', marginBottom: 0 }}
+                            readOnly
+                            style={{ ...styles.formInput, width: '100%', fontSize: '0.8rem', padding: '6px 8px', marginBottom: 0, backgroundColor: styles.isDark ? '#334155' : '#f1f5f9', cursor: 'not-allowed', color: styles.isDark ? '#94a3b8' : '#64748b' }}
                           />
                           <input
                             type="text"
@@ -876,6 +913,36 @@ export const VendaAvulsa: React.FC<VendaAvulsaProps> = ({ styles, currentUser })
                             onChange={(e) => setAddressReference(e.target.value)}
                             style={{ ...styles.formInput, width: '100%', fontSize: '0.8rem', padding: '6px 8px', marginBottom: 0 }}
                           />
+                        </div>
+
+                        {/* Delivery Time Selection */}
+                        <div style={{ marginTop: '16px', borderTop: `1px dashed ${styles.borderColor}`, paddingTop: '12px' }}>
+                          <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, marginBottom: '8px', color: styles.textMain }}>
+                            Qual horário?
+                          </label>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', cursor: 'pointer' }}>
+                              <input
+                                type="checkbox"
+                                checked={deliveryAsap}
+                                onChange={(e) => {
+                                  setDeliveryAsap(e.target.checked);
+                                  if (e.target.checked) setDeliveryTime('');
+                                }}
+                                style={{ cursor: 'pointer' }}
+                              />
+                              O mais breve possível
+                            </label>
+                            <input
+                              type="time"
+                              value={deliveryTime}
+                              onChange={(e) => {
+                                setDeliveryTime(e.target.value);
+                                if (e.target.value) setDeliveryAsap(false);
+                              }}
+                              style={{ ...styles.formInput, width: 'auto', fontSize: '0.8rem', padding: '4px 8px', marginBottom: 0 }}
+                            />
+                          </div>
                         </div>
                       </>
                     }
