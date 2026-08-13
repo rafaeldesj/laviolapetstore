@@ -3,6 +3,7 @@ import { X, UserPlus, Eye, EyeOff } from 'lucide-react';
 import { logAction } from '../supabaseClient';
 import { auth, db, isFirebaseConfigured } from '../firebaseClient';
 import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
+import { formatPhoneBR } from '../utils/formatters';
 import { doc, setDoc } from 'firebase/firestore';
 import type { AuthUser } from '../hooks/useAuth';
 
@@ -188,7 +189,7 @@ export const RegisterModal: React.FC<RegisterModalProps> = ({
 
           <div style={styles.formGroup}>
             <label htmlFor="reg-phone" style={styles.formLabel}>Celular *</label>
-            <input id="reg-phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)}
+            <input id="reg-phone" type="tel" value={phone} onChange={(e) => setPhone(formatPhoneBR(e.target.value))}
               style={styles.formInput} placeholder="(21) 99999-9999" disabled={isLoading} />
           </div>
 

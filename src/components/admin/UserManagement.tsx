@@ -7,6 +7,7 @@ import { collection, getDocs, doc, setDoc, updateDoc, deleteDoc } from 'firebase
 import { createUserWithEmailAndPassword, updateProfile, updatePassword } from 'firebase/auth';
 import { PermissionsPanel } from './PermissionsPanel';
 import type { AuthUser } from '../../hooks/useAuth';
+import { formatPhoneBR } from '../../utils/formatters';
 
 interface UserManagementProps {
   currentUser: AuthUser;
@@ -739,7 +740,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
                         <input
                           type="tel"
                           value={editPhone}
-                          onChange={(e) => setEditPhone(e.target.value)}
+                          onChange={(e) => setEditPhone(formatPhoneBR(e.target.value))}
                           placeholder="(21) 99999-9999"
                           style={{ ...styles.formInput, padding: '8px 10px', fontSize: '0.85rem', width: '100%' }}
                         />
@@ -908,7 +909,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
                     id="new-phone"
                     type="tel"
                     value={newPhone}
-                    onChange={(e) => setNewPhone(e.target.value)}
+                    onChange={(e) => setNewPhone(formatPhoneBR(e.target.value))}
                     style={styles.formInput}
                     placeholder="(21) 99999-9999"
                   />
