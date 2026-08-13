@@ -730,42 +730,44 @@ export const DeliveryMap = ({ onAddressSelect, initialAddress, leftContent }: De
       </div>
 
       {/* Right Column: Only the Map */}
-      <div style={{ display: 'flex', flexDirection: 'column', position: 'relative' }}>
-        {/* Map container */}
-        <div ref={mapContainerRef} className="delivery-map-container" />
+      <div style={{ display: 'flex', flexDirection: 'column' }}>
+        <div style={{ position: 'relative' }}>
+          {/* Map container */}
+          <div ref={mapContainerRef} className="delivery-map-container" />
 
-        {/* Usar Minha Localização (Overlay Icon) */}
-        <button
-          type="button"
-          onClick={handleLocateMe}
-          disabled={isLocating}
-          title="Usar minha localização atual"
-          style={{
-            position: 'absolute',
-            bottom: '40px', // Acima do botão +/- do Leaflet (que fica em ~20px bottomright)
-            right: '10px',
-            zIndex: 400,
-            width: '26px',
-            height: '26px',
-            backgroundColor: '#ffffff',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            cursor: isLocating ? 'wait' : 'pointer',
-            border: '2px solid rgba(0,0,0,0.3)',
-            borderRadius: '6px',
-            padding: 0,
-            boxShadow: '0 2px 8px rgba(0,0,0,0.5)'
-          }}
-        >
-          {isLocating ? (
-            <span className="spinner" style={{ width: '12px', height: '12px', borderWidth: '2px', borderColor: '#1372da', borderTopColor: 'transparent' }} />
-          ) : (
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1372da" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="9" opacity="0.4"/>
-            </svg>
-          )}
-        </button>
+          {/* Usar Minha Localização (Overlay Icon) */}
+          <button
+            type="button"
+            onClick={handleLocateMe}
+            disabled={isLocating}
+            title="Usar minha localização atual"
+            style={{
+              position: 'absolute',
+              bottom: '75px', // Acima do botão +/- do Leaflet (que fica em ~20px bottomright)
+              right: '10px',
+              zIndex: 400,
+              width: '30px',
+              height: '30px',
+              backgroundColor: '#ffffff',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: isLocating ? 'wait' : 'pointer',
+              border: '2px solid rgba(0,0,0,0.15)',
+              borderRadius: '4px',
+              padding: 0,
+              boxShadow: '0 2px 5px rgba(0,0,0,0.2)'
+            }}
+          >
+            {isLocating ? (
+              <span className="spinner" style={{ width: '14px', height: '14px', borderWidth: '2px', borderColor: '#1372da', borderTopColor: 'transparent' }} />
+            ) : (
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#475569" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="9" opacity="0.4"/>
+              </svg>
+            )}
+          </button>
+        </div>
 
         {/* Location error */}
         {locationError && (
