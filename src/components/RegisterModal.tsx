@@ -72,6 +72,8 @@ export const RegisterModal: React.FC<RegisterModalProps> = ({
           collaborator_category_id: null as string | null
         };
         
+        // Wait 1.5s to ensure the auth token propagates to the Firestore client before writing
+        await new Promise(resolve => setTimeout(resolve, 1500));
         await setDoc(doc(db, 'profiles', user.uid), profileData);
 
         const registeredUser: AuthUser = {

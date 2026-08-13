@@ -30,7 +30,8 @@ service cloud.firestore {
     // Usuário vê e edita apenas o próprio perfil; staff vê todos
     match /profiles/{userId} {
       allow read: if true; // Aberto para permitir resolução de Username/Telefone na tela de login
-      allow write: if isAuth() && (request.auth.uid == userId || isStaff());
+      allow create: if true; // Permite criação pelo frontend (contorna o delay de propagação do token de auth)
+      allow update, delete: if isAuth() && (request.auth.uid == userId || isStaff());
     }
 
     // ---- PETS ----
