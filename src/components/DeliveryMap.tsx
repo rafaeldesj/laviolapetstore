@@ -742,7 +742,7 @@ export const DeliveryMap = ({ onAddressSelect, initialAddress, leftContent }: De
           title="Usar minha localização atual"
           style={{
             position: 'absolute',
-            bottom: '100px',
+            bottom: '130px',
             right: '10px',
             zIndex: 400,
             width: '26px',
