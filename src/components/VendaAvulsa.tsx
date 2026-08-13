@@ -65,6 +65,17 @@ export const VendaAvulsa: React.FC<VendaAvulsaProps> = ({ styles, currentUser })
     setAddressLng(addr.lng);
   };
 
+  // State for delivery options
+  const [deliveryObs, setDeliveryObs] = useState<string>('');
+  
+  const getMinDeliveryTime = () => {
+    const d = new Date();
+    d.setHours(d.getHours() + 2);
+    const h = d.getHours().toString().padStart(2, '0');
+    const m = d.getMinutes().toString().padStart(2, '0');
+    return `${h}:${m}`;
+  };
+
   // Register on the fly States
   const [isRegisterOpen, setIsRegisterOpen] = useState<boolean>(false);
   const [regSku, setRegSku] = useState<string>('');
@@ -387,7 +398,8 @@ export const VendaAvulsa: React.FC<VendaAvulsaProps> = ({ styles, currentUser })
         reference: addressReference.trim(),
         lat: addressLat,
         lng: addressLng,
-        time: deliveryAsap ? 'O mais breve possível' : deliveryTime
+        time: deliveryAsap ? 'O mais breve possível' : deliveryTime,
+        obs: deliveryObs.trim()
       } : null,
       type: deliveryType,
       nfe_ready: true // Flag to state this sale has all necessary NF-e info prefilled
@@ -446,8 +458,14 @@ export const VendaAvulsa: React.FC<VendaAvulsaProps> = ({ styles, currentUser })
           status: 'agendada',
           items: itemsString,
           scheduled_time: scheduledTime,
+          support_reason: deliveryObs.trim() ? `OBS Cliente: ${deliveryObs.trim()}` : null, // Use support_reason or append to items as a hack, or wait, does DeliveryItem have obs? It has support_reason, but appending to items might be better:
           created_at: new Date().toISOString()
         };
+        
+        // append OBS to items if it exists so it's visible to driver
+        if (deliveryObs.trim()) {
+          newDelivery.items += `\n[OBS: ${deliveryObs.trim()}]`;
+        }
 
         const localDeliveries = JSON.parse(localStorage.getItem('laviola_deliveries') || '[]');
         localDeliveries.push(newDelivery);
@@ -936,6 +954,7 @@ export const VendaAvulsa: React.FC<VendaAvulsaProps> = ({ styles, currentUser })
                             <input
                               type="time"
                               step="300"
+                              min={getMinDeliveryTime()}
                               value={deliveryTime}
                               onChange={(e) => {
                                 setDeliveryTime(e.target.value);
@@ -943,6 +962,20 @@ export const VendaAvulsa: React.FC<VendaAvulsaProps> = ({ styles, currentUser })
                               }}
                               style={{ ...styles.formInput, width: 'auto', fontSize: '0.8rem', padding: '4px 8px', marginBottom: 0 }}
                             />
+                          </div>
+                          
+                          <div style={{ marginTop: '12px' }}>
+                            <input
+                              type="text"
+                              maxLength={50}
+                              placeholder="Observação (Ex: Deixar na portaria, Cuidado com o cachorro) - Máx 50 caract."
+                              value={deliveryObs}
+                              onChange={(e) => setDeliveryObs(e.target.value)}
+                              style={{ ...styles.formInput, width: '100%', fontSize: '0.8rem', padding: '6px 8px', marginBottom: 0 }}
+                            />
+                            <div style={{ fontSize: '0.65rem', color: styles.sidebarWidgetText?.color, textAlign: 'right', marginTop: '4px' }}>
+                              {deliveryObs.length}/50
+                            </div>
                           </div>
                         </div>
                       </>
