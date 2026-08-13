@@ -2,9 +2,9 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Users, Shield, UserCheck, UserX, Trash2, Search, Edit, Phone, Save, X, ChevronDown, PlusCircle, Key, Eye, EyeOff } from 'lucide-react';
 import type { UserProfile, UserRole } from '../../supabaseClient';
 import { supabase, roleLabels, canManage, roleHierarchy, isSupabaseConfigured, logAction } from '../../supabaseClient';
-import { db, secondaryAuth, isFirebaseConfigured } from '../../firebaseClient';
+import { db, auth, secondaryAuth, isFirebaseConfigured } from '../../firebaseClient';
 import { collection, getDocs, doc, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
-import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
+import { createUserWithEmailAndPassword, updateProfile, updatePassword } from 'firebase/auth';
 import { PermissionsPanel } from './PermissionsPanel';
 import type { AuthUser } from '../../hooks/useAuth';
 
@@ -390,9 +390,18 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
 
     try {
       if (isFirebaseConfigured) {
-        alert("Atenção: No Firebase, por motivos de segurança, não é possível redefinir a senha de outro usuário diretamente pelo frontend.\n\nPara fazer isso manualmente, seria necessário configurar um servidor Backend (Cloud Functions). A alternativa padrão do Firebase é enviar um 'E-mail de Recuperação' para o usuário.\n\nFale com o desenvolvedor (eu) no chat para decidirmos qual caminho seguir!");
-        setIsResetting(false);
-        return;
+        if (resetPasswordUser.id === currentUser.id) {
+          // Firebase Auth permite alterar a senha do usuário atualmente logado
+          if (auth && auth.currentUser) {
+            await updatePassword(auth.currentUser, resetPasswordVal);
+          } else {
+            throw new Error("Usuário não está autenticado no Firebase.");
+          }
+        } else {
+          alert("Atenção: No Firebase, não é possível redefinir a senha de outro usuário diretamente pelo painel do administrador (sem um backend).\n\nComo você está tentando alterar a senha de OUTRO usuário, a operação foi bloqueada. A alternativa seria enviar um E-mail de Recuperação para ele.");
+          setIsResetting(false);
+          return;
+        }
       } else if (false && supabase) {
         if (resetPasswordUser.id === currentUser.id) {
           const { error } = await supabase.auth.updateUser({ password: resetPasswordVal });
