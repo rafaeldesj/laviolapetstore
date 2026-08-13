@@ -8,6 +8,7 @@ import { createUserWithEmailAndPassword, updateProfile, updatePassword } from 'f
 import { PermissionsPanel } from './PermissionsPanel';
 import type { AuthUser } from '../../hooks/useAuth';
 import { formatPhoneBR } from '../../utils/formatters';
+import { checkEmailExists, checkPhoneExists, checkUsernameExists, generateUsernameSuggestions } from '../../utils/userValidation';
 
 interface UserManagementProps {
   currentUser: AuthUser;
@@ -192,7 +193,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
   const handleUpdateUser = async (e: React.FormEvent, user: UserProfile) => {
     e.preventDefault();
     if (!editFullName.trim() || !editUsername.trim()) {
-      setErrorMsg('Nome e Username são obrigatórios.');
+      setErrorMsg('Nome e Apelido são obrigatórios.');
       return;
     }
     setIsSaving(true);
@@ -235,6 +236,29 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
           localStorage.setItem('laviola_mock_session', JSON.stringify(mockSession));
         }
       } else {
+        // Validação de duplicidade na edição (ignorando o próprio usuário)
+        if (editPhone.trim() && editPhone.trim() !== user.phone) {
+          const phoneExists = await checkPhoneExists(editPhone.trim(), user.id);
+          if (phoneExists) {
+            setErrorMsg('Este Celular já está em uso por outro usuário.');
+            setIsSaving(false);
+            return;
+          }
+        }
+        
+        if (editUsername.trim() !== user.username) {
+          const usernameExists = await checkUsernameExists(editUsername.trim(), user.id);
+          if (usernameExists) {
+            const suggestions = await generateUsernameSuggestions(editUsername.trim());
+            const suggestionsText = suggestions.length > 0 
+              ? ` Tente algo como: ${suggestions.join(', ')}` 
+              : '';
+            setErrorMsg(`Este Apelido já está em uso por outro usuário.${suggestionsText}`);
+            setIsSaving(false);
+            return;
+          }
+        }
+
         // Resolve or create category in Supabase
         let categoryId: string | null = null;
         if (specialtyName) {
@@ -288,6 +312,32 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
 
     try {
       if (isFirebaseConfigured && secondaryAuth && db) {
+        // Validação de duplicidade
+        const emailExists = await checkEmailExists(newEmail);
+        if (emailExists) {
+          setErrorMsg('Este E-mail já está em uso. Tente outro.');
+          setIsSaving(false);
+          return;
+        }
+
+        const phoneExists = await checkPhoneExists(newPhone);
+        if (phoneExists) {
+          setErrorMsg('Este Celular já está em uso. Tente outro.');
+          setIsSaving(false);
+          return;
+        }
+
+        const usernameExists = await checkUsernameExists(newUsername);
+        if (usernameExists) {
+          const suggestions = await generateUsernameSuggestions(newUsername);
+          const suggestionsText = suggestions.length > 0 
+            ? ` Tente algo como: ${suggestions.join(', ')}` 
+            : '';
+          setErrorMsg(`Este Apelido já está em uso. Tente outro.${suggestionsText}`);
+          setIsSaving(false);
+          return;
+        }
+
         const userCredential = await createUserWithEmailAndPassword(secondaryAuth, newEmail.trim(), newPassword);
         const user = userCredential.user;
         await updateProfile(user, { displayName: newFullName.trim() });
@@ -721,7 +771,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
                       {/* Username */}
                       <div style={{ flex: '1 1 120px', minWidth: '100px' }}>
                         <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 600, color: styles.sidebarWidgetText?.color, marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                          Login *
+                          Apelido *
                         </label>
                         <input
                           type="text"
@@ -878,7 +928,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
               </div>
 
               <div style={styles.formGroup}>
-                <label htmlFor="new-email" style={styles.formLabel}>E-mail (Gmail) *</label>
+                <label htmlFor="new-email" style={styles.formLabel}>E-mail *</label>
                 <input
                   id="new-email"
                   type="email"
@@ -892,7 +942,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
                 <div style={styles.formGroup}>
-                  <label htmlFor="new-username" style={styles.formLabel}>Login (Username) *</label>
+                  <label htmlFor="new-username" style={styles.formLabel}>Apelido (Login) *</label>
                   <input
                     id="new-username"
                     type="text"

@@ -4,6 +4,7 @@ import { logAction } from '../supabaseClient';
 import { auth, db, isFirebaseConfigured } from '../firebaseClient';
 import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
 import { formatPhoneBR } from '../utils/formatters';
+import { checkEmailExists, checkPhoneExists, checkUsernameExists, generateUsernameSuggestions } from '../utils/userValidation';
 import { doc, setDoc } from 'firebase/firestore';
 import type { AuthUser } from '../hooks/useAuth';
 
@@ -31,8 +32,8 @@ export const RegisterModal: React.FC<RegisterModalProps> = ({
   const [hoveredClose, setHoveredClose] = useState<boolean>(false);
   const [hoveredSubmit, setHoveredSubmit] = useState<boolean>(false);
 
-  const validateGmail = (value: string): boolean =>
-    /^[a-zA-Z0-9._%+\-]+@gmail\.com$/.test(value.trim());
+  const validateEmail = (value: string): boolean =>
+    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -42,8 +43,8 @@ export const RegisterModal: React.FC<RegisterModalProps> = ({
       setErrorMsg('Preencha todos os campos obrigatórios.');
       return;
     }
-    if (!validateGmail(email)) {
-      setErrorMsg('Apenas endereços @gmail.com são aceitos para cadastro.');
+    if (!validateEmail(email)) {
+      setErrorMsg('Por favor, informe um endereço de E-mail válido.');
       return;
     }
     if (password.length < 6) {
@@ -52,8 +53,35 @@ export const RegisterModal: React.FC<RegisterModalProps> = ({
     }
 
     setIsLoading(true);
+
     try {
       if (isFirebaseConfigured && auth && db) {
+        // Validação de duplicidade
+        const emailExists = await checkEmailExists(email);
+        if (emailExists) {
+          setErrorMsg('Este E-mail já está em uso. Tente outro.');
+          setIsLoading(false);
+          return;
+        }
+
+        const phoneExists = await checkPhoneExists(phone);
+        if (phoneExists) {
+          setErrorMsg('Este Celular já está em uso. Tente outro.');
+          setIsLoading(false);
+          return;
+        }
+
+        const usernameExists = await checkUsernameExists(username);
+        if (usernameExists) {
+          const suggestions = await generateUsernameSuggestions(username);
+          const suggestionsText = suggestions.length > 0 
+            ? ` Tente algo como: ${suggestions.join(', ')}` 
+            : '';
+          setErrorMsg(`Este Apelido já está em uso. Tente outro.${suggestionsText}`);
+          setIsLoading(false);
+          return;
+        }
+
         const userCredential = await createUserWithEmailAndPassword(auth, email.trim(), password);
         const user = userCredential.user;
         
@@ -176,17 +204,15 @@ export const RegisterModal: React.FC<RegisterModalProps> = ({
           </div>
 
           <div style={styles.formGroup}>
-            <label htmlFor="reg-email" style={styles.formLabel}>
-              Gmail * <span style={{ fontSize: '0.75rem', fontWeight: 400, color: '#999' }}>(somente @gmail.com)</span>
-            </label>
+            <label htmlFor="reg-email" style={styles.formLabel}>E-mail *</label>
             <input id="reg-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)}
-              style={styles.formInput} placeholder="seunome@gmail.com" disabled={isLoading} />
+              style={styles.formInput} placeholder="seuemail@exemplo.com" disabled={isLoading} />
           </div>
 
           <div style={styles.formGroup}>
-            <label htmlFor="reg-username" style={styles.formLabel}>Username (login) *</label>
+            <label htmlFor="reg-username" style={styles.formLabel}>Apelido (login) *</label>
             <input id="reg-username" type="text" value={username} onChange={(e) => setUsername(e.target.value)}
-              style={styles.formInput} placeholder="Seu nome de usuário único" disabled={isLoading} />
+              style={styles.formInput} placeholder="Seu apelido único" disabled={isLoading} />
           </div>
 
           <div style={styles.formGroup}>
