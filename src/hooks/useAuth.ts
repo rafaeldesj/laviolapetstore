@@ -101,6 +101,21 @@ export const useAuth = () => {
     const snapUser = await getDocs(qUsername);
     if (!snapUser.empty) return snapUser.docs[0].data().email;
     
+    // Try lowercase
+    const qUsernameLow = query(collection(db, 'profiles'), where('username', '==', cleanInput.toLowerCase()));
+    const snapUserLow = await getDocs(qUsernameLow);
+    if (!snapUserLow.empty) return snapUserLow.docs[0].data().email;
+
+    // Try uppercase
+    const qUsernameUp = query(collection(db, 'profiles'), where('username', '==', cleanInput.toUpperCase()));
+    const snapUserUp = await getDocs(qUsernameUp);
+    if (!snapUserUp.empty) return snapUserUp.docs[0].data().email;
+    
+    // Try phone
+    const qPhone = query(collection(db, 'profiles'), where('phone', '==', cleanInput));
+    const snapPhone = await getDocs(qPhone);
+    if (!snapPhone.empty) return snapPhone.docs[0].data().email;
+    
     return null;
   };
 
