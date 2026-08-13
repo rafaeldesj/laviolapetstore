@@ -68,28 +68,88 @@ export const VendaAvulsa: React.FC<VendaAvulsaProps> = ({ styles, currentUser })
   // State for delivery options
   const [deliveryObs, setDeliveryObs] = useState<string>('');
   
-  // Generate time options: from 2 hours ahead, every 5 mins, for the next 12 hours
-  const getTimeOptions = () => {
-    const options = [];
-    const d = new Date();
-    d.setHours(d.getHours() + 2);
-    
-    // Round to next 5 minutes
-    const remainder = d.getMinutes() % 5;
-    if (remainder !== 0) {
-      d.setMinutes(d.getMinutes() + (5 - remainder));
-    }
-    
-    for (let i = 0; i < 144; i++) { // 12 hours * 12 intervals
-      const h = d.getHours().toString().padStart(2, '0');
-      const m = d.getMinutes().toString().padStart(2, '0');
-      options.push(`${h}:${m}`);
-      d.setMinutes(d.getMinutes() + 5);
-    }
-    return options;
-  };
+  // Date and time selection states
+  const [deliveryDate, setDeliveryDate] = useState<string>('');
+  const [deliveryTime, setDeliveryTime] = useState<string>('');
   
-  const timeOptions = getTimeOptions();
+  // Generator for delivery slots (next 5 days, 09:00 to 18:00)
+  const generateDeliverySlots = () => {
+    const days = [];
+    const timesByDay: Record<string, string[]> = {};
+    
+    const WORK_START = 9;
+    const WORK_END = 18;
+    const MIN_HOURS_AHEAD = 2;
+    
+    const d = new Date();
+    
+    for (let i = 0; i < 5; i++) {
+      const loopDate = new Date(d);
+      loopDate.setDate(loopDate.getDate() + i);
+      
+      const dateStr = loopDate.toISOString().split('T')[0];
+      
+      let label = '';
+      if (i === 0) label = 'Hoje';
+      else if (i === 1) label = 'Amanhã';
+      else {
+        const weekdays = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+        const w = weekdays[loopDate.getDay()];
+        const day = loopDate.getDate().toString().padStart(2, '0');
+        const month = (loopDate.getMonth() + 1).toString().padStart(2, '0');
+        label = `${w}, ${day}/${month}`;
+      }
+      
+      let startHour = WORK_START;
+      let startMinute = 0;
+      
+      if (i === 0) {
+        const todayPlus2 = new Date();
+        todayPlus2.setHours(todayPlus2.getHours() + MIN_HOURS_AHEAD);
+        
+        const remainder = todayPlus2.getMinutes() % 5;
+        if (remainder !== 0) {
+          todayPlus2.setMinutes(todayPlus2.getMinutes() + (5 - remainder));
+        }
+        
+        if (todayPlus2.getHours() >= WORK_END && (todayPlus2.getHours() > WORK_END || todayPlus2.getMinutes() > 0)) {
+          continue; // Past working hours today, skip
+        }
+        
+        if (todayPlus2.getHours() > WORK_START || (todayPlus2.getHours() === WORK_START && todayPlus2.getMinutes() > 0)) {
+          startHour = todayPlus2.getHours();
+          startMinute = todayPlus2.getMinutes();
+        }
+      }
+      
+      days.push({ value: dateStr, label });
+      
+      const times = [];
+      const t = new Date(loopDate);
+      t.setHours(startHour, startMinute, 0, 0);
+      
+      const endT = new Date(loopDate);
+      endT.setHours(WORK_END, 0, 0, 0);
+      
+      while (t <= endT) {
+        const hStr = t.getHours().toString().padStart(2, '0');
+        const mStr = t.getMinutes().toString().padStart(2, '0');
+        times.push(`${hStr}:${mStr}`);
+        t.setMinutes(t.getMinutes() + 5);
+      }
+      
+      timesByDay[dateStr] = times;
+    }
+    
+    return { days, timesByDay };
+  };
+
+  const [deliverySlots, setDeliverySlots] = useState<{days: {value: string, label: string}[], timesByDay: Record<string, string[]>}>({days: [], timesByDay: {}});
+
+  useEffect(() => {
+    const slots = generateDeliverySlots();
+    setDeliverySlots(slots);
+  }, []);
 
   // Register on the fly States
   const [isRegisterOpen, setIsRegisterOpen] = useState<boolean>(false);
@@ -413,7 +473,7 @@ export const VendaAvulsa: React.FC<VendaAvulsaProps> = ({ styles, currentUser })
         reference: addressReference.trim(),
         lat: addressLat,
         lng: addressLng,
-        time: deliveryAsap ? 'O mais breve possível' : deliveryTime,
+        time: deliveryAsap ? 'O mais breve possível' : `${deliveryDate}|${deliveryTime}`,
         obs: deliveryObs.trim()
       } : null,
       type: deliveryType,
@@ -457,7 +517,11 @@ export const VendaAvulsa: React.FC<VendaAvulsaProps> = ({ styles, currentUser })
       // Create a DeliveryItem if it's a delivery
       if (deliveryType === 'delivery') {
         const fullAddress = `${addressStreet.trim()}, ${addressNumber.trim()} - ${addressNeighborhood.trim()}`;
-        const scheduledTime = deliveryAsap ? 'O mais breve possível' : deliveryTime;
+        let scheduledTime = 'O mais breve possível';
+        if (!deliveryAsap && deliveryDate && deliveryTime) {
+          const selectedDayLabel = deliverySlots.days.find(d => d.value === deliveryDate)?.label || deliveryDate;
+          scheduledTime = `${selectedDayLabel} às ${deliveryTime}`;
+        }
         
         const newDelivery = {
           id: `deliv-${saleId}`,
@@ -967,15 +1031,31 @@ export const VendaAvulsa: React.FC<VendaAvulsaProps> = ({ styles, currentUser })
                               O mais breve possível
                             </label>
                             <select
+                              value={deliveryDate}
+                              onChange={(e) => {
+                                setDeliveryDate(e.target.value);
+                                setDeliveryTime(''); // reset time when date changes
+                                if (e.target.value) setDeliveryAsap(false);
+                              }}
+                              style={{ ...styles.formInput, width: 'auto', fontSize: '0.8rem', padding: '4px 8px', marginBottom: 0 }}
+                            >
+                              <option value="">Selecione a Data...</option>
+                              {deliverySlots.days.map(day => (
+                                <option key={day.value} value={day.value}>{day.label}</option>
+                              ))}
+                            </select>
+
+                            <select
                               value={deliveryTime}
                               onChange={(e) => {
                                 setDeliveryTime(e.target.value);
                                 if (e.target.value) setDeliveryAsap(false);
                               }}
+                              disabled={!deliveryDate}
                               style={{ ...styles.formInput, width: 'auto', fontSize: '0.8rem', padding: '4px 8px', marginBottom: 0 }}
                             >
-                              <option value="">Selecione...</option>
-                              {timeOptions.map(time => (
+                              <option value="">Selecione a Hora...</option>
+                              {deliveryDate && deliverySlots.timesByDay[deliveryDate]?.map(time => (
                                 <option key={time} value={time}>{time}</option>
                               ))}
                             </select>
