@@ -68,13 +68,28 @@ export const VendaAvulsa: React.FC<VendaAvulsaProps> = ({ styles, currentUser })
   // State for delivery options
   const [deliveryObs, setDeliveryObs] = useState<string>('');
   
-  const getMinDeliveryTime = () => {
+  // Generate time options: from 2 hours ahead, every 5 mins, for the next 12 hours
+  const getTimeOptions = () => {
+    const options = [];
     const d = new Date();
     d.setHours(d.getHours() + 2);
-    const h = d.getHours().toString().padStart(2, '0');
-    const m = d.getMinutes().toString().padStart(2, '0');
-    return `${h}:${m}`;
+    
+    // Round to next 5 minutes
+    const remainder = d.getMinutes() % 5;
+    if (remainder !== 0) {
+      d.setMinutes(d.getMinutes() + (5 - remainder));
+    }
+    
+    for (let i = 0; i < 144; i++) { // 12 hours * 12 intervals
+      const h = d.getHours().toString().padStart(2, '0');
+      const m = d.getMinutes().toString().padStart(2, '0');
+      options.push(`${h}:${m}`);
+      d.setMinutes(d.getMinutes() + 5);
+    }
+    return options;
   };
+  
+  const timeOptions = getTimeOptions();
 
   // Register on the fly States
   const [isRegisterOpen, setIsRegisterOpen] = useState<boolean>(false);
@@ -951,17 +966,19 @@ export const VendaAvulsa: React.FC<VendaAvulsaProps> = ({ styles, currentUser })
                               />
                               O mais breve possível
                             </label>
-                            <input
-                              type="time"
-                              step="300"
-                              min={getMinDeliveryTime()}
+                            <select
                               value={deliveryTime}
                               onChange={(e) => {
                                 setDeliveryTime(e.target.value);
                                 if (e.target.value) setDeliveryAsap(false);
                               }}
                               style={{ ...styles.formInput, width: 'auto', fontSize: '0.8rem', padding: '4px 8px', marginBottom: 0 }}
-                            />
+                            >
+                              <option value="">Selecione...</option>
+                              {timeOptions.map(time => (
+                                <option key={time} value={time}>{time}</option>
+                              ))}
+                            </select>
                           </div>
                           
                           <div style={{ marginTop: '12px' }}>
