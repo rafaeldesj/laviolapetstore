@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Users, Shield, UserCheck, UserX, Trash2, Search, Edit, Phone, Save, X, ChevronDown, PlusCircle, Key } from 'lucide-react';
+import { Users, Shield, UserCheck, UserX, Trash2, Search, Edit, Phone, Save, X, ChevronDown, PlusCircle, Key, Eye, EyeOff } from 'lucide-react';
 import type { UserProfile, UserRole } from '../../supabaseClient';
 import { supabase, roleLabels, canManage, roleHierarchy, isSupabaseConfigured, logAction } from '../../supabaseClient';
 import { db, secondaryAuth, isFirebaseConfigured } from '../../firebaseClient';
@@ -34,6 +34,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
   const [resetPasswordUser, setResetPasswordUser] = useState<UserProfile | null>(null);
   const [resetPasswordVal, setResetPasswordVal] = useState<string>('');
   const [isResetting, setIsResetting] = useState<boolean>(false);
+  const [showResetPassword, setShowResetPassword] = useState<boolean>(false);
 
   // Inline edit form state
   const [editFullName, setEditFullName] = useState<string>('');
@@ -388,7 +389,11 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
     setErrorMsg(null);
 
     try {
-      if (false && supabase) {
+      if (isFirebaseConfigured) {
+        alert("Atenção: No Firebase, por motivos de segurança, não é possível redefinir a senha de outro usuário diretamente pelo frontend.\n\nPara fazer isso manualmente, seria necessário configurar um servidor Backend (Cloud Functions). A alternativa padrão do Firebase é enviar um 'E-mail de Recuperação' para o usuário.\n\nFale com o desenvolvedor (eu) no chat para decidirmos qual caminho seguir!");
+        setIsResetting(false);
+        return;
+      } else if (false && supabase) {
         if (resetPasswordUser.id === currentUser.id) {
           const { error } = await supabase.auth.updateUser({ password: resetPasswordVal });
           if (error) throw error;
@@ -1069,16 +1074,29 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
 
               <div style={styles.formGroup}>
                 <label htmlFor="reset-new-password" style={styles.formLabel}>Nova Senha *</label>
-                <input
-                  id="reset-new-password"
-                  type="password"
-                  placeholder="Mínimo 6 caracteres"
-                  value={resetPasswordVal}
-                  onChange={(e) => setResetPasswordVal(e.target.value)}
-                  style={styles.formInput}
-                  required
-                  autoFocus
-                />
+                <div style={{ position: 'relative' }}>
+                  <input
+                    id="reset-new-password"
+                    type={showResetPassword ? "text" : "password"}
+                    placeholder="Mínimo 6 caracteres"
+                    value={resetPasswordVal}
+                    onChange={(e) => setResetPasswordVal(e.target.value)}
+                    style={{ ...styles.formInput, width: '100%', paddingRight: '40px' }}
+                    required
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowResetPassword(!showResetPassword)}
+                    style={{
+                      position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)',
+                      background: 'none', border: 'none', cursor: 'pointer', color: styles.sidebarWidgetText?.color,
+                      padding: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center'
+                    }}
+                  >
+                    {showResetPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
               </div>
 
               <div style={styles.modalActions}>
