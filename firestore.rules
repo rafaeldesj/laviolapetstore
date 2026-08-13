@@ -29,7 +29,7 @@ service cloud.firestore {
     // ---- PERFIS ----
     // Usuário vê e edita apenas o próprio perfil; staff vê todos
     match /profiles/{userId} {
-      allow read: if isAuth() && (request.auth.uid == userId || isStaff());
+      allow read: if isAuth() && (request.auth.uid == userId || isStaff() || request.auth.token.email == resource.data.email);
       allow write: if isAuth() && (request.auth.uid == userId || isStaff());
     }
 
