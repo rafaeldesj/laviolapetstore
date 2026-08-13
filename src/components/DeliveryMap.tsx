@@ -742,11 +742,11 @@ export const DeliveryMap = ({ onAddressSelect, initialAddress, leftContent }: De
           title="Usar minha localização atual"
           style={{
             position: 'absolute',
-            bottom: '120px',
+            bottom: '100px',
             right: '10px',
             zIndex: 400,
-            width: '36px',
-            height: '36px',
+            width: '26px',
+            height: '26px',
             backgroundColor: '#ffffff',
             display: 'flex',
             alignItems: 'center',
@@ -759,9 +759,9 @@ export const DeliveryMap = ({ onAddressSelect, initialAddress, leftContent }: De
           }}
         >
           {isLocating ? (
-            <span className="spinner" style={{ width: '16px', height: '16px', borderWidth: '3px', borderColor: '#1372da', borderTopColor: 'transparent' }} />
+            <span className="spinner" style={{ width: '12px', height: '12px', borderWidth: '2px', borderColor: '#1372da', borderTopColor: 'transparent' }} />
           ) : (
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1372da" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1372da" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="9" opacity="0.4"/>
             </svg>
           )}
