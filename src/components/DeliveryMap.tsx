@@ -743,7 +743,7 @@ export const DeliveryMap = ({ onAddressSelect, initialAddress, leftContent }: De
             title="Usar minha localização atual"
             style={{
               position: 'absolute',
-              bottom: '75px', // Acima do botão +/- do Leaflet (que fica em ~20px bottomright)
+              bottom: '90px', // Acima do botão +/- do Leaflet (que fica em ~20px bottomright) com um pequeno respiro
               right: '10px',
               zIndex: 400,
               width: '30px',
