@@ -935,6 +935,7 @@ export const VendaAvulsa: React.FC<VendaAvulsaProps> = ({ styles, currentUser })
                             </label>
                             <input
                               type="time"
+                              step="300"
                               value={deliveryTime}
                               onChange={(e) => {
                                 setDeliveryTime(e.target.value);
