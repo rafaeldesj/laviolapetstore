@@ -60,7 +60,7 @@ service cloud.firestore {
     // Apenas staff lê; escrita só via Admin SDK
     match /audit_logs/{logId} {
       allow read: if isStaff();
-      allow write: if isStaff();
+      allow write: if isAuth(); // Permitido para que o logAction via client SDK funcione
     }
 
     // ---- PRONTUÁRIOS VETERINÁRIOS ----
