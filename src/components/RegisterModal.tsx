@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
 import { X, UserPlus, Eye, EyeOff } from 'lucide-react';
-import { supabase, isSupabaseConfigured, logAction } from '../supabaseClient';
+import { logAction } from '../supabaseClient';
+import { auth, db, isFirebaseConfigured } from '../firebaseClient';
+import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
+import { doc, setDoc } from 'firebase/firestore';
 import type { AuthUser } from '../hooks/useAuth';
 
 interface RegisterModalProps {
@@ -49,60 +52,49 @@ export const RegisterModal: React.FC<RegisterModalProps> = ({
 
     setIsLoading(true);
     try {
-      if (isSupabaseConfigured && supabase) {
-        const { data, error } = await supabase.auth.signUp({
-          email: email.trim(),
-          password,
-          options: {
-            data: {
-              full_name: fullName.trim(),
-              username: username.trim(),
-              phone: phone.trim(),
-            },
-          },
-        });
-        if (error) throw error;
+      if (isFirebaseConfigured && auth && db) {
+        const userCredential = await createUserWithEmailAndPassword(auth, email.trim(), password);
+        const user = userCredential.user;
+        
+        await updateProfile(user, { displayName: fullName.trim() });
+        
+        const timestamp = new Date().toISOString();
+        const profileData = {
+          id: user.uid,
+          email: user.email,
+          full_name: fullName.trim(),
+          username: username.trim(),
+          phone: phone.trim(),
+          role: 'client',
+          is_active: true,
+          created_at: timestamp,
+          collaborator_category_id: null
+        };
+        
+        await setDoc(doc(db, 'profiles', user.uid), profileData);
 
-        // Garantir que o perfil seja criado como 'client'
-        if (data.user) {
-          await supabase
-            .from('profiles')
-            .update({ role: 'client' })
-            .eq('id', data.user.id);
+        const registeredUser: AuthUser = {
+          id: user.uid,
+          email: user.email || email,
+          name: fullName.trim(),
+          profile: profileData as any,
+        };
+
+        if (registeredUser.profile?.role !== 'developer') {
+          await logAction(
+            registeredUser.email,
+            registeredUser.name,
+            'Login',
+            `O usuário "${registeredUser.name}" entrou no sistema (cadastro realizado).`
+          );
         }
 
-        if (data.session && data.user) {
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('*, collaborator_category:collaborator_categories(id, name, description, is_active)')
-            .eq('id', data.user.id)
-            .single();
-
-          const registeredUser = {
-            id: data.user.id,
-            email: data.user.email || email,
-            name: profile?.full_name || fullName,
-            profile: profile || null,
-          };
-
-          if (registeredUser.profile?.role !== 'developer') {
-            await logAction(
-              registeredUser.email,
-              registeredUser.name,
-              'Login',
-              `O usuário "${registeredUser.name}" entrou no sistema (cadastro realizado).`
-            );
-          }
-
-          onRegisterSuccess(registeredUser);
-          onClose();
-        } else {
-          setErrorMsg('Conta criada! Verifique seu e-mail para confirmar e depois faça login.');
-          setTimeout(() => { onGoLogin(); }, 3000);
-        }
+        onRegisterSuccess(registeredUser);
+        onClose();
       } else {
-        // Modo mock (sem Supabase)
+        // Fallback for mock local usage
         const newId = Math.random().toString(36).substring(2, 9);
+        const users = JSON.parse(localStorage.getItem('laviola_mock_users') || '[]');
         const newProfile = {
           id: newId,
           email: email.trim(),

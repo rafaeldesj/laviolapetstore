@@ -2,6 +2,9 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Users, Shield, UserCheck, UserX, Trash2, Search, Edit, Phone, Save, X, ChevronDown, PlusCircle, Key } from 'lucide-react';
 import type { UserProfile, UserRole } from '../../supabaseClient';
 import { supabase, roleLabels, canManage, roleHierarchy, isSupabaseConfigured, logAction } from '../../supabaseClient';
+import { db, secondaryAuth, isFirebaseConfigured } from '../../firebaseClient';
+import { collection, getDocs, doc, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
 import { PermissionsPanel } from './PermissionsPanel';
 import type { AuthUser } from '../../hooks/useAuth';
 
@@ -76,18 +79,18 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
     setIsLoading(true);
     setErrorMsg(null);
     try {
-      if (!supabase) {
+      if (!isFirebaseConfigured || !db) {
         const mockUsers = JSON.parse(localStorage.getItem('laviola_mock_users') || '[]');
         const profiles = mockUsers.map((u: any) => u.profile).filter(Boolean);
         setUsers(profiles);
       } else {
-        const { data, error } = await supabase
-          .from('profiles')
-          .select(`*, collaborator_category:collaborator_categories(id, name, description, is_active)`)
-          .order('role')
-          .order('full_name');
-        if (error) throw error;
-        setUsers(data || []);
+        const snap = await getDocs(collection(db, 'profiles'));
+        let firestoreUsers = [];
+        snap.forEach(docSnap => {
+          firestoreUsers.push(docSnap.data());
+        });
+        firestoreUsers.sort((a, b) => (a.full_name || '').localeCompare(b.full_name || ''));
+        setUsers(firestoreUsers);
         // Load categories from Supabase
         const { data: cats } = await supabase
           .from('collaborator_categories')
@@ -115,7 +118,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
       return;
     }
     try {
-      if (!supabase) {
+      if (!isFirebaseConfigured || !db) {
         const mockUsers = JSON.parse(localStorage.getItem('laviola_mock_users') || '[]');
         const idx = mockUsers.findIndex((u: any) => u.id === user.id);
         if (idx !== -1 && mockUsers[idx].profile) {
@@ -123,8 +126,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
           localStorage.setItem('laviola_mock_users', JSON.stringify(mockUsers));
         }
       } else {
-        const { error } = await supabase.from('profiles').update({ is_active: !user.is_active }).eq('id', user.id);
-        if (error) throw error;
+        await updateDoc(doc(db, 'profiles', user.id), { is_active: !user.is_active });
       }
       await logAction(
         currentUser.email || '',
@@ -151,13 +153,12 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
     const user = deleteTarget;
     setDeleteTarget(null);
     try {
-      if (!supabase) {
+      if (!isFirebaseConfigured || !db) {
         const mockUsers = JSON.parse(localStorage.getItem('laviola_mock_users') || '[]');
         const filtered = mockUsers.filter((u: any) => u.id !== user.id);
         localStorage.setItem('laviola_mock_users', JSON.stringify(filtered));
       } else {
-        const { error } = await supabase.from('profiles').delete().eq('id', user.id);
-        if (error) throw error;
+        await deleteDoc(doc(db, 'profiles', user.id));
       }
       await logAction(
         currentUser.email || '',
@@ -202,7 +203,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
       role: editRole,
     };
     try {
-      if (!supabase) {
+      if (!isFirebaseConfigured || !db) {
         const mockUsers = JSON.parse(localStorage.getItem('laviola_mock_users') || '[]');
         const idx = mockUsers.findIndex((u: any) => u.id === user.id);
         if (idx !== -1) {
@@ -252,8 +253,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
           }
         }
         updatedData.collaborator_category_id = categoryId;
-        const { error } = await supabase.from('profiles').update(updatedData).eq('id', user.id);
-        if (error) throw error;
+        await updateDoc(doc(db, 'profiles', user.id), updatedData);
       }
       await logAction(
         currentUser.email || '',
@@ -285,35 +285,12 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
     }
 
     try {
-      if (false && supabase) {
-        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
-        const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
-
-        const { createClient } = await import('@supabase/supabase-js');
-        const tempClient = createClient(supabaseUrl, supabaseAnonKey, {
-          auth: {
-            persistSession: false,
-            autoRefreshToken: false,
-            detectSessionInUrl: false
-          }
-        });
-
-        const { data, error: signUpError } = await tempClient.auth.signUp({
-          email: newEmail.trim(),
-          password: newPassword,
-          options: {
-            data: {
-              full_name: newFullName.trim(),
-              username: newUsername.trim(),
-              phone: newPhone.trim(),
-            },
-          },
-        });
-
-        if (signUpError) throw signUpError;
-
-        // Resolve specialty category ID if collaborator
-        let categoryId: string | null = null;
+      if (isFirebaseConfigured && secondaryAuth && db) {
+        const userCredential = await createUserWithEmailAndPassword(secondaryAuth, newEmail.trim(), newPassword);
+        const user = userCredential.user;
+        await updateProfile(user, { displayName: newFullName.trim() });
+        
+        let categoryId = null;
         if (newRole === 'collaborator' && newSpecialty.trim()) {
           const specialtyName = newSpecialty.trim();
           const { data: existingCat } = await supabase
@@ -333,16 +310,18 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
           }
         }
 
-        if (data.user) {
-          const updateData: any = { role: newRole };
-          updateData.collaborator_category_id = newRole === 'collaborator' ? categoryId : null;
-          const { error: updateError } = await supabase
-            .from('profiles')
-            .update(updateData)
-            .eq('id', data.user.id);
-          if (updateError) console.error('Erro ao atualizar cargo/especialidade:', updateError);
-        }
-
+        const profileData = {
+          id: user.uid,
+          email: user.email,
+          full_name: newFullName.trim(),
+          username: newUsername.trim(),
+          phone: newPhone.trim(),
+          role: newRole,
+          collaborator_category_id: newRole === 'collaborator' ? categoryId : null,
+          is_active: true,
+          created_at: new Date().toISOString()
+        };
+        await setDoc(doc(db, 'profiles', user.uid), profileData);
       } else {
         const mockUsers = JSON.parse(localStorage.getItem('laviola_mock_users') || '[]');
         const newId = Math.random().toString(36).substring(2, 9);
