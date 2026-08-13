@@ -99,7 +99,6 @@ export const Navigation: React.FC<NavigationProps> = ({ styles, activeSection, s
           onMouseLeave={() => setHoveredLink(null)}
           style={{
             ...styles.navLink(isActive, isHovered),
-            background: (isActive || isHovered) ? 'rgba(255, 255, 255, 0.15)' : 'transparent',
             border: 'none',
             textAlign: 'left',
             cursor: 'pointer',

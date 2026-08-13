@@ -58,6 +58,28 @@ table {
   cursor: not-allowed;
 }
 
+/* ---------- Efeito Global para TODOS os Botões ---------- */
+button {
+  transition: all 0.2s ease;
+}
+
+button:not(:disabled):not(.no-global-hover):hover {
+  transform: scale(1.03) !important;
+  filter: brightness(1.1) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+}
+
+button:not(:disabled):not(.no-global-hover):active {
+  transform: scale(0.97) !important;
+  filter: brightness(0.85) !important;
+  box-shadow: inset 0 4px 8px rgba(0, 0, 0, 0.2) !important;
+}
+
+button:not(:disabled):not(.no-global-hover):focus {
+  outline: none;
+  box-shadow: 0 0 0 3px hsla(210, 85%, 45%, 0.4) !important;
+}
+
 /* ---------- Pequenos Botões de Ação (Icon Buttons) ---------- */
 .btn-action-icon {
   display: flex !important;
@@ -88,5 +110,223 @@ table {
 .btn-action-success {
   background-color: hsla(142, 60%, 45%, 0.1) !important;
   color: hsl(142, 60%, 45%) !important;
+}
+
+
+/* ==========================================================================
+   DELIVERY MAP COMPONENT
+   ========================================================================== */
+
+@keyframes pulse-ring {
+  0%   { transform: translate(-50%, -50%) scale(0.8); opacity: 0.8; }
+  70%  { transform: translate(-50%, -50%) scale(2.5); opacity: 0; }
+  100% { transform: translate(-50%, -50%) scale(2.5); opacity: 0; }
+}
+
+.delivery-map-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  width: 100%;
+}
+
+.map-search-bar {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  align-items: stretch;
+}
+
+.map-search-input-wrapper {
+  position: relative;
+  flex: 1;
+  display: flex;
+  align-items: center;
+}
+
+.map-search-icon {
+  position: absolute;
+  left: 10px;
+  color: var(--text-secondary, #64748b);
+  pointer-events: none;
+  flex-shrink: 0;
+}
+
+.map-search-input {
+  width: 100%;
+  padding: 0.65rem 2.25rem 0.65rem 2.25rem;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  color: inherit;
+  font-family: inherit;
+  font-size: 0.9rem;
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.map-search-input:focus {
+  border-color: hsl(210, 85%, 45%);
+  box-shadow: 0 0 0 2px rgba(19, 114, 218, 0.12);
+}
+
+.map-search-spinner {
+  position: absolute;
+  right: 10px;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  border-top-color: hsl(210, 85%, 45%);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.map-search-clear {
+  position: absolute;
+  right: 8px;
+  background: none;
+  border: none;
+  color: var(--text-secondary, #64748b);
+  cursor: pointer;
+  font-size: 0.8rem;
+  line-height: 1;
+  padding: 2px 4px;
+  border-radius: 4px;
+  transition: color 0.15s;
+}
+
+.map-search-clear:hover {
+  color: inherit;
+}
+
+.map-locate-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.6rem 0.9rem;
+  background: rgba(19, 114, 218, 0.1);
+  border: 1px solid rgba(19, 114, 218, 0.25);
+  border-radius: 10px;
+  color: hsl(210, 85%, 45%);
+  font-family: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.map-locate-btn:hover:not(:disabled) {
+  background: rgba(19, 114, 218, 0.18);
+  border-color: rgba(19, 114, 218, 0.4);
+  transform: translateY(-1px);
+}
+
+.map-locate-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.map-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 12px;
+  overflow: hidden;
+  z-index: 9999;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.map-dropdown-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  width: 100%;
+  padding: 0.7rem 1rem;
+  background: none;
+  border: none;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.04);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s;
+}
+
+.map-dropdown-item:last-child {
+  border-bottom: none;
+}
+
+.map-dropdown-item:hover {
+  background: rgba(19, 114, 218, 0.06);
+}
+
+.delivery-map-container {
+  width: 100%;
+  height: 240px;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.1);
+  z-index: 0;
+}
+
+.map-popup .leaflet-popup-content-wrapper {
+  background: #ffffff;
+  color: #333333;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 10px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+}
+
+.map-popup .leaflet-popup-tip {
+  background: #ffffff;
+}
+
+.map-selected-address {
+  background: rgba(19, 114, 218, 0.06);
+  border: 1px solid rgba(19, 114, 218, 0.18);
+  border-radius: 12px;
+  padding: 0.9rem 1rem;
+}
+
+.map-selected-address-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.map-selected-address-info p {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.map-hint-banner {
+  font-size: 0.82rem;
+  color: var(--text-secondary, #64748b);
+  text-align: center;
+  padding: 0.5rem;
+}
+
+.map-error-banner {
+  font-size: 0.82rem;
+  color: #fca5a5;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+  text-align: center;
 }
 

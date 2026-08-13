@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   ShoppingCart, Search, PlusCircle, Trash2, Barcode, DollarSign, 
-  CheckCircle, CreditCard, AlertTriangle, ArrowRight, User, Hash, Plus, Minus
+  CheckCircle, CreditCard, AlertTriangle, ArrowRight, User, Hash, Plus, Minus,
+  Store, Truck
 } from 'lucide-react';
 import { supabase, mockSupabaseDb, isSupabaseConfigured, logAction } from '../supabaseClient';
 import type { Product } from '../supabaseClient';
 import type { AuthUser } from '../hooks/useAuth';
+import { DeliveryMap, type MapAddress } from './DeliveryMap';
 
 interface VendaAvulsaProps {
   styles: any;
@@ -43,6 +45,19 @@ export const VendaAvulsa: React.FC<VendaAvulsaProps> = ({ styles, currentUser })
   const [clientCPF, setClientCPF] = useState<string>('');
   const [checkoutSuccess, setCheckoutSuccess] = useState<boolean>(false);
   const [lastSaleSummary, setLastSaleSummary] = useState<any>(null);
+  const [deliveryType, setDeliveryType] = useState<'store' | 'delivery' | null>(null);
+  const [hoveredType, setHoveredType] = useState<'store' | 'delivery' | null>(null);
+  const [addressStreet, setAddressStreet] = useState<string>('');
+  const [addressNumber, setAddressNumber] = useState<string>('');
+  const [addressNeighborhood, setAddressNeighborhood] = useState<string>('');
+  const [addressReference, setAddressReference] = useState<string>('');
+
+  const handleMapAddressSelect = (addr: MapAddress) => {
+    setAddressStreet(addr.street);
+    setAddressNumber(addr.number || '');
+    setAddressNeighborhood(addr.neighborhood);
+    setAddressReference(addr.complement || '');
+  };
 
   // Register on the fly States
   const [isRegisterOpen, setIsRegisterOpen] = useState<boolean>(false);
@@ -322,6 +337,11 @@ export const VendaAvulsa: React.FC<VendaAvulsaProps> = ({ styles, currentUser })
     setAmountPaid('');
     setClientName('');
     setClientCPF('');
+    setDeliveryType(null);
+    setAddressStreet('');
+    setAddressNumber('');
+    setAddressNeighborhood('');
+    setAddressReference('');
     setIsCheckoutOpen(true);
   };
 
@@ -354,6 +374,13 @@ export const VendaAvulsa: React.FC<VendaAvulsaProps> = ({ styles, currentUser })
         name: clientName.trim(),
         cpf_cnpj: clientCPF.replace(/\D/g, '') // remove non-digits
       },
+      delivery: deliveryType === 'delivery' ? {
+        street: addressStreet.trim(),
+        number: addressNumber.trim(),
+        neighborhood: addressNeighborhood.trim(),
+        reference: addressReference.trim(),
+      } : null,
+      type: deliveryType,
       nfe_ready: true // Flag to state this sale has all necessary NF-e info prefilled
     };
 
@@ -747,7 +774,7 @@ export const VendaAvulsa: React.FC<VendaAvulsaProps> = ({ styles, currentUser })
       {/* MODAL: CHECKOUT & COBRANÇA */}
       {isCheckoutOpen && (
         <div style={styles.modalOverlay}>
-          <div style={{ ...styles.modalContent, maxWidth: '500px' }} role="dialog" aria-modal="true" aria-labelledby="checkout-title">
+          <div style={{ ...styles.modalContent, maxWidth: deliveryType === 'delivery' ? '900px' : '500px', transition: 'max-width 0.3s ease' }} role="dialog" aria-modal="true" aria-labelledby="checkout-title">
             <div style={styles.modalHeader}>
               <h2 id="checkout-title" style={styles.modalTitle}>
                 <DollarSign size={20} style={{ display: 'inline', marginRight: '6px', color: styles.primary }} />
@@ -761,6 +788,100 @@ export const VendaAvulsa: React.FC<VendaAvulsaProps> = ({ styles, currentUser })
                 <span style={{ fontWeight: 600, color: styles.textMain }}>Total da Venda:</span>
                 <strong style={{ fontSize: '1.2rem', color: styles.primary, fontFamily: 'monospace' }}>R$ {subtotal.toFixed(2)}</strong>
               </div>
+
+              {/* Delivery or Store Selection */}
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ ...styles.formLabel, display: 'block', marginBottom: '8px' }}>Tipo de Venda *</label>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setDeliveryType('store')}
+                    onMouseEnter={() => setHoveredType('store')}
+                    onMouseLeave={() => setHoveredType(null)}
+                    style={{
+                      padding: '12px 10px', borderRadius: '8px', border: '2px solid',
+                      borderColor: deliveryType === 'store' ? styles.primary : (hoveredType === 'store' ? styles.primary : styles.borderColor),
+                      backgroundColor: deliveryType === 'store' ? (styles.isDark ? '#334155' : '#e2e8f0') : (hoveredType === 'store' ? (styles.isDark ? '#1e293b' : '#f8fafc') : 'transparent'),
+                      color: deliveryType === 'store' ? styles.primary : styles.textMain,
+                      cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '8px',
+                      fontSize: '0.9rem', fontWeight: deliveryType === 'store' ? 800 : (hoveredType === 'store' ? 700 : 600), transition: 'all 0.2s ease',
+                      boxShadow: deliveryType === 'store' ? `0 0 0 1px ${styles.primary}` : 'none',
+                      transform: deliveryType === 'store' ? 'scale(1.03)' : (hoveredType === 'store' ? 'scale(1.01)' : 'scale(1)')
+                    }}
+                  >
+                    <Store size={24} />
+                    Na loja (Retirada)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDeliveryType('delivery')}
+                    onMouseEnter={() => setHoveredType('delivery')}
+                    onMouseLeave={() => setHoveredType(null)}
+                    style={{
+                      padding: '12px 10px', borderRadius: '8px', border: '2px solid',
+                      borderColor: deliveryType === 'delivery' ? styles.primary : (hoveredType === 'delivery' ? styles.primary : styles.borderColor),
+                      backgroundColor: deliveryType === 'delivery' ? (styles.isDark ? '#334155' : '#e2e8f0') : (hoveredType === 'delivery' ? (styles.isDark ? '#1e293b' : '#f8fafc') : 'transparent'),
+                      color: deliveryType === 'delivery' ? styles.primary : styles.textMain,
+                      cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '8px',
+                      fontSize: '0.9rem', fontWeight: deliveryType === 'delivery' ? 800 : (hoveredType === 'delivery' ? 700 : 600), transition: 'all 0.2s ease',
+                      boxShadow: deliveryType === 'delivery' ? `0 0 0 1px ${styles.primary}` : 'none',
+                      transform: deliveryType === 'delivery' ? 'scale(1.03)' : (hoveredType === 'delivery' ? 'scale(1.01)' : 'scale(1)')
+                    }}
+                  >
+                    <Truck size={24} />
+                    Entrega (Delivery)
+                  </button>
+                </div>
+              </div>
+
+              {/* Delivery Address Fields & Map */}
+              {deliveryType === 'delivery' && (
+                <div style={{ border: `1px solid ${styles.borderColor}`, borderRadius: '10px', padding: '12px', marginBottom: '16px' }}>
+                  <span style={{ display: 'block', fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: styles.sidebarWidgetText?.color, marginBottom: '8px' }}>
+                    Endereço de Entrega *
+                  </span>
+                  
+                  <DeliveryMap 
+                    onAddressSelect={handleMapAddressSelect} 
+                    leftContent={
+                      <>
+                        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '10px', marginTop: '4px' }}>
+                          <input
+                            type="text"
+                            placeholder="Rua/Avenida *"
+                            value={addressStreet}
+                            onChange={(e) => setAddressStreet(e.target.value)}
+                            style={{ ...styles.formInput, width: '100%', fontSize: '0.8rem', padding: '6px 8px', marginBottom: 0 }}
+                          />
+                          <input
+                            type="text"
+                            placeholder="Número *"
+                            value={addressNumber}
+                            onChange={(e) => setAddressNumber(e.target.value)}
+                            style={{ ...styles.formInput, width: '100%', fontSize: '0.8rem', padding: '6px 8px', marginBottom: 0 }}
+                          />
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginTop: '10px' }}>
+                          <input
+                            type="text"
+                            placeholder="Bairro *"
+                            value={addressNeighborhood}
+                            onChange={(e) => setAddressNeighborhood(e.target.value)}
+                            style={{ ...styles.formInput, width: '100%', fontSize: '0.8rem', padding: '6px 8px', marginBottom: 0 }}
+                          />
+                          <input
+                            type="text"
+                            placeholder="Ponto de Referência"
+                            value={addressReference}
+                            onChange={(e) => setAddressReference(e.target.value)}
+                            style={{ ...styles.formInput, width: '100%', fontSize: '0.8rem', padding: '6px 8px', marginBottom: 0 }}
+                          />
+                        </div>
+                      </>
+                    }
+                  />
+                </div>
+              )}
 
               {/* Client Info Section (NF-e Ready) */}
               <div style={{ border: `1px solid ${styles.borderColor}`, borderRadius: '10px', padding: '12px', marginBottom: '16px' }}>
@@ -807,10 +928,11 @@ export const VendaAvulsa: React.FC<VendaAvulsaProps> = ({ styles, currentUser })
                       style={{
                         padding: '10px', borderRadius: '8px', border: '1px solid',
                         borderColor: paymentMethod === method.id ? styles.primary : styles.borderColor,
-                        backgroundColor: paymentMethod === method.id ? `${styles.primary}12` : 'transparent',
+                        backgroundColor: paymentMethod === method.id ? (styles.isDark ? '#334155' : '#e2e8f0') : 'transparent',
                         color: paymentMethod === method.id ? styles.primary : styles.textMain,
                         cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
-                        fontSize: '0.85rem', fontWeight: 600, transition: 'all 0.15s'
+                        fontSize: '0.85rem', fontWeight: paymentMethod === method.id ? 700 : 600, transition: 'all 0.15s',
+                        boxShadow: paymentMethod === method.id ? `0 0 0 1px ${styles.primary}` : 'none'
                       }}
                     >
                       {method.icon}
@@ -869,7 +991,12 @@ export const VendaAvulsa: React.FC<VendaAvulsaProps> = ({ styles, currentUser })
                 <button
                   type="button"
                   onClick={handleFinalizeSale}
-                  disabled={isLoading || (paymentMethod === 'Dinheiro' && amountPaid !== '' && parseFloat(amountPaid) < subtotal)}
+                  disabled={
+                    isLoading || 
+                    !deliveryType || 
+                    (deliveryType === 'delivery' && (!addressStreet.trim() || !addressNumber.trim() || !addressNeighborhood.trim())) ||
+                    (paymentMethod === 'Dinheiro' && amountPaid !== '' && parseFloat(amountPaid) < subtotal)
+                  }
                   className="btn-save"
                   style={{
                     padding: '10px 20px', borderRadius: '8px', border: 'none',

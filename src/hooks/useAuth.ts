@@ -10,6 +10,8 @@ export interface AuthUser {
   email: string;
   name: string;
   profile: UserProfile | null;
+  displayName?: string;
+  uid?: string;
 }
 
 export const useAuth = () => {

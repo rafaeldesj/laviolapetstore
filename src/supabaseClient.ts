@@ -35,6 +35,13 @@ export interface UserProfile {
   collaborator_category?: CollaboratorCategory;
   is_active: boolean;
   created_at: string;
+  clientAddress?: any;
+  name?: string;
+  pagbank_card_token?: string;
+  pagbank_card_brand?: string;
+  pagbank_card_last_digits?: string;
+  phoneNumber?: string;
+  cpf?: string;
 }
 
 export interface PermissionKey {

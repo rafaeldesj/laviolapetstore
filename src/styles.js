@@ -147,8 +147,19 @@ export const getStyles = (highContrast, fontSize, isDesktop, windowWidth) => {
       width: '100%',
       backgroundColor: (highContrast && isHovered)
         ? '#ffff00'
-        : ((isActive || isHovered) ? 'rgba(255, 255, 255, 0.15)' : 'transparent'),
-      transform: (isActive || isHovered) ? (isDesktop ? 'translateX(4px)' : 'translateY(-1px)') : 'none'
+        : isActive 
+          ? 'rgba(255, 255, 255, 0.3)' 
+          : isHovered 
+            ? 'rgba(255, 255, 255, 0.1)' 
+            : 'transparent',
+      transform: isActive 
+        ? (isDesktop ? 'translateX(8px) scale(1.02)' : 'translateY(-2px) scale(1.02)') 
+        : isHovered 
+          ? (isDesktop ? 'translateX(4px)' : 'translateY(-1px)') 
+          : 'none',
+      boxShadow: isActive ? '0 4px 12px rgba(0,0,0,0.15)' : 'none',
+      fontWeight: isActive ? 800 : 600,
+      borderLeft: isActive && isDesktop ? '4px solid #ffffff' : '4px solid transparent'
     }),
     mainContent: {
       display: 'flex',
@@ -441,6 +452,8 @@ export const getStyles = (highContrast, fontSize, isDesktop, windowWidth) => {
       padding: '30px',
       width: '100%',
       maxWidth: '400px',
+      maxHeight: '90vh',
+      overflowY: 'auto',
       boxShadow: shadowLg,
       display: 'flex',
       flexDirection: 'column',
