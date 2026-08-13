@@ -687,25 +687,6 @@ export const DeliveryMap = ({ onAddressSelect, initialAddress, leftContent }: De
             )}
           </div>
 
-          {/* Locate Me button */}
-          <button
-            type="button"
-            className="map-locate-btn"
-            onClick={handleLocateMe}
-            disabled={isLocating}
-            title="Usar minha localização atual"
-          >
-            {isLocating ? (
-              <span className="spinner" style={{ position: 'relative', right: 0, width: '12px', height: '12px', borderWidth: '2px' }} />
-            ) : (
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>
-                <circle cx="12" cy="12" r="9" opacity="0.3"/>
-              </svg>
-            )}
-            <span>{isLocating ? 'Localizando...' : 'Usar minha localização'}</span>
-          </button>
-
           {/* Search results dropdown */}
           {showDropdown && searchResults.length > 0 && (
             <div className="map-dropdown">
@@ -752,6 +733,39 @@ export const DeliveryMap = ({ onAddressSelect, initialAddress, leftContent }: De
       <div style={{ display: 'flex', flexDirection: 'column', position: 'relative' }}>
         {/* Map container */}
         <div ref={mapContainerRef} className="delivery-map-container" />
+
+        {/* Usar Minha Localização (Overlay Icon) */}
+        <button
+          type="button"
+          onClick={handleLocateMe}
+          disabled={isLocating}
+          title="Usar minha localização atual"
+          style={{
+            position: 'absolute',
+            bottom: '90px',
+            right: '10px',
+            zIndex: 400,
+            width: '34px',
+            height: '34px',
+            backgroundColor: '#fff',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: isLocating ? 'wait' : 'pointer',
+            border: '2px solid rgba(0,0,0,0.2)',
+            borderRadius: '4px',
+            padding: 0,
+            boxShadow: '0 1px 5px rgba(0,0,0,0.65)'
+          }}
+        >
+          {isLocating ? (
+            <span className="spinner" style={{ width: '14px', height: '14px', borderWidth: '2px', borderColor: '#333', borderTopColor: 'transparent' }} />
+          ) : (
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#333" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="9" opacity="0.3"/>
+            </svg>
+          )}
+        </button>
 
         {/* Location error */}
         {locationError && (
