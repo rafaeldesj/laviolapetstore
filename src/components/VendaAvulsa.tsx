@@ -1016,8 +1016,8 @@ export const VendaAvulsa: React.FC<VendaAvulsaProps> = ({ styles, currentUser })
                           <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, marginBottom: '8px', color: styles.textMain }}>
                             Qual horário?
                           </label>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', cursor: 'pointer' }}>
+                          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', cursor: 'pointer', marginTop: '6px' }}>
                               <input
                                 type="checkbox"
                                 checked={deliveryAsap}
@@ -1029,35 +1029,38 @@ export const VendaAvulsa: React.FC<VendaAvulsaProps> = ({ styles, currentUser })
                               />
                               O mais breve possível
                             </label>
-                            <select
-                              value={deliveryDate}
-                              onChange={(e) => {
-                                setDeliveryDate(e.target.value);
-                                setDeliveryTime(''); // reset time when date changes
-                                if (e.target.value) setDeliveryAsap(false);
-                              }}
-                              style={{ ...styles.formInput, width: 'auto', fontSize: '0.8rem', padding: '4px 8px', marginBottom: 0 }}
-                            >
-                              <option value="">Selecione a Data...</option>
-                              {deliverySlots.days.map(day => (
-                                <option key={day.value} value={day.value}>{day.label}</option>
-                              ))}
-                            </select>
+                            
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                              <select
+                                value={deliveryDate}
+                                onChange={(e) => {
+                                  setDeliveryDate(e.target.value);
+                                  setDeliveryTime(''); // reset time when date changes
+                                  if (e.target.value) setDeliveryAsap(false);
+                                }}
+                                style={{ ...styles.formInput, width: '100%', fontSize: '0.8rem', padding: '4px 8px', marginBottom: 0 }}
+                              >
+                                <option value="">Selecione a Data...</option>
+                                {deliverySlots.days.map(day => (
+                                  <option key={day.value} value={day.value}>{day.label}</option>
+                                ))}
+                              </select>
 
-                            <select
-                              value={deliveryTime}
-                              onChange={(e) => {
-                                setDeliveryTime(e.target.value);
-                                if (e.target.value) setDeliveryAsap(false);
-                              }}
-                              disabled={!deliveryDate}
-                              style={{ ...styles.formInput, width: 'auto', fontSize: '0.8rem', padding: '4px 8px', marginBottom: 0 }}
-                            >
-                              <option value="">Selecione a Hora...</option>
-                              {deliveryDate && deliverySlots.timesByDay[deliveryDate]?.map(time => (
-                                <option key={time} value={time}>{time}</option>
-                              ))}
-                            </select>
+                              <select
+                                value={deliveryTime}
+                                onChange={(e) => {
+                                  setDeliveryTime(e.target.value);
+                                  if (e.target.value) setDeliveryAsap(false);
+                                }}
+                                disabled={!deliveryDate}
+                                style={{ ...styles.formInput, width: '100%', fontSize: '0.8rem', padding: '4px 8px', marginBottom: 0 }}
+                              >
+                                <option value="">Selecione a Hora...</option>
+                                {deliveryDate && deliverySlots.timesByDay[deliveryDate]?.map(time => (
+                                  <option key={time} value={time}>{time}</option>
+                                ))}
+                              </select>
+                            </div>
                           </div>
                           
                           <div style={{ marginTop: '12px' }}>

@@ -365,10 +365,10 @@ export const DeliveryMap = ({ onAddressSelect, initialAddress, leftContent }: De
       (err) => {
         if (!mapRef.current || mapRef.current !== map) return;
         console.warn('Geolocation error:', err.message);
-        setLocationError('Não foi possível obter sua localização.');
+        setLocationError('Não foi possível obter sua localização exata.');
         setIsLocating(false);
       },
-      { timeout: 10000, maximumAge: 60000 }
+      { timeout: 10000, maximumAge: 0, enableHighAccuracy: true }
     );
   };
 
@@ -742,7 +742,7 @@ export const DeliveryMap = ({ onAddressSelect, initialAddress, leftContent }: De
           title="Usar minha localização atual"
           style={{
             position: 'absolute',
-            bottom: '130px',
+            bottom: '40px', // Acima do botão +/- do Leaflet (que fica em ~20px bottomright)
             right: '10px',
             zIndex: 400,
             width: '26px',
