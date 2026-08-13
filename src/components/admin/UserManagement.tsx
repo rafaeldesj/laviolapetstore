@@ -85,9 +85,9 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
         setUsers(profiles);
       } else {
         const snap = await getDocs(collection(db, 'profiles'));
-        let firestoreUsers = [];
+        let firestoreUsers: UserProfile[] = [];
         snap.forEach(docSnap => {
-          firestoreUsers.push(docSnap.data());
+          firestoreUsers.push(docSnap.data() as UserProfile);
         });
         firestoreUsers.sort((a, b) => (a.full_name || '').localeCompare(b.full_name || ''));
         setUsers(firestoreUsers);

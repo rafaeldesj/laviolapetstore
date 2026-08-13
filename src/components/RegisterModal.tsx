@@ -68,7 +68,7 @@ export const RegisterModal: React.FC<RegisterModalProps> = ({
           role: 'client',
           is_active: true,
           created_at: timestamp,
-          collaborator_category_id: null
+          collaborator_category_id: null as string | null
         };
         
         await setDoc(doc(db, 'profiles', user.uid), profileData);
@@ -114,7 +114,7 @@ export const RegisterModal: React.FC<RegisterModalProps> = ({
           name: fullName.trim(),
           profile: newProfile,
         };
-        const users = JSON.parse(localStorage.getItem('laviola_mock_users') || '[]');
+        // Remove redeclaration
         users.push({
           id: newId,
           email: email.trim(),
