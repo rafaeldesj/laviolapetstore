@@ -20,7 +20,10 @@ service cloud.firestore {
 
     // Helper: cargos com acesso administrativo
     function isStaff() {
-      return isAuth() && getProfile().role in ['desenvolvedor', 'proprietaria', 'gerente', 'colaborador'];
+      return isAuth() && getProfile().role in [
+        'desenvolvedor', 'proprietaria', 'gerente', 'colaborador',
+        'developer', 'owner', 'manager', 'collaborator'
+      ];
     }
 
     // ---- PERFIS ----

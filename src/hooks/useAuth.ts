@@ -27,6 +27,15 @@ export const useAuth = () => {
       const docSnap = await getDoc(docRef);
       let profile = docSnap.exists() ? (docSnap.data() as UserProfile) : null;
       
+      // Normalize role (from Portuguese to English) to ensure compatibility
+      if (profile && profile.role) {
+        if (profile.role as string === 'desenvolvedor') profile.role = 'developer';
+        if (profile.role as string === 'proprietaria') profile.role = 'owner';
+        if (profile.role as string === 'gerente') profile.role = 'manager';
+        if (profile.role as string === 'colaborador') profile.role = 'collaborator';
+        if (profile.role as string === 'cliente') profile.role = 'client';
+      }
+      
       return {
         id: userId,
         email,
