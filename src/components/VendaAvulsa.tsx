@@ -70,7 +70,6 @@ export const VendaAvulsa: React.FC<VendaAvulsaProps> = ({ styles, currentUser })
   
   // Date and time selection states
   const [deliveryDate, setDeliveryDate] = useState<string>('');
-  const [deliveryTime, setDeliveryTime] = useState<string>('');
   
   // Generator for delivery slots (next 5 days, 09:00 to 18:00)
   const generateDeliverySlots = () => {
