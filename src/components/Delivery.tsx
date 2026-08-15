@@ -1,10 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { 
-  Truck, PlusCircle, Search, CheckCircle2, 
-  Map, Compass, Play, X, Eye, Trash2,
-  AlertTriangle, LifeBuoy
-} from 'lucide-react';
-import { logAction, supabase, isSupabaseConfigured } from '../supabaseClient';
+import { ArrowLeft, Clock, MapPin, Search, Truck, Navigation, Phone, MessageCircle, AlertCircle, LifeBuoy, X, CheckCircle, Package, PlusCircle, Eye, Trash2, Map, Compass, Play, ShoppingCart, Barcode, Minus, Plus } from 'lucide-react';
+import { DeliveryMap, type MapAddress } from './DeliveryMap';
+import { logAction, supabase, isSupabaseConfigured, mockSupabaseDb } from '../supabaseClient';
+import type { Product } from '../supabaseClient';
 import type { AuthUser } from '../hooks/useAuth';
 
 // Declare Leaflet global object L
@@ -107,13 +105,31 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
 
   // Form scheduling states
   const [isFormOpen, setIsFormOpen] = useState(false);
-  const [formClientId, setFormClientId] = useState('');
-  const [formAddress, setFormAddress] = useState('');
-  const [formLat, setFormLat] = useState(PETSHOP_COORDS.lat);
-  const [formLng, setFormLng] = useState(PETSHOP_COORDS.lng);
-  const [formDriverId, setFormDriverId] = useState('');
-  const [formItems, setFormItems] = useState('');
-  const [formScheduledTime, setFormScheduledTime] = useState('');
+  const [formClientId, setFormClientId] = useState<string>('');
+  const [formDriverId, setFormDriverId] = useState<string>('');
+  const [formItems, setFormItems] = useState<string>('');
+  
+  // Cart & Products states
+  const [products, setProducts] = useState<Product[]>([]);
+  const [cart, setCart] = useState<{product: Product, quantity: number}[]>([]);
+  const [skuInput, setSkuInput] = useState<string>('');
+  const [productSearchQuery, setProductSearchQuery] = useState<string>('');
+  const [isProductSearching, setIsProductSearching] = useState<boolean>(false);
+  const skuInputRef = useRef<HTMLInputElement>(null);
+  
+  const [addressStreet, setAddressStreet] = useState<string>('');
+  const [addressNumber, setAddressNumber] = useState<string>('');
+  const [addressNeighborhood, setAddressNeighborhood] = useState<string>('');
+  const [addressReference, setAddressReference] = useState<string>('');
+  const [addressLat, setAddressLat] = useState<number>(PETSHOP_COORDS.lat);
+  const [addressLng, setAddressLng] = useState<number>(PETSHOP_COORDS.lng);
+  
+  const [deliveryAsap, setDeliveryAsap] = useState<boolean>(true);
+  const [deliveryDate, setDeliveryDate] = useState<string>('');
+  const [deliveryTime, setDeliveryTime] = useState<string>('');
+  const [deliveryObs, setDeliveryObs] = useState<string>('');
+  const [paymentStatus, setPaymentStatus] = useState<string>('Já Pago');
+  const [deliverySlots, setDeliverySlots] = useState<{days: {value: string, label: string}[], timesByDay: Record<string, string[]>}>({days: [], timesByDay: {}});
 
   // New Client Modal states
   const [isClientModalOpen, setIsClientModalOpen] = useState(false);
@@ -788,13 +804,131 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
 
   // Form Predefined coordinates picker helper
   const handlePredefinedLocationChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const val = e.target.value;
-    if (!val) return;
-    const loc = PREDEFINED_LOCATIONS.find(l => l.name === val);
-    if (loc) {
-      setFormAddress(loc.name + ' - Campo Grande');
-      setFormLat(loc.lat);
-      setFormLng(loc.lng);
+    // Kept for signature compatibility if needed
+  };
+
+  const generateDeliverySlots = () => {
+    const days = [];
+    const timesByDay: Record<string, string[]> = {};
+    const WORK_START = 9;
+    const WORK_END = 18;
+    const MIN_HOURS_AHEAD = 2;
+    const d = new Date();
+    for (let i = 0; i < 5; i++) {
+      const loopDate = new Date(d);
+      loopDate.setDate(loopDate.getDate() + i);
+      const dateStr = loopDate.toISOString().split('T')[0];
+      let label = '';
+      if (i === 0) label = 'Hoje';
+      else if (i === 1) label = 'Amanhã';
+      else {
+        const weekdays = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+        const w = weekdays[loopDate.getDay()];
+        const day = loopDate.getDate().toString().padStart(2, '0');
+        const month = (loopDate.getMonth() + 1).toString().padStart(2, '0');
+        label = `${w}, ${day}/${month}`;
+      }
+      let startHour = WORK_START;
+      let startMinute = 0;
+      if (i === 0) {
+        const todayPlus2 = new Date();
+        todayPlus2.setHours(todayPlus2.getHours() + MIN_HOURS_AHEAD);
+        const remainder = todayPlus2.getMinutes() % 5;
+        if (remainder !== 0) todayPlus2.setMinutes(todayPlus2.getMinutes() + (5 - remainder));
+        if (todayPlus2.getHours() >= WORK_END && (todayPlus2.getHours() > WORK_END || todayPlus2.getMinutes() > 0)) continue;
+        if (todayPlus2.getHours() > WORK_START || (todayPlus2.getHours() === WORK_START && todayPlus2.getMinutes() > 0)) {
+          startHour = todayPlus2.getHours();
+          startMinute = todayPlus2.getMinutes();
+        }
+      }
+      days.push({ value: dateStr, label });
+      const times = [];
+      const t = new Date(loopDate);
+      t.setHours(startHour, startMinute, 0, 0);
+      const endT = new Date(loopDate);
+      endT.setHours(WORK_END, 0, 0, 0);
+      while (t <= endT) {
+        const hStr = t.getHours().toString().padStart(2, '0');
+        const mStr = t.getMinutes().toString().padStart(2, '0');
+        times.push(`${hStr}:${mStr}`);
+        t.setMinutes(t.getMinutes() + 5);
+      }
+      timesByDay[dateStr] = times;
+    }
+    return { days, timesByDay };
+  };
+
+  useEffect(() => {
+    const slots = generateDeliverySlots();
+    setDeliverySlots(slots);
+    
+    // Load products
+    const fetchProducts = async () => {
+      try {
+        const { data } = await mockSupabaseDb.getProducts();
+        setProducts(data || []);
+      } catch (err) {
+        console.error('Error loading products for delivery:', err);
+      }
+    };
+    fetchProducts();
+  }, []);
+
+  const handleMapAddressSelect = (addr: MapAddress) => {
+    setAddressStreet(addr.street);
+    setAddressNumber(addr.number || '');
+    setAddressNeighborhood(addr.neighborhood);
+    setAddressReference(addr.complement || '');
+    setAddressLat(addr.lat);
+    setAddressLng(addr.lng);
+  };
+
+  const filteredSearch = productSearchQuery.trim() === '' 
+    ? [] 
+    : products.filter(p => 
+        p.name.toLowerCase().includes(productSearchQuery.toLowerCase()) || 
+        (p.sku && p.sku.includes(productSearchQuery))
+      );
+
+  const addToCart = (product: Product) => {
+    setCart(prev => {
+      const existing = prev.find(item => item.product.id === product.id);
+      if (existing) {
+        return prev.map(item => 
+          item.product.id === product.id ? { ...item, quantity: item.quantity + 1 } : item
+        );
+      }
+      return [...prev, { product, quantity: 1 }];
+    });
+    setProductSearchQuery('');
+    setIsProductSearching(false);
+  };
+
+  const updateQuantity = (productId: string, delta: number) => {
+    setCart(prev => prev.map(item => {
+      if (item.product.id === productId) {
+        const nextQty = item.quantity + delta;
+        return nextQty > 0 ? { ...item, quantity: nextQty } : item;
+      }
+      return item;
+    }).filter(item => item.quantity > 0));
+  };
+
+  const removeFromCart = (productId: string) => {
+    setCart(prev => prev.filter(item => item.product.id !== productId));
+  };
+
+  const handleBarcodeSubmit = (e: React.FormEvent | React.KeyboardEvent) => {
+    e.preventDefault();
+    const sku = skuInput.trim();
+    if (!sku) return;
+    const foundProduct = products.find(p => p.sku === sku);
+    if (foundProduct) {
+      addToCart(foundProduct);
+      setSkuInput('');
+    } else {
+      alert('Produto não encontrado!');
+      setSkuInput('');
     }
   };
 
@@ -889,10 +1023,26 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
 
   const handleCreateDelivery = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formClientId || !formDriverId || !formAddress || !formItems || !formScheduledTime) {
-      alert('Por favor, preencha todos os campos obrigatórios.');
+    
+    const fullAddress = `${addressStreet.trim()}, ${addressNumber.trim()} - ${addressNeighborhood.trim()}`;
+    let scheduledTime = 'O mais breve possível';
+    if (!deliveryAsap && deliveryDate && deliveryTime) {
+      const selectedDayLabel = deliverySlots.days.find(d => d.value === deliveryDate)?.label || deliveryDate;
+      scheduledTime = `${selectedDayLabel} às ${deliveryTime}`;
+    }
+
+    const generatedItemsStr = cart.map(item => `${item.quantity}x ${item.product.name}`).join(' + ');
+
+    if (!formClientId || !formDriverId || !addressStreet.trim() || !addressNumber.trim() || !addressNeighborhood.trim() || cart.length === 0) {
+      alert('Por favor, preencha todos os campos obrigatórios e adicione pelo menos um item.');
       return;
     }
+
+    let itemsWithObsAndPayment = generatedItemsStr;
+    if (deliveryObs.trim()) {
+      itemsWithObsAndPayment += `\n[OBS: ${deliveryObs.trim()}]`;
+    }
+    itemsWithObsAndPayment += `\n[PGTO: ${paymentStatus}]`;
 
     const client = clients.find(c => c.id === formClientId);
     const driver = drivers.find(d => d.id === formDriverId);
@@ -901,16 +1051,16 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
       id: 'deliv-' + Math.random().toString(36).substring(2, 9),
       client_id: formClientId,
       client_name: client?.name || 'Cliente',
-      client_address: formAddress,
-      client_lat: formLat,
-      client_lng: formLng,
+      client_address: fullAddress,
+      client_lat: addressLat,
+      client_lng: addressLng,
       driver_id: formDriverId,
       driver_name: driver?.name || 'Entregador',
       driver_lat: PETSHOP_COORDS.lat,
       driver_lng: PETSHOP_COORDS.lng,
       status: 'agendada',
-      items: formItems,
-      scheduled_time: formScheduledTime,
+      items: itemsWithObsAndPayment,
+      scheduled_time: scheduledTime,
       created_at: new Date().toISOString()
     };
 
@@ -931,11 +1081,20 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
         setIsFormOpen(false);
         setFormClientId('');
         setFormDriverId('');
-        setFormAddress('');
+        setAddressStreet('');
+        setAddressNumber('');
+        setAddressNeighborhood('');
+        setAddressReference('');
         setFormItems('');
-        setFormScheduledTime('');
-        setFormLat(PETSHOP_COORDS.lat);
-        setFormLng(PETSHOP_COORDS.lng);
+        setCart([]);
+        setSkuInput('');
+        setDeliveryAsap(true);
+        setDeliveryDate('');
+        setDeliveryTime('');
+        setDeliveryObs('');
+        setPaymentStatus('Já Pago');
+        setAddressLat(PETSHOP_COORDS.lat);
+        setAddressLng(PETSHOP_COORDS.lng);
         await logAction(currentUser?.email || '', currentUser?.name || 'Gerente', 'Agendamento de Entrega', `Nova entrega criada.`);
         return;
       } catch (err: any) {
@@ -953,11 +1112,20 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
     // Clear form
     setFormClientId('');
     setFormDriverId('');
-    setFormAddress('');
+    setAddressStreet('');
+    setAddressNumber('');
+    setAddressNeighborhood('');
+    setAddressReference('');
     setFormItems('');
-    setFormScheduledTime('');
-    setFormLat(PETSHOP_COORDS.lat);
-    setFormLng(PETSHOP_COORDS.lng);
+    setCart([]);
+    setSkuInput('');
+    setDeliveryAsap(true);
+    setDeliveryDate('');
+    setDeliveryTime('');
+    setDeliveryObs('');
+    setPaymentStatus('Já Pago');
+    setAddressLat(PETSHOP_COORDS.lat);
+    setAddressLng(PETSHOP_COORDS.lng);
 
     await logAction(
       currentUser?.email || '',
@@ -1617,7 +1785,7 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
                   color: 'hsl(0, 75%, 45%)', fontWeight: 700, display: 'flex', flexDirection: 'column', gap: '4px'
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <AlertTriangle size={16} /> 
+                    <AlertCircle size={16} /> 
                     <span>ENTREGA CANCELADA - RETORNANDO À BASE</span>
                   </div>
                   <p style={{ fontWeight: 500, fontSize: '0.8rem', color: styles.sidebarWidgetText?.color || '#555', marginTop: '4px' }}>
@@ -1634,7 +1802,7 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
                   border: '1px solid rgba(239, 68, 68, 0.15)', borderRadius: '6px', fontSize: '0.82rem',
                   color: 'hsl(0, 75%, 45%)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px'
                 }}>
-                  <AlertTriangle size={14} /> 
+                  <AlertCircle size={14} /> 
                   <span>
                     Dificuldade relatada pelo entregador: "{activeClientDelivery.support_reason}". 
                     {activeClientDelivery.support_decision ? (
@@ -1675,7 +1843,7 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
                         color: 'hsl(142, 60%, 35%)', borderRadius: '6px', fontSize: '0.85rem', fontWeight: 600,
                         display: 'flex', alignItems: 'center', gap: '8px'
                       }}>
-                        <CheckCircle2 size={16} /> O entregador chegou à sua residência!
+                        <CheckCircle size={16} /> O entregador chegou à sua residência!
                       </div>
                     ) : (
                       <p style={{ fontSize: '0.8rem', color: styles.sidebarWidgetText?.color, fontStyle: 'italic' }}>
@@ -1819,7 +1987,7 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
                         fontSize: '0.78rem', color: 'hsl(0, 75%, 50%)', fontWeight: 600,
                         display: 'flex', alignItems: 'center', gap: '6px'
                       }}>
-                        <AlertTriangle size={12} /> Suporte solicitado: "{d.support_reason}"
+                        <AlertCircle size={12} /> Suporte solicitado: "{d.support_reason}"
                       </div>
                     )}
 
@@ -1863,7 +2031,7 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
                               backgroundColor: 'hsl(142, 60%, 45%)', color: '#fff', border: 'none'
                             }}
                           >
-                            <CheckCircle2 size={12} style={{ marginRight: '4px' }} /> Marcar como Entregue
+                            <CheckCircle size={12} style={{ marginRight: '4px' }} /> Marcar como Entregue
                           </button>
                           <button
                             onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${d.client_lat},${d.client_lng}`, '_blank')}
@@ -1895,7 +2063,7 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
                             fontWeight: 'bold'
                           }}
                         >
-                          <CheckCircle2 size={12} style={{ marginRight: '4px' }} /> Confirmar Retorno à Base
+                          <CheckCircle size={12} style={{ marginRight: '4px' }} /> Confirmar Retorno à Base
                         </button>
                       )}
                       
@@ -2128,7 +2296,7 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
                                 }}
                                 title="Clique para tomar uma decisão de suporte"
                               >
-                                <AlertTriangle size={10} /> Suporte: "{d.support_reason}"
+                                <AlertCircle size={10} /> Suporte: "{d.support_reason}"
                               </div>
                             )}
                           </td>
@@ -2282,7 +2450,7 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
       {/* ======================================= */}
       {isFormOpen && (
         <div style={styles.modalOverlay}>
-          <div style={{ ...styles.modalContent, maxWidth: '500px' }} role="dialog" aria-modal="true" aria-labelledby="form-title">
+          <div style={{ ...styles.modalContent, maxWidth: '900px' }} role="dialog" aria-modal="true" aria-labelledby="form-title">
             
             <div style={styles.modalHeader}>
               <h2 id="form-title" style={styles.modalTitle}>Agendar Nova Entrega</h2>
@@ -2316,59 +2484,8 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
                 </select>
               </div>
 
-              {/* Endereço - Seleção Predefinida ou Manual */}
-              <div style={styles.formGroup}>
-                <label htmlFor="form-pref-loc" style={styles.formLabel}>Localização de Destino (Campo Grande) *</label>
-                <select
-                  id="form-pref-loc"
-                  onChange={handlePredefinedLocationChange}
-                  style={{ ...styles.formInput, marginBottom: '6px' }}
-                >
-                  <option value="">— Escolher no mapa / Endereços Salvos —</option>
-                  {PREDEFINED_LOCATIONS.map(loc => (
-                    <option key={loc.name} value={loc.name}>{loc.name}</option>
-                  ))}
-                </select>
-                <input
-                  type="text"
-                  placeholder="Endereço detalhado com número"
-                  value={formAddress}
-                  onChange={(e) => setFormAddress(e.target.value)}
-                  style={styles.formInput}
-                  required
-                />
-              </div>
-
-              {/* Coordenadas Lat/Lng */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                <div style={styles.formGroup}>
-                  <label htmlFor="form-lat" style={{ ...styles.formLabel, fontSize: '0.8rem' }}>Latitude</label>
-                  <input
-                    id="form-lat"
-                    type="number"
-                    step="0.000001"
-                    value={formLat}
-                    onChange={(e) => setFormLat(parseFloat(e.target.value))}
-                    style={{ ...styles.formInput, fontSize: '0.85rem' }}
-                    required
-                  />
-                </div>
-                <div style={styles.formGroup}>
-                  <label htmlFor="form-lng" style={{ ...styles.formLabel, fontSize: '0.8rem' }}>Longitude</label>
-                  <input
-                    id="form-lng"
-                    type="number"
-                    step="0.000001"
-                    value={formLng}
-                    onChange={(e) => setFormLng(parseFloat(e.target.value))}
-                    style={{ ...styles.formInput, fontSize: '0.85rem' }}
-                    required
-                  />
-                </div>
-              </div>
-
               {/* Entregador */}
-              <div style={styles.formGroup}>
+              <div style={{ ...styles.formGroup, zIndex: 10 }}>
                 <label htmlFor="form-driver" style={styles.formLabel}>Entregador Responsável *</label>
                 <select
                   id="form-driver"
@@ -2384,31 +2501,272 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
                 </select>
               </div>
 
-              {/* Itens */}
-              <div style={styles.formGroup}>
-                <label htmlFor="form-items" style={styles.formLabel}>Itens da Entrega *</label>
-                <input
-                  id="form-items"
-                  type="text"
-                  placeholder="Ex: Ração Golden 15kg + Brinquedo Ossinho"
-                  value={formItems}
-                  onChange={(e) => setFormItems(e.target.value)}
-                  style={styles.formInput}
-                  required
-                />
+              {/* Itens com Leitor de Código de Barras / Busca */}
+              <div style={{ ...styles.formGroup, border: `1px solid ${styles.borderColor}`, padding: '12px', borderRadius: '10px' }}>
+                <span style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', color: styles.sidebarWidgetText?.color, marginBottom: '8px' }}>
+                  Itens da Entrega *
+                </span>
+                
+                <div style={{ display: 'flex', gap: '10px', marginBottom: '12px', flexWrap: 'wrap' }}>
+                  {/* Barcode scanner */}
+                  <div style={{ flex: '1 1 200px', position: 'relative' }}>
+                    <div style={{ display: 'flex', alignItems: 'center' }}>
+                      <Barcode size={16} style={{ position: 'absolute', left: '10px', color: styles.primary }} />
+                      <input
+                        ref={skuInputRef}
+                        type="text"
+                        placeholder="Leitor Código de Barras (SKU)..."
+                        value={skuInput}
+                        onChange={(e) => setSkuInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleBarcodeSubmit(e);
+                          }
+                        }}
+                        style={{ ...styles.formInput, width: '100%', paddingLeft: '34px', marginBottom: 0 }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Manual search */}
+                  <div style={{ flex: '1 1 200px', position: 'relative' }}>
+                    <div style={{ display: 'flex', alignItems: 'center' }}>
+                      <Search size={16} style={{ position: 'absolute', left: '10px', color: styles.sidebarWidgetText?.color }} />
+                      <input
+                        type="text"
+                        placeholder="Busca por nome..."
+                        value={productSearchQuery}
+                        onChange={(e) => {
+                          setProductSearchQuery(e.target.value);
+                          setIsProductSearching(e.target.value.trim() !== '');
+                        }}
+                        style={{ ...styles.formInput, width: '100%', paddingLeft: '34px', marginBottom: 0 }}
+                      />
+                    </div>
+                    {isProductSearching && (
+                      <div style={{
+                        position: 'absolute', top: '100%', left: 0, right: 0,
+                        backgroundColor: styles.isDark ? '#26293b' : '#fff',
+                        border: `1px solid ${styles.borderColor}`,
+                        borderRadius: '0 0 10px 10px', zIndex: 100,
+                        maxHeight: '200px', overflowY: 'auto',
+                        boxShadow: styles.shadowLg, marginTop: '2px'
+                      }}>
+                        {filteredSearch.length === 0 ? (
+                          <div style={{ padding: '10px', fontSize: '0.8rem', color: styles.sidebarWidgetText?.color }}>Nenhum produto.</div>
+                        ) : (
+                          filteredSearch.map(product => (
+                            <button
+                              key={product.id}
+                              type="button"
+                              onClick={() => addToCart(product)}
+                              style={{
+                                width: '100%', padding: '8px 10px', border: 'none',
+                                borderBottom: `1px solid ${styles.borderColor}`,
+                                backgroundColor: 'transparent', color: styles.textMain,
+                                textAlign: 'left', cursor: 'pointer', display: 'flex',
+                                justifyContent: 'space-between', alignItems: 'center'
+                              }}
+                            >
+                              <div style={{ fontSize: '0.8rem', fontWeight: 600 }}>{product.name}</div>
+                              <strong style={{ color: styles.primary, fontSize: '0.8rem' }}>R$ {product.price.toFixed(2)}</strong>
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Cart list */}
+                {cart.length > 0 ? (
+                  <div style={{ maxHeight: '180px', overflowY: 'auto', border: `1px solid ${styles.borderColor}`, borderRadius: '8px' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.8rem' }}>
+                      <thead style={{ position: 'sticky', top: 0, backgroundColor: styles.isDark ? '#1e293b' : '#f8fafc', zIndex: 1 }}>
+                        <tr style={{ borderBottom: `1px solid ${styles.borderColor}`, color: styles.sidebarWidgetText?.color }}>
+                          <th style={{ padding: '6px' }}>Produto</th>
+                          <th style={{ padding: '6px', textAlign: 'center' }}>Qtd</th>
+                          <th style={{ padding: '6px', textAlign: 'center' }}>Ação</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {cart.map((item) => (
+                          <tr key={item.product.id} style={{ borderBottom: `1px solid ${styles.borderColor}`, color: styles.textMain }}>
+                            <td style={{ padding: '6px' }}>{item.product.name}</td>
+                            <td style={{ padding: '6px', textAlign: 'center' }}>
+                              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                <button type="button" onClick={() => updateQuantity(item.product.id, -1)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: styles.textMain }}>
+                                  <Minus size={14} />
+                                </button>
+                                <strong style={{ minWidth: '16px' }}>{item.quantity}</strong>
+                                <button type="button" onClick={() => updateQuantity(item.product.id, 1)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: styles.textMain }}>
+                                  <Plus size={14} />
+                                </button>
+                              </div>
+                            </td>
+                            <td style={{ padding: '6px', textAlign: 'center' }}>
+                              <button type="button" onClick={() => removeFromCart(item.product.id)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'hsl(0,75%,55%)' }}>
+                                <Trash2 size={14} />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div style={{ padding: '20px', textAlign: 'center', fontSize: '0.8rem', color: styles.sidebarWidgetText?.color, backgroundColor: styles.isDark ? '#1e293b' : '#f8fafc', borderRadius: '8px' }}>
+                    <ShoppingCart size={24} style={{ opacity: 0.5, margin: '0 auto 8px' }} />
+                    Carrinho vazio. Busque ou escaneie um produto.
+                  </div>
+                )}
               </div>
 
-              {/* Horário */}
+              {/* Pagamento */}
               <div style={styles.formGroup}>
-                <label htmlFor="form-time" style={styles.formLabel}>Horário de Entrega *</label>
-                <input
-                  id="form-time"
-                  type="text"
-                  placeholder="Ex: Hoje às 17:30 ou 15/06 às 10:00"
-                  value={formScheduledTime}
-                  onChange={(e) => setFormScheduledTime(e.target.value)}
-                  style={styles.formInput}
-                  required
+                <label style={styles.formLabel}>Status do Pagamento *</label>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setPaymentStatus('Já Pago')}
+                    style={{
+                      padding: '10px', borderRadius: '8px', border: '1px solid',
+                      borderColor: paymentStatus === 'Já Pago' ? styles.primary : styles.borderColor,
+                      backgroundColor: paymentStatus === 'Já Pago' ? (styles.isDark ? '#334155' : '#e2e8f0') : 'transparent',
+                      color: paymentStatus === 'Já Pago' ? styles.primary : styles.textMain,
+                      cursor: 'pointer', fontWeight: paymentStatus === 'Já Pago' ? 700 : 600, transition: 'all 0.15s'
+                    }}
+                  >
+                    Já Pago
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPaymentStatus('A Receber na Entrega')}
+                    style={{
+                      padding: '10px', borderRadius: '8px', border: '1px solid',
+                      borderColor: paymentStatus === 'A Receber na Entrega' ? styles.primary : styles.borderColor,
+                      backgroundColor: paymentStatus === 'A Receber na Entrega' ? (styles.isDark ? '#334155' : '#e2e8f0') : 'transparent',
+                      color: paymentStatus === 'A Receber na Entrega' ? styles.primary : styles.textMain,
+                      cursor: 'pointer', fontWeight: paymentStatus === 'A Receber na Entrega' ? 700 : 600, transition: 'all 0.15s'
+                    }}
+                  >
+                    A Receber na Entrega
+                  </button>
+                </div>
+              </div>
+
+              {/* Endereço de Entrega */}
+              <div style={{ border: `1px solid ${styles.borderColor}`, borderRadius: '10px', padding: '12px', marginBottom: '16px' }}>
+                <span style={{ display: 'block', fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: styles.sidebarWidgetText?.color, marginBottom: '8px' }}>
+                  Endereço de Entrega *
+                </span>
+                
+                <DeliveryMap 
+                  onAddressSelect={handleMapAddressSelect} 
+                  leftContent={
+                    <>
+                      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '10px', marginTop: '4px' }}>
+                        <input
+                          type="text"
+                          placeholder="Rua/Avenida *"
+                          value={addressStreet}
+                          readOnly
+                          style={{ ...styles.formInput, width: '100%', fontSize: '0.8rem', padding: '6px 8px', marginBottom: 0, backgroundColor: styles.isDark ? '#334155' : '#f1f5f9', cursor: 'not-allowed', color: styles.isDark ? '#94a3b8' : '#64748b' }}
+                        />
+                        <input
+                          type="text"
+                          placeholder="Número *"
+                          value={addressNumber}
+                          readOnly
+                          style={{ ...styles.formInput, width: '100%', fontSize: '0.8rem', padding: '6px 8px', marginBottom: 0, backgroundColor: styles.isDark ? '#334155' : '#f1f5f9', cursor: 'not-allowed', color: styles.isDark ? '#94a3b8' : '#64748b' }}
+                        />
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginTop: '10px' }}>
+                        <input
+                          type="text"
+                          placeholder="Bairro *"
+                          value={addressNeighborhood}
+                          readOnly
+                          style={{ ...styles.formInput, width: '100%', fontSize: '0.8rem', padding: '6px 8px', marginBottom: 0, backgroundColor: styles.isDark ? '#334155' : '#f1f5f9', cursor: 'not-allowed', color: styles.isDark ? '#94a3b8' : '#64748b' }}
+                        />
+                        <input
+                          type="text"
+                          placeholder="Ponto de Referência"
+                          value={addressReference}
+                          onChange={(e) => setAddressReference(e.target.value)}
+                          style={{ ...styles.formInput, width: '100%', fontSize: '0.8rem', padding: '6px 8px', marginBottom: 0 }}
+                        />
+                      </div>
+
+                      {/* Delivery Time Selection */}
+                      <div style={{ marginTop: '16px', borderTop: `1px dashed ${styles.borderColor}`, paddingTop: '12px' }}>
+                        <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, marginBottom: '8px', color: styles.textMain }}>
+                          Qual horário?
+                        </label>
+                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', cursor: 'pointer', marginTop: '6px' }}>
+                            <input
+                              type="checkbox"
+                              checked={deliveryAsap}
+                              onChange={(e) => {
+                                setDeliveryAsap(e.target.checked);
+                                if (e.target.checked) setDeliveryTime('');
+                              }}
+                              style={{ cursor: 'pointer' }}
+                            />
+                            O mais breve possível
+                          </label>
+                          
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            <select
+                              value={deliveryDate}
+                              onChange={(e) => {
+                                setDeliveryDate(e.target.value);
+                                setDeliveryTime(''); // reset time when date changes
+                                if (e.target.value) setDeliveryAsap(false);
+                              }}
+                              style={{ ...styles.formInput, width: '100%', fontSize: '0.8rem', padding: '4px 8px', marginBottom: 0 }}
+                            >
+                              <option value="">Selecione a Data...</option>
+                              {deliverySlots.days.map(day => (
+                                <option key={day.value} value={day.value}>{day.label}</option>
+                              ))}
+                            </select>
+
+                            <select
+                              value={deliveryTime}
+                              onChange={(e) => {
+                                setDeliveryTime(e.target.value);
+                                if (e.target.value) setDeliveryAsap(false);
+                              }}
+                              disabled={!deliveryDate}
+                              style={{ ...styles.formInput, width: '100%', fontSize: '0.8rem', padding: '4px 8px', marginBottom: 0 }}
+                            >
+                              <option value="">Selecione a Hora...</option>
+                              {deliveryDate && deliverySlots.timesByDay[deliveryDate]?.map(time => (
+                                <option key={time} value={time}>{time}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                        
+                        <div style={{ marginTop: '12px' }}>
+                          <input
+                            type="text"
+                            maxLength={50}
+                            placeholder="Observação (Ex: Deixar na portaria, Cuidado com o cachorro) - Máx 50 caract."
+                            value={deliveryObs}
+                            onChange={(e) => setDeliveryObs(e.target.value)}
+                            style={{ ...styles.formInput, width: '100%', fontSize: '0.8rem', padding: '6px 8px', marginBottom: 0 }}
+                          />
+                          <div style={{ fontSize: '0.65rem', color: styles.sidebarWidgetText?.color, textAlign: 'right', marginTop: '4px' }}>
+                            {deliveryObs.length}/50
+                          </div>
+                        </div>
+                      </div>
+                    </>
+                  }
                 />
               </div>
 

@@ -31,6 +31,7 @@ function App() {
   const [windowWidth, setWindowWidth] = useState<number>(window.innerWidth);
   const [isSkipFocused, setIsSkipFocused] = useState<boolean>(false);
   const [activeSection, setActiveSection] = useState<string>('inicio');
+  const [configTab, setConfigTab] = useState<string>('profile');
   const [modalView, setModalView] = useState<ModalView>('none');
   const [selectedProduct, setSelectedProduct] = useState<{ name: string; price: number } | null>(null);
 
@@ -108,6 +109,8 @@ function App() {
             isLoggedIn={!!user}
             userRole={userRole}
             userSpecialty={userSpecialty}
+            configTab={configTab}
+            setConfigTab={setConfigTab}
           />
 
           <main id="main-content" style={styles.mainContent} role="main">
@@ -193,6 +196,8 @@ function App() {
                   setFontSize(val);
                   localStorage.setItem('laviola_font_size', String(val));
                 }}
+                configTab={configTab}
+                setConfigTab={setConfigTab}
               />
             )}
 

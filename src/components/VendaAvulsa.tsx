@@ -1203,7 +1203,7 @@ export const VendaAvulsa: React.FC<VendaAvulsaProps> = ({ styles, currentUser })
                     fontSize: '0.85rem', fontWeight: 700
                   }}
                 >
-                  {isLoading ? 'Finalizando...' : 'Finalizar e Emitir Log'}
+                  {isLoading ? 'Finalizando...' : 'Finalizar'}
                 </button>
               </div>
             </div>

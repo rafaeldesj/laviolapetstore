@@ -9,6 +9,13 @@
           "laviolapetstore"
         ]
       }
+    },
+    "laviolapet": {
+      "hosting": {
+        "laviola": [
+          "laviolapet"
+        ]
+      }
     }
   },
   "etags": {}

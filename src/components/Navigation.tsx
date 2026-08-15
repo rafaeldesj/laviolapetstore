@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { 
   Home, Scissors, Tag, Info, Phone,
   PawPrint, CalendarDays, Wallet, Package, 
-  ClipboardList, BarChart3, Users, History, Settings, CreditCard, ShoppingCart, Menu, X, Truck
+  ClipboardList, BarChart3, Users, History, Settings, CreditCard, ShoppingCart, Menu, X, Truck,
+  User, Printer, Store, Shield, QrCode, Lock, Terminal, FileText
 } from 'lucide-react';
 import type { UserRole } from '../supabaseClient';
 import { roleHierarchy } from '../supabaseClient';
@@ -26,9 +27,11 @@ interface NavigationProps {
   isLoggedIn: boolean;
   userRole?: UserRole;
   userSpecialty?: string | null;
+  configTab?: string;
+  setConfigTab?: (tab: string) => void;
 }
 
-export const Navigation: React.FC<NavigationProps> = ({ styles, activeSection, setActiveSection, isLoggedIn, userRole, userSpecialty }) => {
+export const Navigation: React.FC<NavigationProps> = ({ styles, activeSection, setActiveSection, isLoggedIn, userRole, userSpecialty, configTab, setConfigTab }) => {
   const [hoveredLink, setHoveredLink] = useState<string | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -92,7 +95,7 @@ export const Navigation: React.FC<NavigationProps> = ({ styles, activeSection, s
     const isActive = activeSection === item.id;
     const isHovered = hoveredLink === item.id;
     return (
-      <li key={item.id} style={{ width: '100%' }}>
+      <li key={item.id} style={{ width: '100%', display: 'flex', flexDirection: 'column' }}>
         <button
           onClick={() => handleNavClick(item.id)}
           onMouseEnter={() => setHoveredLink(item.id)}
@@ -114,6 +117,88 @@ export const Navigation: React.FC<NavigationProps> = ({ styles, activeSection, s
           {item.icon}
           {item.label}
         </button>
+        {item.id === 'configuracoes' && isActive && configTab && setConfigTab && (
+          <ul style={{ listStyle: 'none', padding: '4px 0 4px 20px', margin: 0, display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            <li style={{ width: '100%' }}>
+              <button onClick={() => setConfigTab('profile')} style={{ ...styles.navLink(configTab === 'profile', false), padding: '6px 10px', fontSize: '0.8rem', width: '100%', textAlign: 'left', border: 'none', background: configTab === 'profile' ? 'rgba(255,255,255,0.1)' : 'transparent', color: configTab === 'profile' ? '#fff' : 'rgba(255,255,255,0.7)', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', borderRadius: '6px' }}>
+                <User size={14} /> Meu Perfil
+              </button>
+            </li>
+            {(isManager || userRole === 'collaborator') && (
+              <li style={{ width: '100%' }}>
+                <button onClick={() => setConfigTab('printer')} style={{ ...styles.navLink(configTab === 'printer', false), padding: '6px 10px', fontSize: '0.8rem', width: '100%', textAlign: 'left', border: 'none', background: configTab === 'printer' ? 'rgba(255,255,255,0.1)' : 'transparent', color: configTab === 'printer' ? '#fff' : 'rgba(255,255,255,0.7)', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', borderRadius: '6px' }}>
+                  <Printer size={14} /> Impressora BT
+                </button>
+              </li>
+            )}
+            {(isManager || userRole === 'collaborator') && (
+              <li style={{ width: '100%' }}>
+                <button onClick={() => setConfigTab('elgin_i8')} style={{ ...styles.navLink(configTab === 'elgin_i8', false), padding: '6px 10px', fontSize: '0.8rem', width: '100%', textAlign: 'left', border: 'none', background: configTab === 'elgin_i8' ? 'rgba(255,255,255,0.1)' : 'transparent', color: configTab === 'elgin_i8' ? '#fff' : 'rgba(255,255,255,0.7)', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', borderRadius: '6px' }}>
+                  <Printer size={14} /> Impressora USB
+                </button>
+              </li>
+            )}
+            {isManager && (
+              <>
+                <li style={{ width: '100%' }}>
+                  <button onClick={() => setConfigTab('store')} style={{ ...styles.navLink(configTab === 'store', false), padding: '6px 10px', fontSize: '0.8rem', width: '100%', textAlign: 'left', border: 'none', background: configTab === 'store' ? 'rgba(255,255,255,0.1)' : 'transparent', color: configTab === 'store' ? '#fff' : 'rgba(255,255,255,0.7)', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', borderRadius: '6px' }}>
+                    <Store size={14} /> Funcionamento
+                  </button>
+                </li>
+                <li style={{ width: '100%' }}>
+                  <button onClick={() => setConfigTab('loyalty')} style={{ ...styles.navLink(configTab === 'loyalty', false), padding: '6px 10px', fontSize: '0.8rem', width: '100%', textAlign: 'left', border: 'none', background: configTab === 'loyalty' ? 'rgba(255,255,255,0.1)' : 'transparent', color: configTab === 'loyalty' ? '#fff' : 'rgba(255,255,255,0.7)', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', borderRadius: '6px' }}>
+                    <Shield size={14} /> Regras & Fid.
+                  </button>
+                </li>
+                <li style={{ width: '100%' }}>
+                  <button onClick={() => setConfigTab('mesas')} style={{ ...styles.navLink(configTab === 'mesas', false), padding: '6px 10px', fontSize: '0.8rem', width: '100%', textAlign: 'left', border: 'none', background: configTab === 'mesas' ? 'rgba(255,255,255,0.1)' : 'transparent', color: configTab === 'mesas' ? '#fff' : 'rgba(255,255,255,0.7)', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', borderRadius: '6px' }}>
+                    <QrCode size={14} /> Mesas & QR
+                  </button>
+                </li>
+                <li style={{ width: '100%' }}>
+                  <button onClick={() => setConfigTab('payments')} style={{ ...styles.navLink(configTab === 'payments', false), padding: '6px 10px', fontSize: '0.8rem', width: '100%', textAlign: 'left', border: 'none', background: configTab === 'payments' ? 'rgba(255,255,255,0.1)' : 'transparent', color: configTab === 'payments' ? '#fff' : 'rgba(255,255,255,0.7)', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', borderRadius: '6px' }}>
+                    <Wallet size={14} /> Formas de Pgto
+                  </button>
+                </li>
+              </>
+            )}
+            {isOwnerOrDev && (
+              <>
+                <li style={{ width: '100%' }}>
+                  <button onClick={() => setConfigTab('security')} style={{ ...styles.navLink(configTab === 'security', false), padding: '6px 10px', fontSize: '0.8rem', width: '100%', textAlign: 'left', border: 'none', background: configTab === 'security' ? 'rgba(255,255,255,0.1)' : 'transparent', color: configTab === 'security' ? '#fff' : 'rgba(255,255,255,0.7)', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', borderRadius: '6px' }}>
+                    <Lock size={14} /> Segurança
+                  </button>
+                </li>
+                <li style={{ width: '100%' }}>
+                  <button onClick={() => setConfigTab('point_guide')} style={{ ...styles.navLink(configTab === 'point_guide', false), padding: '6px 10px', fontSize: '0.8rem', width: '100%', textAlign: 'left', border: 'none', background: configTab === 'point_guide' ? 'rgba(255,255,255,0.1)' : 'transparent', color: configTab === 'point_guide' ? '#fff' : 'rgba(255,255,255,0.7)', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', borderRadius: '6px' }}>
+                    <CreditCard size={14} /> Guia Maquininha
+                  </button>
+                </li>
+              </>
+            )}
+            {userRole === 'developer' && (
+              <li style={{ width: '100%' }}>
+                <button onClick={() => setConfigTab('advanced')} style={{ ...styles.navLink(configTab === 'advanced', false), padding: '6px 10px', fontSize: '0.8rem', width: '100%', textAlign: 'left', border: 'none', background: configTab === 'advanced' ? 'rgba(255,255,255,0.1)' : 'transparent', color: configTab === 'advanced' ? '#fff' : 'rgba(255,255,255,0.7)', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', borderRadius: '6px' }}>
+                  <Terminal size={14} /> Avançado (Dev)
+                </button>
+              </li>
+            )}
+            {isManager && (
+              <>
+                <li style={{ width: '100%' }}>
+                  <button onClick={() => setConfigTab('audit_logs')} style={{ ...styles.navLink(configTab === 'audit_logs', false), padding: '6px 10px', fontSize: '0.8rem', width: '100%', textAlign: 'left', border: 'none', background: configTab === 'audit_logs' ? 'rgba(255,255,255,0.1)' : 'transparent', color: configTab === 'audit_logs' ? '#fff' : 'rgba(255,255,255,0.7)', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', borderRadius: '6px' }}>
+                    <History size={14} /> Logs de Auditoria
+                  </button>
+                </li>
+                <li style={{ width: '100%' }}>
+                  <button onClick={() => setConfigTab('commissions')} style={{ ...styles.navLink(configTab === 'commissions', false), padding: '6px 10px', fontSize: '0.8rem', width: '100%', textAlign: 'left', border: 'none', background: configTab === 'commissions' ? 'rgba(255,255,255,0.1)' : 'transparent', color: configTab === 'commissions' ? '#fff' : 'rgba(255,255,255,0.7)', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', borderRadius: '6px' }}>
+                    <FileText size={14} /> Comissões
+                  </button>
+                </li>
+              </>
+            )}
+          </ul>
+        )}
       </li>
     );
   };

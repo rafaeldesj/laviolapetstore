@@ -68,23 +68,21 @@ interface StoreConfig {
   temporaryCloseReason?: string;
 }
 
+
 interface ConfiguracoesProps {
   styles: any;
   highContrast?: boolean;
   setHighContrast?: (val: boolean) => void;
   fontSize?: number;
   setFontSize?: (val: number) => void;
+  configTab?: string;
+  setConfigTab?: (tab: string) => void;
 }
 
-export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize, setFontSize }: ConfiguracoesProps) => {
+export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize, setFontSize, configTab = 'profile', setConfigTab }: ConfiguracoesProps) => {
   const { user } = useAuth();
   const userData = user?.profile;
-  
-  // Tabs state: 'profile' (all) | 'store' (admin) | 'loyalty' (admin) | 'advanced' (dev) | 'audit_logs' (admin) | 'commissions' | 'security' | 'payments' | 'printer'
-  const [activeTab, setActiveTab] = useState<'profile' | 'store' | 'loyalty' | 'advanced' | 'audit_logs' | 'commissions' | 'security' | 'mesas' | 'point_guide' | 'payments' | 'printer' | 'elgin_i8'>('profile');
   const [selectedOrderTypeFilter, setSelectedOrderTypeFilter] = useState<'dine_in_table' | 'dine_in' | 'pickup' | 'delivery' | 'pdv'>('delivery');
-
-  // Printer config states
   const [printerSettings, setPrinterSettingsState] = useState<PrinterSettings>(() => getPrinterSettings());
   const [isBtConnected, setIsBtConnected] = useState(isBluetoothConnected());
   const [btDeviceName, setBtDeviceName] = useState(getConnectedDeviceName());
@@ -554,7 +552,7 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
 
   // Load audit logs from firestore
   useEffect(() => {
-    if (activeTab !== 'audit_logs' || !isAdmin) return;
+    if (configTab !== 'audit_logs' || !isAdmin) return;
     
     setLoadingLogs(true);
     const q = query(
@@ -579,7 +577,7 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
     });
 
     return () => unsubscribe();
-  }, [activeTab, isAdmin]);
+  }, [configTab, isAdmin]);
 
   const [orders, setOrders] = useState<any[]>([]);
   const [loadingOrders, setLoadingOrders] = useState(false);
@@ -590,7 +588,7 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
 
   // Load orders for commissions calculation
   useEffect(() => {
-    if (activeTab !== 'commissions' || !isAdmin) return;
+    if (configTab !== 'commissions' || !isAdmin) return;
     
     setLoadingOrders(true);
     const q = query(
@@ -614,7 +612,7 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
     });
 
     return () => unsubscribe();
-  }, [activeTab, isAdmin]);
+  }, [configTab, isAdmin]);
 
   const showFeedback = (type: 'success' | 'error', text: string) => {
     setMessage({ type, text });
@@ -990,317 +988,17 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
         </div>
       )}
 
-      <div className="settings-grid">
-        
-        {/* Sidebar de Configurações */}
-        <aside className="settings-sidebar">
-          <button
-            type="button"
-            onClick={() => setActiveTab('profile')}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.75rem',
-              padding: '0.85rem 1rem',
-              borderRadius: '12px',
-              border: activeTab === 'profile' ? '1px solid var(--primary-gold)' : '1px solid rgba(255,255,255,0.05)',
-              background: activeTab === 'profile' ? 'rgba(245, 158, 11, 0.1)' : 'rgba(255,255,255,0.02)',
-              color: activeTab === 'profile' ? 'var(--primary-gold)' : 'var(--text-secondary)',
-              cursor: 'pointer',
-              fontWeight: 600,
-              fontSize: '0.9rem',
-              transition: 'all 0.2s',
-              textAlign: 'left'
-            }}
-          >
-            <User size={16} />
-            <span>Meu Perfil</span>
-          </button>
-
-          {(isAdmin || role === 'collaborator') && (
-            <button
-              type="button"
-              onClick={() => setActiveTab('printer')}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.75rem',
-                padding: '0.85rem 1rem',
-                borderRadius: '12px',
-                border: activeTab === 'printer' ? '1px solid var(--primary-gold)' : '1px solid rgba(255,255,255,0.05)',
-                background: activeTab === 'printer' ? 'rgba(245, 158, 11, 0.1)' : 'rgba(255,255,255,0.02)',
-                color: activeTab === 'printer' ? 'var(--primary-gold)' : 'var(--text-secondary)',
-                cursor: 'pointer',
-                fontWeight: 600,
-                fontSize: '0.9rem',
-                transition: 'all 0.2s',
-                textAlign: 'left'
-              }}
-            >
-              <Printer size={18} />
-              Impressora Bluetooth
-            </button>
-          )}
-
-          {(isAdmin || role === 'collaborator') && (
-            <button
-              type="button"
-              onClick={() => setActiveTab('elgin_i8')}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.75rem',
-                padding: '0.85rem 1rem',
-                borderRadius: '12px',
-                border: activeTab === 'elgin_i8' ? '1px solid var(--primary-gold)' : '1px solid rgba(255,255,255,0.05)',
-                background: activeTab === 'elgin_i8' ? 'rgba(245, 158, 11, 0.1)' : 'rgba(255,255,255,0.02)',
-                color: activeTab === 'elgin_i8' ? 'var(--primary-gold)' : 'var(--text-secondary)',
-                cursor: 'pointer',
-                fontWeight: 600,
-                fontSize: '0.9rem',
-                transition: 'all 0.2s',
-                textAlign: 'left'
-              }}
-            >
-              <Printer size={18} />
-              Impressora Bematech Elgin i8
-            </button>
-          )}
-
-          {isAdmin && (
-            <>
-              <button
-                type="button"
-                onClick={() => setActiveTab('store')}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.75rem',
-                  padding: '0.85rem 1rem',
-                  borderRadius: '12px',
-                  border: activeTab === 'store' ? '1px solid var(--primary-gold)' : '1px solid rgba(255,255,255,0.05)',
-                  background: activeTab === 'store' ? 'rgba(245, 158, 11, 0.1)' : 'rgba(255,255,255,0.02)',
-                  color: activeTab === 'store' ? 'var(--primary-gold)' : 'var(--text-secondary)',
-                  cursor: 'pointer',
-                  fontWeight: 600,
-                  fontSize: '0.9rem',
-                  transition: 'all 0.2s',
-                  textAlign: 'left'
-                }}
-              >
-                <Store size={16} />
-                <span>Funcionamento</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setActiveTab('loyalty')}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.75rem',
-                  padding: '0.85rem 1rem',
-                  borderRadius: '12px',
-                  border: activeTab === 'loyalty' ? '1px solid var(--primary-gold)' : '1px solid rgba(255,255,255,0.05)',
-                  background: activeTab === 'loyalty' ? 'rgba(245, 158, 11, 0.1)' : 'rgba(255,255,255,0.02)',
-                  color: activeTab === 'loyalty' ? 'var(--primary-gold)' : 'var(--text-secondary)',
-                  cursor: 'pointer',
-                  fontWeight: 600,
-                  fontSize: '0.9rem',
-                  transition: 'all 0.2s',
-                  textAlign: 'left'
-                }}
-              >
-                <Shield size={16} />
-                <span>Regras & Fidelidade</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setActiveTab('mesas')}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.75rem',
-                  padding: '0.85rem 1rem',
-                  borderRadius: '12px',
-                  border: activeTab === 'mesas' ? '1px solid var(--primary-gold)' : '1px solid rgba(255,255,255,0.05)',
-                  background: activeTab === 'mesas' ? 'rgba(245, 158, 11, 0.1)' : 'rgba(255,255,255,0.02)',
-                  color: activeTab === 'mesas' ? 'var(--primary-gold)' : 'var(--text-secondary)',
-                  cursor: 'pointer',
-                  fontWeight: 600,
-                  fontSize: '0.9rem',
-                  transition: 'all 0.2s',
-                  textAlign: 'left'
-                }}
-              >
-                <QrCode size={16} />
-                <span>Mesas & QR Codes</span>
-              </button>
-            </>
-          )}
-
-          {(isDev || role === 'owner') && (
-            <>
-              <button
-                type="button"
-                onClick={() => setActiveTab('security')}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.75rem',
-                  padding: '0.85rem 1rem',
-                  borderRadius: '12px',
-                  border: activeTab === 'security' ? '1px solid var(--primary-gold)' : '1px solid rgba(255,255,255,0.05)',
-                  background: activeTab === 'security' ? 'rgba(245, 158, 11, 0.1)' : 'rgba(255,255,255,0.02)',
-                  color: activeTab === 'security' ? 'var(--primary-gold)' : 'var(--text-secondary)',
-                  cursor: 'pointer',
-                  fontWeight: 600,
-                  fontSize: '0.9rem',
-                  transition: 'all 0.2s',
-                  textAlign: 'left'
-                }}
-              >
-                <Camera size={16} style={{ color: '#10b981' }} />
-                <span>Segurança</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setActiveTab('advanced')}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.75rem',
-                  padding: '0.85rem 1rem',
-                  borderRadius: '12px',
-                  border: activeTab === 'advanced' ? '1px solid var(--primary-gold)' : '1px solid rgba(255,255,255,0.05)',
-                  background: activeTab === 'advanced' ? 'rgba(245, 158, 11, 0.1)' : 'rgba(255,255,255,0.02)',
-                  color: activeTab === 'advanced' ? 'var(--primary-gold)' : 'var(--text-secondary)',
-                  cursor: 'pointer',
-                  fontWeight: 600,
-                  fontSize: '0.9rem',
-                  transition: 'all 0.2s',
-                  textAlign: 'left'
-                }}
-              >
-                <Shield size={16} style={{ color: '#a855f7' }} />
-                <span>Avançado (Dev)</span>
-              </button>
-            </>
-          )}
-
-          {isAdmin && (
-            <button
-              type="button"
-              onClick={() => setActiveTab('audit_logs')}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.75rem',
-                padding: '0.85rem 1rem',
-                borderRadius: '12px',
-                border: activeTab === 'audit_logs' ? '1px solid var(--primary-gold)' : '1px solid rgba(255,255,255,0.05)',
-                background: activeTab === 'audit_logs' ? 'rgba(245, 158, 11, 0.1)' : 'rgba(255,255,255,0.02)',
-                color: activeTab === 'audit_logs' ? 'var(--primary-gold)' : 'var(--text-secondary)',
-                cursor: 'pointer',
-                fontWeight: 600,
-                fontSize: '0.9rem',
-                transition: 'all 0.2s',
-                textAlign: 'left'
-              }}
-            >
-              <History size={16} style={{ color: '#38bdf8' }} />
-              <span>Logs de Auditoria</span>
-            </button>
-          )}
-
-          {isAdmin && (
-            <button
-              type="button"
-              onClick={() => setActiveTab('commissions')}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.75rem',
-                padding: '0.85rem 1rem',
-                borderRadius: '12px',
-                border: activeTab === 'commissions' ? '1px solid var(--primary-gold)' : '1px solid rgba(255,255,255,0.05)',
-                background: activeTab === 'commissions' ? 'rgba(245, 158, 11, 0.1)' : 'rgba(255,255,255,0.02)',
-                color: activeTab === 'commissions' ? 'var(--primary-gold)' : 'var(--text-secondary)',
-                cursor: 'pointer',
-                fontWeight: 600,
-                fontSize: '0.9rem',
-                transition: 'all 0.2s',
-                textAlign: 'left'
-              }}
-            >
-              <CreditCard size={16} style={{ color: '#10b981' }} />
-              <span>Fechamento de Comissão</span>
-            </button>
-          )}
-
-          {isAdmin && (
-            <button
-              type="button"
-              onClick={() => setActiveTab('point_guide')}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.75rem',
-                padding: '0.85rem 1rem',
-                borderRadius: '12px',
-                border: activeTab === 'point_guide' ? '1px solid #3b82f6' : '1px solid rgba(255,255,255,0.05)',
-                background: activeTab === 'point_guide' ? 'rgba(59,130,246,0.12)' : 'rgba(255,255,255,0.02)',
-                color: activeTab === 'point_guide' ? '#60a5fa' : 'var(--text-secondary)',
-                cursor: 'pointer',
-                fontWeight: 600,
-                fontSize: '0.9rem',
-                transition: 'all 0.2s',
-                textAlign: 'left'
-              }}
-            >
-              <CreditCard size={16} style={{ color: '#3b82f6' }} />
-              <span>📟 Guia Maquininha</span>
-            </button>
-          )}
-
-          {isAdmin && (
-            <button
-              type="button"
-              onClick={() => setActiveTab('payments')}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.75rem',
-                padding: '0.85rem 1rem',
-                borderRadius: '12px',
-                border: activeTab === 'payments' ? '1px solid var(--primary-gold)' : '1px solid rgba(255,255,255,0.05)',
-                background: activeTab === 'payments' ? 'rgba(245, 158, 11, 0.1)' : 'rgba(255,255,255,0.02)',
-                color: activeTab === 'payments' ? 'var(--primary-gold)' : 'var(--text-secondary)',
-                cursor: 'pointer',
-                fontWeight: 600,
-                fontSize: '0.9rem',
-                transition: 'all 0.2s',
-                textAlign: 'left'
-              }}
-            >
-              <Wallet size={16} style={{ color: '#f59e0b' }} />
-              <span>Formas de Pagamento</span>
-            </button>
-          )}
-        </aside>
-
+      <div style={{ width: '100%' }}>
         {/* Formulários de Configurações */}
-        <main className="loyalty-card" style={{ padding: '2rem', textAlign: 'left' }}>
+        <main className="loyalty-card" style={{ padding: '2rem', textAlign: 'left', width: '100%' }}>
           
           {/* Aba Mesas & QR Codes */}
-          {activeTab === 'mesas' && isAdmin && (
+          {configTab === 'mesas' && isAdmin && (
             <></>
           )}
 
           {/* Aba Formas de Pagamento */}
-          {activeTab === 'payments' && isAdmin && (
+          {configTab === 'payments' && isAdmin && (
             <div style={{ background: 'rgba(255,255,255,0.02)', padding: '1.5rem', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.05)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
                 <Wallet size={20} style={{ color: 'var(--primary-gold)' }} />
@@ -1697,7 +1395,7 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
           )}
 
           {/* Aba Guia Maquininha Point */}
-          {activeTab === 'point_guide' && isAdmin && (
+          {configTab === 'point_guide' && isAdmin && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
 
               {/* ── SEÇÃO: CONFIGURAÇÃO AUTOMÁTICA ── */}
@@ -2127,7 +1825,7 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
           )}
 
           {/* Aba 1: Meu Perfil */}
-          {activeTab === 'profile' && (
+          {configTab === 'profile' && (
             <form onSubmit={handleSaveProfile} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
               <h3 style={{ borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '0.5rem', margin: 0 }}>Meu Perfil e Endereço</h3>
               
@@ -2295,7 +1993,7 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
           )}
 
           {/* Aba 2: Funcionamento da Loja */}
-          {activeTab === 'store' && isAdmin && (
+          {configTab === 'store' && isAdmin && (
             <form onSubmit={handleSaveStoreConfig} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
               <h3 style={{ borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '0.5rem', margin: 0 }}>Funcionamento da Pastelaria</h3>
               
@@ -2700,7 +2398,7 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
           )}
 
           {/* Aba 3: Fidelidade */}
-          {activeTab === 'loyalty' && isAdmin && (
+          {configTab === 'loyalty' && isAdmin && (
             <form onSubmit={handleSaveStoreConfig} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
               <h3 style={{ borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '0.5rem', margin: 0 }}>Regras do Cartão Fidelidade</h3>
 
@@ -2731,7 +2429,7 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
           )}
 
           {/* Aba 4: Avançado Dev */}
-          {activeTab === 'advanced' && (isDev || role === 'owner') && (
+          {configTab === 'advanced' && (isDev || role === 'owner') && (
             <form onSubmit={handleSaveDevMPConfig} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
               <div>
                 <h3 style={{ borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '0.5rem', margin: 0, color: '#a855f7' }}>Split de Pagamentos & Mercado Pago 💳</h3>
@@ -2911,7 +2609,7 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
             </form>
           )}
           {/* Aba 5: Logs de Auditoria */}
-          {activeTab === 'audit_logs' && isAdmin && (
+          {configTab === 'audit_logs' && isAdmin && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
               <div>
                 <h3 style={{ borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '0.5rem', margin: 0 }}>Histórico Visível (Timeline)</h3>
@@ -2992,7 +2690,7 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
           )}
 
           {/* Aba 6: Fechamento de Comissões */}
-          {activeTab === 'commissions' && isAdmin && (() => {
+          {configTab === 'commissions' && isAdmin && (() => {
             const weeklyPeriod = getWeeklyPeriod();
             const monthlyPeriod = getMonthlyPeriod();
             const weeklyOrders = filterOfflineOrders(weeklyPeriod.start, weeklyPeriod.end);
@@ -3172,12 +2870,12 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
           })()}
 
           {/* Aba 7: Segurança e Câmeras IP */}
-          {activeTab === 'security' && (isDev || role === 'owner') && (
+          {configTab === 'security' && (isDev || role === 'owner') && (
             <></>
           )}
 
           {/* Aba 8: Impressora Bluetooth */}
-          {activeTab === 'printer' && (isAdmin || role === 'collaborator') && (
+          {configTab === 'printer' && (isAdmin || role === 'collaborator') && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
               <div>
                 <h3 style={{ borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '0.5rem', margin: 0, color: 'var(--primary-gold)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -3435,7 +3133,7 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
 
         
           {/* Aba 9: Impressora Bematech Elgin i8 */}
-          {activeTab === 'elgin_i8' && (isAdmin || role === 'collaborator') && (
+          {configTab === 'elgin_i8' && (isAdmin || role === 'collaborator') && (
             <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', height: '100%' }}>
               <div>
                 <h3 style={{ borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '0.5rem', margin: 0, color: 'var(--primary-gold)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
