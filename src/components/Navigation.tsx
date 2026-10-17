@@ -3,7 +3,7 @@ import {
   Home, Scissors, Tag, Info, Phone,
   PawPrint, CalendarDays, Wallet, Package, 
   ClipboardList, BarChart3, Users, History, Settings, CreditCard, ShoppingCart, Menu, X, Truck,
-  User, Printer, Store, Shield, QrCode, Lock, Terminal, FileText
+  User, Printer, Store, Shield, QrCode, Lock, Terminal, FileText, Receipt
 } from 'lucide-react';
 import type { UserRole } from '../supabaseClient';
 import { roleHierarchy } from '../supabaseClient';
@@ -124,6 +124,13 @@ export const Navigation: React.FC<NavigationProps> = ({ styles, activeSection, s
                 <User size={14} /> Meu Perfil
               </button>
             </li>
+            {(userRole === 'developer' || userRole === 'owner') && (
+              <li style={{ width: '100%' }}>
+                <button onClick={() => setConfigTab('fiscal')} style={{ ...styles.navLink(configTab === 'fiscal', false), padding: '6px 10px', fontSize: '0.8rem', width: '100%', textAlign: 'left', border: 'none', background: configTab === 'fiscal' ? 'rgba(255,255,255,0.1)' : 'transparent', color: configTab === 'fiscal' ? '#fff' : 'rgba(255,255,255,0.7)', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', borderRadius: '6px' }}>
+                  <Receipt size={14} /> Nota Fiscal
+                </button>
+              </li>
+            )}
             {(isManager || userRole === 'collaborator') && (
               <li style={{ width: '100%' }}>
                 <button onClick={() => setConfigTab('printer')} style={{ ...styles.navLink(configTab === 'printer', false), padding: '6px 10px', fontSize: '0.8rem', width: '100%', textAlign: 'left', border: 'none', background: configTab === 'printer' ? 'rgba(255,255,255,0.1)' : 'transparent', color: configTab === 'printer' ? '#fff' : 'rgba(255,255,255,0.7)', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', borderRadius: '6px' }}>

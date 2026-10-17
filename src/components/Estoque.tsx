@@ -3,6 +3,7 @@ import { Package, AlertTriangle, PlusCircle, Search, Filter, Trash2, Edit, Save,
 import { supabase, mockSupabaseDb, isSupabaseConfigured, logAction } from '../supabaseClient';
 import type { Product } from '../supabaseClient';
 import { useAuth } from '../hooks/useAuth';
+import { NcmImportModal } from './NcmImportModal';
 
 interface EstoqueProps {
   styles: any;
@@ -35,6 +36,9 @@ export const Estoque: React.FC<EstoqueProps> = ({ styles }) => {
   const [quantity, setQuantity] = useState<number>(0);
   const [minStock, setMinStock] = useState<number>(0);
   const [sku, setSku] = useState<string>('');
+  const [isNcmImportOpen, setIsNcmImportOpen] = useState<boolean>(false);
+  const [ncm, setNcm] = useState<string>('');
+  const [origin, setOrigin] = useState<string>('0');
 
   // Filters state
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -80,6 +84,8 @@ export const Estoque: React.FC<EstoqueProps> = ({ styles }) => {
     setQuantity(0);
     setMinStock(0);
     setSku('');
+    setNcm('');
+    setOrigin('0');
     setIsModalOpen(true);
   };
 
@@ -93,6 +99,8 @@ export const Estoque: React.FC<EstoqueProps> = ({ styles }) => {
     setQuantity(product.quantity);
     setMinStock(product.min_stock);
     setSku(product.sku || '');
+    setNcm((product as Product & { ncm?: string }).ncm || '');
+    setOrigin((product as Product & { origin?: string }).origin || '0');
     setIsModalOpen(true);
   };
 
@@ -113,7 +121,9 @@ export const Estoque: React.FC<EstoqueProps> = ({ styles }) => {
       cost_price: Number(costPrice) || 0,
       quantity: Number(quantity) || 0,
       min_stock: Number(minStock) || 0,
-      sku: sku.trim()
+      sku: sku.trim(),
+      ncm: ncm.replace(/\D/g, ''),
+      origin
     };
 
     try {
@@ -210,6 +220,8 @@ export const Estoque: React.FC<EstoqueProps> = ({ styles }) => {
     return true;
   });
 
+  const missingNcm = products.filter(p => ((p as Product & { ncm?: string }).ncm || '').replace(/\D/g, '').length !== 8).length;
+
   return (
     <section style={styles.contentSection} aria-labelledby="estoque-heading">
       {/* Header */}
@@ -224,15 +236,46 @@ export const Estoque: React.FC<EstoqueProps> = ({ styles }) => {
             Acompanhe a quantidade de mercadorias, altere preços e configure alertas de estoque baixo.
           </p>
         </div>
-        <button
-          onClick={handleOpenAddModal}
-          style={styles.btnAcc(hoveredBtn === 'new-product')}
-          onMouseEnter={() => setHoveredBtn('new-product')}
-          onMouseLeave={() => setHoveredBtn(null)}
-        >
-          <PlusCircle size={16} /> Novo Produto
-        </button>
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          <button
+            onClick={() => setIsNcmImportOpen(true)}
+            style={styles.btnAcc(hoveredBtn === 'import-ncm')}
+            onMouseEnter={() => setHoveredBtn('import-ncm')}
+            onMouseLeave={() => setHoveredBtn(null)}
+          >
+            Preencher NCM por planilha
+          </button>
+          <button
+            onClick={handleOpenAddModal}
+            style={styles.btnAcc(hoveredBtn === 'new-product')}
+            onMouseEnter={() => setHoveredBtn('new-product')}
+            onMouseLeave={() => setHoveredBtn(null)}
+          >
+            <PlusCircle size={16} /> Novo Produto
+          </button>
+        </div>
       </div>
+
+      {missingNcm > 0 && (
+        <div role="status" style={{
+          margin: '15px 0', padding: '8px 12px', borderRadius: '6px', fontSize: '0.82rem',
+          backgroundColor: 'hsl(36,95%,45%,0.08)', border: '1px solid hsl(36,95%,45%,0.25)', color: 'hsl(36,95%,30%)'
+        }}>
+          ⚠ {missingNcm} produto(s) sem NCM — sem ele não dá para emitir nota fiscal desses itens.{' '}
+          <button type="button" onClick={() => setIsNcmImportOpen(true)} style={{ background: 'none', border: 'none', color: styles.primary, cursor: 'pointer', fontWeight: 700, padding: 0 }}>
+            Resolver agora
+          </button>
+        </div>
+      )}
+
+      {isNcmImportOpen && (
+        <NcmImportModal
+          styles={styles}
+          products={products as any}
+          onClose={() => setIsNcmImportOpen(false)}
+          onDone={fetchProducts}
+        />
+      )}
 
       {errorMsg && (
         <div style={{
@@ -645,6 +688,30 @@ export const Estoque: React.FC<EstoqueProps> = ({ styles }) => {
                   style={styles.formInput}
                   placeholder="Ex: 7891020304050"
                 />
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <div style={{ ...styles.formGroup, flex: '1 1 50%' }}>
+                  <label htmlFor="prod-ncm" style={styles.formLabel}>NCM (8 dígitos, p/ NFC-e)</label>
+                  <input
+                    id="prod-ncm"
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={8}
+                    value={ncm}
+                    onChange={(e) => setNcm(e.target.value.replace(/\D/g, ''))}
+                    style={styles.formInput}
+                    placeholder="Ex: 23091000"
+                  />
+                </div>
+                <div style={{ ...styles.formGroup, flex: '1 1 50%' }}>
+                  <label htmlFor="prod-origin" style={styles.formLabel}>Origem</label>
+                  <select id="prod-origin" value={origin} onChange={(e) => setOrigin(e.target.value)} style={styles.formInput}>
+                    <option value="0">0 - Nacional</option>
+                    <option value="1">1 - Estrangeira (importação direta)</option>
+                    <option value="2">2 - Estrangeira (mercado interno)</option>
+                  </select>
+                </div>
               </div>
 
               <div style={{ display: 'flex', gap: '10px', marginTop: '15px' }}>

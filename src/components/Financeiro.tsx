@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Wallet, TrendingUp, TrendingDown, DollarSign, PlusCircle, Trash2, Calendar, CreditCard } from 'lucide-react';
 import { logAction } from '../supabaseClient';
 import { useAuth } from '../hooks/useAuth';
+import { fetchSales } from '../utils/salesService';
+import { NotasFiscais } from './NotasFiscais';
 
 interface FinanceiroProps {
   styles: any;
@@ -20,6 +22,7 @@ export const Financeiro: React.FC<FinanceiroProps> = ({ styles }) => {
   const { user: currentUser } = useAuth();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isFormOpen, setIsFormOpen] = useState<boolean>(false);
+  const [view, setView] = useState<'caixa' | 'notas'>('caixa');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // New transaction state
@@ -28,9 +31,15 @@ export const Financeiro: React.FC<FinanceiroProps> = ({ styles }) => {
   const [value, setValue] = useState<string>('');
   const [paymentMethod, setPaymentMethod] = useState<string>('Dinheiro');
 
-  const loadFinancialData = () => {
-    // 1. Get POS Sales
-    const pdvSales = JSON.parse(localStorage.getItem('laviola_pdv_sales') || '[]');
+  const loadFinancialData = async () => {
+    // 1. Get POS Sales (Firestore, compartilhado entre todos os computadores)
+    let pdvSales: any[] = [];
+    try {
+      pdvSales = await fetchSales();
+    } catch (e) {
+      console.error('Erro ao carregar vendas do PDV:', e);
+      setErrorMessage('Não foi possível carregar as vendas do PDV.');
+    }
     const pdvTransactions: Transaction[] = pdvSales.map((sale: any) => ({
       id: sale.id || Math.random().toString(36).substring(2, 9),
       date: sale.timestamp || new Date().toISOString(),
@@ -173,6 +182,28 @@ export const Financeiro: React.FC<FinanceiroProps> = ({ styles }) => {
         </button>
       </div>
 
+      <div role="tablist" style={{ display: 'flex', gap: '8px', marginTop: '20px' }}>
+        {([['caixa', 'Entradas e saídas'], ['notas', 'Notas fiscais']] as const).map(([id, label]) => (
+          <button
+            key={id}
+            type="button"
+            role="tab"
+            aria-selected={view === id}
+            onClick={() => setView(id)}
+            style={{
+              padding: '8px 16px', borderRadius: '8px', cursor: 'pointer', fontWeight: 700, fontSize: '0.85rem',
+              border: `1px solid ${view === id ? styles.primary : styles.borderColor}`,
+              background: view === id ? styles.primary : 'none', color: view === id ? '#fff' : styles.textMain,
+            }}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {view === 'notas' && <NotasFiscais styles={styles} />}
+
+      {view === 'caixa' && (<>
       {/* KPI Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginTop: '24px' }}>
         {cards.map(card => (
@@ -268,6 +299,8 @@ export const Financeiro: React.FC<FinanceiroProps> = ({ styles }) => {
       </div>
 
       {/* MODAL: NOVO LANÇAMENTO */}
+      </>)}
+
       {isFormOpen && (
         <div style={styles.modalOverlay}>
           <div style={{ ...styles.modalContent, maxWidth: '450px' }} role="dialog" aria-modal="true" aria-labelledby="form-title">

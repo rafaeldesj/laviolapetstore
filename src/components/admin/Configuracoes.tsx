@@ -19,9 +19,14 @@ import {
   disconnectSerial,
   isSerialConnected,
   getConnectedSerialName,
-  subscribeToSerialState
+  subscribeToSerialState,
+  connectUsb,
+  disconnectUsb,
+  subscribeToUsbState,
+  restorePrinterConnection
 } from '../../utils/printer';
 import type { PrinterSettings } from '../../utils/printer';
+import { FiscalSettingsPanel } from './FiscalSettings';
 
 interface StoreConfig {
   isOpen: boolean;
@@ -88,6 +93,9 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
   const [btDeviceName, setBtDeviceName] = useState(getConnectedDeviceName());
   const [isSerialConn, setIsSerialConn] = useState(isSerialConnected());
   const [serialDeviceName, setSerialDeviceName] = useState(getConnectedSerialName());
+  const [isUsbConn, setIsUsbConn] = useState(false);
+  const [usbDeviceName, setUsbDeviceName] = useState('');
+  const [isUsbPairing, setIsUsbPairing] = useState(false);
   const [isPairing, setIsPairing] = useState(false);
   const [isSerialPairing, setIsSerialPairing] = useState(false);
   const [printError, setPrintError] = useState<string | null>(null);
@@ -102,9 +110,15 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
       setIsSerialConn(connected);
       setSerialDeviceName(name || '');
     });
+    const unsubscribeUsb = subscribeToUsbState((connected, name) => {
+      setIsUsbConn(connected);
+      setUsbDeviceName(name || '');
+    });
+    restorePrinterConnection();
     return () => {
       unsubscribeBt();
       unsubscribeSerial();
+      unsubscribeUsb();
     };
   }, []);
 
@@ -146,6 +160,21 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
   const handleDisconnectSerial = () => {
     disconnectSerial();
     setPrintSuccess(false);
+  };
+
+  const handleConnectUsb = async () => {
+    setIsUsbPairing(true);
+    setPrintError(null);
+    setPrintSuccess(false);
+    try {
+      await connectUsb();
+      setPrintSuccess(true);
+      setTimeout(() => setPrintSuccess(false), 3000);
+    } catch (err: any) {
+      if (err?.name !== 'NotFoundError') setPrintError(err.message || 'Erro ao conectar à impressora USB.');
+    } finally {
+      setIsUsbPairing(false);
+    }
   };
 
   const handleSavePrinterSettings = (newSettings: PrinterSettings) => {
@@ -2759,14 +2788,14 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
                     </div>
                     <div>
                       <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Período Atual:</div>
-                      <div style={{ fontSize: '0.85rem', color: '#fff', fontWeight: 600 }}>
+                      <div style={{ fontSize: '0.85rem', color: 'var(--text-primary, #1e293b)', fontWeight: 600 }}>
                         {weeklyPeriod.start.toLocaleDateString('pt-BR')} a {weeklyPeriod.end.toLocaleDateString('pt-BR')}
                       </div>
                     </div>
                     <div className="responsive-grid-2" style={{ borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '1rem' }}>
                       <div>
                         <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Vendas Offline:</div>
-                        <div style={{ fontSize: '1.2rem', fontWeight: 700, color: '#fff' }}>R$ {totalWeeklySales.toFixed(2)}</div>
+                        <div style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--text-primary, #1e293b)' }}>R$ {totalWeeklySales.toFixed(2)}</div>
                       </div>
                       <div>
                         <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Taxa Dev ({pct}%):</div>
@@ -2792,14 +2821,14 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
                     </div>
                     <div>
                       <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Período Atual:</div>
-                      <div style={{ fontSize: '0.85rem', color: '#fff', fontWeight: 600 }}>
+                      <div style={{ fontSize: '0.85rem', color: 'var(--text-primary, #1e293b)', fontWeight: 600 }}>
                         {monthlyPeriod.start.toLocaleDateString('pt-BR')} a {monthlyPeriod.end.toLocaleDateString('pt-BR')}
                       </div>
                     </div>
                     <div className="responsive-grid-2" style={{ borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '1rem' }}>
                       <div>
                         <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Vendas Offline:</div>
-                        <div style={{ fontSize: '1.2rem', fontWeight: 700, color: '#fff' }}>R$ {totalMonthlySales.toFixed(2)}</div>
+                        <div style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--text-primary, #1e293b)' }}>R$ {totalMonthlySales.toFixed(2)}</div>
                       </div>
                       <div>
                         <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Taxa Dev ({pct}%):</div>
@@ -2880,10 +2909,10 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
               <div>
                 <h3 style={{ borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '0.5rem', margin: 0, color: 'var(--primary-gold)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                   <Printer size={22} style={{ color: 'var(--primary-gold)' }} />
-                  Configuração da Impressora Térmica Bluetooth Bluetooth 🖨️
+                  Configuração da Impressora Térmica 🖨️
                 </h3>
                 <p style={{ margin: '0.5rem 0 0 0', color: 'var(--text-secondary)', fontSize: '0.85rem', lineHeight: '1.4' }}>
-                  Configure e teste a sua impressora térmica local para a impressão dos pedidos. Você pode imprimir o cupom e grampeá-lo na embalagem do cliente para rápida identificação na cozinha e na entrega.
+                  Configure e teste a impressora térmica do caixa. Ela imprime o cupom de cada venda do PDV e o DANFE NFC-e quando a nota fiscal é emitida. A conexão também pode ser feita direto na tela da Venda Avulsa.
                 </p>
               </div>
 
@@ -2903,23 +2932,25 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
                 
                 {/* Métodos de Impressão e Tamanho */}
                 <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '16px', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
-                  <h4 style={{ margin: 0, color: '#fff', fontSize: '1rem', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '0.5rem' }}>Preferências de Impressão</h4>
+                  <h4 style={{ margin: 0, color: 'var(--text-primary, #1e293b)', fontSize: '1rem', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '0.5rem' }}>Preferências de Impressão</h4>
                   
                   <div>
                     <label style={{ display: 'block', fontSize: '0.82rem', color: 'var(--text-secondary)', marginBottom: '0.4rem', fontWeight: 600 }}>MÉTODO DE IMPRESSÃO</label>
                     <select
                       value={printerSettings.method}
-                      onChange={(e) => handleSavePrinterSettings({ ...printerSettings, method: e.target.value as 'browser' | 'bluetooth' | 'serial' })}
+                      onChange={(e) => handleSavePrinterSettings({ ...printerSettings, method: e.target.value as PrinterSettings['method'] })}
                       style={{ width: '100%', padding: '0.65rem 0.85rem', borderRadius: '10px', background: '#0b0f19', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', cursor: 'pointer', fontSize: '0.9rem' }}
                     >
                       <option value="browser">Navegador (Padrão do Sistema) - Recomendado p/ Cabo USB</option>
                       <option value="bluetooth">Bluetooth Direto (Web Bluetooth BLE API)</option>
-                      <option value="serial">Cabo USB Direto (Web Serial API) - Chrome/Edge</option>
+                      <option value="serial">USB Serial / COM (Web Serial API) - Chrome/Edge</option>
+                      <option value="usb">USB Direto (WebUSB) - requer driver WinUSB</option>
                     </select>
                     <p style={{ margin: '0.4rem 0 0 0', fontSize: '0.75rem', color: 'var(--text-secondary)', lineHeight: '1.3' }}>
                       {printerSettings.method === 'browser' && 'Utiliza o gerenciador de impressão do próprio sistema (Windows/Android/iOS). Altamente compatível com qualquer impressora pareada por Bluetooth clássico ou conectada por cabo USB.'}
                       {printerSettings.method === 'bluetooth' && 'Envia dados binários brutos (ESC/POS) diretamente à impressora via Bluetooth BLE do navegador. Não abre telas do sistema.'}
-                      {printerSettings.method === 'serial' && 'Envia dados binários brutos (ESC/POS) diretamente à impressora USB conectada por cabo serial virtual COM. Não abre telas do sistema.'}
+                      {printerSettings.method === 'serial' && 'Envia dados binários brutos (ESC/POS) diretamente à impressora USB conectada por cabo serial virtual COM. Não abre telas do sistema. A impressora autorizada é reconectada sozinha ao abrir o sistema.'}
+                      {printerSettings.method === 'usb' && 'Fala direto com a impressora pelo USB (WebUSB). No Windows, só funciona se a impressora estiver com o driver WinUSB (ex.: instalado com o Zadig); com o driver do fabricante, use USB Serial/COM ou Navegador.'}
                     </p>
                   </div>
 
@@ -2969,13 +3000,13 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
 
                 {/* Status de Conexão de Hardware */}
                 <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '16px', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
-                  <h4 style={{ margin: 0, color: '#fff', fontSize: '1rem', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '0.5rem' }}>Conexão de Hardware</h4>
+                  <h4 style={{ margin: 0, color: 'var(--text-primary, #1e293b)', fontSize: '1rem', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '0.5rem' }}>Conexão de Hardware</h4>
                   
                   {printerSettings.method === 'bluetooth' && (
                     <>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', background: 'rgba(0,0,0,0.15)', padding: '0.75rem 1rem', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.03)' }}>
                         <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: isBtConnected ? '#10b981' : '#ef4444', display: 'inline-block' }}></span>
-                        <span style={{ fontSize: '0.9rem', fontWeight: 600, color: '#fff' }}>
+                        <span style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-primary, #1e293b)' }}>
                           {isBtConnected ? `Conectado: ${btDeviceName}` : 'Impressora Bluetooth Desconectada'}
                         </span>
                       </div>
@@ -3007,7 +3038,7 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
                     <>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', background: 'rgba(0,0,0,0.15)', padding: '0.75rem 1rem', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.03)' }}>
                         <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: isSerialConn ? '#10b981' : '#ef4444', display: 'inline-block' }}></span>
-                        <span style={{ fontSize: '0.9rem', fontWeight: 600, color: '#fff' }}>
+                        <span style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-primary, #1e293b)' }}>
                           {isSerialConn ? `Conectado via USB: ${serialDeviceName}` : 'Impressora USB/Cabo Desconectada'}
                         </span>
                       </div>
@@ -3026,6 +3057,38 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
                           <button
                             type="button"
                             onClick={handleDisconnectSerial}
+                            style={{ flex: 1, padding: '0.75rem', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)', borderRadius: '10px', fontWeight: 700, fontSize: '0.88rem', cursor: 'pointer' }}
+                          >
+                            Desconectar USB
+                          </button>
+                        )}
+                      </div>
+                    </>
+                  )}
+
+                  {printerSettings.method === 'usb' && (
+                    <>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', background: 'rgba(0,0,0,0.15)', padding: '0.75rem 1rem', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.03)' }}>
+                        <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: isUsbConn ? '#10b981' : '#ef4444', display: 'inline-block' }}></span>
+                        <span style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-primary, #1e293b)' }}>
+                          {isUsbConn ? `Conectado via USB: ${usbDeviceName}` : 'Impressora USB Desconectada'}
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', gap: '0.75rem' }}>
+                        {!isUsbConn ? (
+                          <button
+                            type="button"
+                            disabled={isUsbPairing}
+                            onClick={handleConnectUsb}
+                            style={{ flex: 1, padding: '0.75rem', background: 'var(--primary-gold)', color: '#0b0f19', border: 'none', borderRadius: '10px', fontWeight: 700, fontSize: '0.88rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
+                          >
+                            <Printer size={16} />
+                            Conectar Impressora USB
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => disconnectUsb()}
                             style={{ flex: 1, padding: '0.75rem', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)', borderRadius: '10px', fontWeight: 700, fontSize: '0.88rem', cursor: 'pointer' }}
                           >
                             Desconectar USB
@@ -3083,45 +3146,32 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
 
               {/* Automações de Impressão */}
               <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '16px', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
-                <h4 style={{ margin: 0, color: '#fff', fontSize: '1rem', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '0.5rem' }}>Impressão Automática (Automação de Pedidos)</h4>
+                <h4 style={{ margin: 0, color: 'var(--text-primary, #1e293b)', fontSize: '1rem', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '0.5rem' }}>Automação do Caixa</h4>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1.25rem' }}>
-                  
-                  <label style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', cursor: 'pointer', background: 'rgba(0,0,0,0.1)', padding: '0.85rem 1rem', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.02)' }}>
+
+                  <label style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', cursor: 'pointer', background: 'rgba(0,0,0,0.05)', padding: '0.85rem 1rem', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.02)' }}>
                     <input
                       type="checkbox"
-                      checked={printerSettings.autoPrintOnNew}
-                      onChange={(e) => handleSavePrinterSettings({ ...printerSettings, autoPrintOnNew: e.target.checked })}
+                      checked={printerSettings.autoPrintOnSale}
+                      onChange={(e) => handleSavePrinterSettings({ ...printerSettings, autoPrintOnSale: e.target.checked })}
                       style={{ marginTop: '0.2rem', accentColor: 'var(--primary-gold)' }}
                     />
                     <div>
-                      <strong style={{ display: 'block', fontSize: '0.9rem', color: '#fff' }}>Ao receber novo pedido</strong>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Imprime o cupom automaticamente assim que o cliente enviar o pedido no caixa ou cardápio.</span>
+                      <strong style={{ display: 'block', fontSize: '0.9rem', color: 'var(--text-primary, #1e293b)' }}>Imprimir ao finalizar a venda</strong>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Imprime o cupom assim que a venda é concluída no PDV (e o DANFE NFC-e, se a nota for emitida).</span>
                     </div>
                   </label>
 
-                  <label style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', cursor: 'pointer', background: 'rgba(0,0,0,0.1)', padding: '0.85rem 1rem', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.02)' }}>
+                  <label style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', cursor: 'pointer', background: 'rgba(0,0,0,0.05)', padding: '0.85rem 1rem', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.02)' }}>
                     <input
                       type="checkbox"
-                      checked={printerSettings.autoPrintOnAccept}
-                      onChange={(e) => handleSavePrinterSettings({ ...printerSettings, autoPrintOnAccept: e.target.checked })}
+                      checked={printerSettings.openDrawer}
+                      onChange={(e) => handleSavePrinterSettings({ ...printerSettings, openDrawer: e.target.checked })}
                       style={{ marginTop: '0.2rem', accentColor: 'var(--primary-gold)' }}
                     />
                     <div>
-                      <strong style={{ display: 'block', fontSize: '0.9rem', color: '#fff' }}>Ao começar preparo</strong>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Imprime o cupom automaticamente na cozinha quando o cozinheiro clicar em 'Começar Preparo'.</span>
-                    </div>
-                  </label>
-
-                  <label style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', cursor: 'pointer', background: 'rgba(0,0,0,0.1)', padding: '0.85rem 1rem', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.02)' }}>
-                    <input
-                      type="checkbox"
-                      checked={printerSettings.autoPrintOnReady}
-                      onChange={(e) => handleSavePrinterSettings({ ...printerSettings, autoPrintOnReady: e.target.checked })}
-                      style={{ marginTop: '0.2rem', accentColor: 'var(--primary-gold)' }}
-                    />
-                    <div>
-                      <strong style={{ display: 'block', fontSize: '0.9rem', color: '#fff' }}>Ao concluir preparo</strong>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Imprime o cupom automaticamente assim que o pedido for enviado para o balcão.</span>
+                      <strong style={{ display: 'block', fontSize: '0.9rem', color: 'var(--text-primary, #1e293b)' }}>Abrir gaveta de dinheiro</strong>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Envia o pulso de abertura da gaveta nas vendas em dinheiro (gaveta ligada à impressora; não vale para o método Navegador).</span>
                     </div>
                   </label>
 
@@ -3132,6 +3182,8 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
           )}
 
         
+          {configTab === 'fiscal' && (isDev || role === 'owner') && <FiscalSettingsPanel />}
+
           {/* Aba 9: Impressora Bematech Elgin i8 */}
           {configTab === 'elgin_i8' && (isAdmin || role === 'collaborator') && (
             <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', height: '100%' }}>
@@ -3169,26 +3221,21 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
                       <label style={{ display: 'block', marginBottom: '0.5rem', color: '#cbd5e1', fontSize: '0.85rem' }}>Modo de Conexão (Elgin i8)</label>
                       <select
                         value={printerSettings.method}
-                        onChange={(e) => handleSavePrinterSettings({ ...printerSettings, method: e.target.value as 'browser' | 'bluetooth' | 'serial' | 'ethernet' })}
+                        onChange={(e) => handleSavePrinterSettings({ ...printerSettings, method: e.target.value as PrinterSettings['method'] })}
                         style={{ width: '100%', padding: '0.75rem 1rem', borderRadius: '12px', background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', cursor: 'pointer', fontSize: '0.9rem' }}
                       >
                         <option value="browser">USB / Spooler do Windows (Padrão)</option>
-                        <option value="ethernet">Rede Local (Ethernet / IP Direto)</option>
-                        <option value="serial">Cabo Serial / COM Direta</option>
+                        <option value="serial">USB Serial / COM Direta</option>
+                        <option value="usb">USB Direto (WebUSB, driver WinUSB)</option>
                       </select>
                     </div>
 
-                    {printerSettings.method === 'ethernet' && (
-                      <div className="fade-in">
-                        <label style={{ display: 'block', marginBottom: '0.5rem', color: '#cbd5e1', fontSize: '0.85rem' }}>Endereço IP da Elgin i8</label>
-                        <input
-                          type="text"
-                          placeholder="Ex: 192.168.1.100"
-                          style={{ width: '100%', padding: '0.75rem 1rem', borderRadius: '12px', background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', fontSize: '0.9rem' }}
-                        />
-                      </div>
+                    {printerSettings.method === 'browser' && (
+                      <p className="fade-in" style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: '1.4' }}>
+                        Rede (IP) direta não é possível pelo navegador. Para a i8 em rede, instale-a no Windows como impressora e use este modo, ou conecte por USB (COM) para impressão silenciosa e corte automático.
+                      </p>
                     )}
-                    
+
                     {printerSettings.method === 'serial' && (
                       <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '0.5rem' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem', background: 'rgba(0,0,0,0.2)', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.05)' }}>

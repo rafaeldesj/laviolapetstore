@@ -1,0 +1,9 @@
+# Proxy gratuito de emissão de NFC-e (Cloudflare Workers, plano Free, sem cartão).
+name = "laviola-fiscal"
+main = "index.js"
+compatibility_date = "2025-01-01"
+
+[vars]
+FIREBASE_PROJECT_ID = "laviolapetstore-e8de9"
+# Origens autorizadas a chamar o proxy (separe por vírgula)
+ALLOWED_ORIGINS = "https://laviolapet.web.app,https://laviolapetstore.web.app,http://localhost:5173"

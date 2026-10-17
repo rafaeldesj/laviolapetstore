@@ -8,6 +8,12 @@ import { supabase, mockSupabaseDb, isSupabaseConfigured, logAction } from '../su
 import type { Product } from '../supabaseClient';
 import type { AuthUser } from '../hooks/useAuth';
 import { DeliveryMap, type MapAddress } from './DeliveryMap';
+import { PrinterStatus } from './PrinterStatus';
+import { finalizeSale } from '../utils/salesService';
+import type { Sale } from '../utils/salesService';
+import { printSaleReceipt, getPrinterSettings, DEFAULT_COMPANY } from '../utils/printer';
+import { companyFromSettings, consultNfce, emitNfce, explainFiscalError, getFiscalSettings, isValidCpfOrCnpj, DEFAULT_FISCAL_SETTINGS } from '../utils/fiscal';
+import type { FiscalSettings } from '../utils/fiscal';
 
 interface VendaAvulsaProps {
   styles: any;
@@ -44,7 +50,10 @@ export const VendaAvulsa: React.FC<VendaAvulsaProps> = ({ styles, currentUser })
   const [clientName, setClientName] = useState<string>('');
   const [clientCPF, setClientCPF] = useState<string>('');
   const [checkoutSuccess, setCheckoutSuccess] = useState<boolean>(false);
-  const [lastSaleSummary, setLastSaleSummary] = useState<any>(null);
+  const [lastSaleSummary, setLastSaleSummary] = useState<Sale | null>(null);
+  const [fiscalCfg, setFiscalCfg] = useState<FiscalSettings>(DEFAULT_FISCAL_SETTINGS);
+  const [receiptBusy, setReceiptBusy] = useState<boolean>(false);
+  const [receiptNotice, setReceiptNotice] = useState<{ ok: boolean; text: string } | null>(null);
   const [deliveryType, setDeliveryType] = useState<'store' | 'delivery' | null>(null);
   const [hoveredType, setHoveredType] = useState<'store' | 'delivery' | null>(null);
   const [addressStreet, setAddressStreet] = useState<string>('');
@@ -222,6 +231,7 @@ export const VendaAvulsa: React.FC<VendaAvulsaProps> = ({ styles, currentUser })
 
   useEffect(() => {
     loadProducts();
+    getFiscalSettings().then(setFiscalCfg);
   }, []);
 
   // Autofocus barcode scanner field on load and listen for global shortcuts
@@ -438,8 +448,15 @@ export const VendaAvulsa: React.FC<VendaAvulsaProps> = ({ styles, currentUser })
 
   const handleFinalizeSale = async () => {
     if (cart.length === 0) return;
-    setIsLoading(true);
     setErrorMessage(null);
+
+    const clientDoc = clientCPF.replace(/\D/g, '');
+    if (clientDoc && !isValidCpfOrCnpj(clientDoc)) {
+      setErrorMessage('CPF/CNPJ do cliente inválido. Corrija ou deixe em branco (consumidor não identificado).');
+      return;
+    }
+
+    setIsLoading(true);
 
     const saleItems = cart.map(item => ({
       product_id: item.product.id,
@@ -447,73 +464,48 @@ export const VendaAvulsa: React.FC<VendaAvulsaProps> = ({ styles, currentUser })
       sku: item.product.sku,
       price: item.product.price,
       quantity: item.quantity,
-      subtotal: item.product.price * item.quantity,
-      // NF-e elements
-      ncm: (item.product as any).ncm || '',
-      origin: (item.product as any).origin || '0'
+      subtotal: Number((item.product.price * item.quantity).toFixed(2)),
+      ncm: (item.product as ProductWithNF).ncm || '',
+      origin: (item.product as ProductWithNF).origin || '0'
     }));
 
-    const salePayload = {
-      timestamp: new Date().toISOString(),
-      items: saleItems,
-      total_items: totalItems,
-      subtotal: subtotal,
-      payment_method: paymentMethod,
-      amount_paid: paymentMethod === 'Dinheiro' ? parseFloat(amountPaid) || subtotal : subtotal,
-      change: paymentMethod === 'Dinheiro' ? changeDue : 0,
-      client: {
-        name: clientName.trim(),
-        cpf_cnpj: clientCPF.replace(/\D/g, '') // remove non-digits
-      },
-      delivery: deliveryType === 'delivery' ? {
-        street: addressStreet.trim(),
-        number: addressNumber.trim(),
-        neighborhood: addressNeighborhood.trim(),
-        reference: addressReference.trim(),
-        lat: addressLat,
-        lng: addressLng,
-        time: deliveryAsap ? 'O mais breve possível' : `${deliveryDate}|${deliveryTime}`,
-        obs: deliveryObs.trim()
-      } : null,
-      type: deliveryType,
-      nfe_ready: true // Flag to state this sale has all necessary NF-e info prefilled
-    };
-
     try {
-      // Abate stock for each item sold
-      for (const item of cart) {
-        const currentQty = item.product.quantity;
-        const newQty = Math.max(0, currentQty - item.quantity);
+      // Venda + baixa de estoque numa única transação no Firestore (tudo ou nada).
+      const sale = await finalizeSale({
+        timestamp: new Date().toISOString(),
+        items: saleItems,
+        total_items: totalItems,
+        subtotal: Number(subtotal.toFixed(2)),
+        payment_method: paymentMethod,
+        amount_paid: paymentMethod === 'Dinheiro' ? parseFloat(amountPaid) || subtotal : subtotal,
+        change: paymentMethod === 'Dinheiro' ? changeDue : 0,
+        client: { name: clientName.trim(), cpf_cnpj: clientDoc },
+        operator: currentUser.name || 'Operador',
+        operator_email: currentUser.email || '',
+        type: deliveryType,
+        delivery: deliveryType === 'delivery' ? {
+          street: addressStreet.trim(),
+          number: addressNumber.trim(),
+          neighborhood: addressNeighborhood.trim(),
+          reference: addressReference.trim(),
+          lat: addressLat ?? null,
+          lng: addressLng ?? null,
+          time: deliveryAsap ? 'O mais breve possível' : `${deliveryDate}|${deliveryTime}`,
+          obs: deliveryObs.trim()
+        } : null,
+        fiscal: null
+      });
 
-        if (isSupabaseConfigured && supabase) {
-          const { error } = await supabase
-            .from('products')
-            .update({ quantity: newQty })
-            .eq('id', item.product.id);
-          if (error) throw error;
-        } else {
-          await mockSupabaseDb.updateProduct(item.product.id, { quantity: newQty });
-        }
-      }
-
-      // Record logs
       const itemsString = saleItems.map(i => `${i.quantity}x ${i.name}`).join(', ');
       const clientString = clientName ? ` (Cliente: ${clientName} - CPF: ${clientCPF})` : ' (Consumidor Não Identificado)';
-      
       await logAction(
         currentUser.email || '',
         currentUser.name || 'Operador',
         'Venda Avulsa Finalizada',
-        `PDV Caixa: Venda finalizada com ${paymentMethod}. Total: R$ ${subtotal.toFixed(2)}. Itens: [${itemsString}].${clientString}`
+        `PDV Caixa: Venda #${sale.number} finalizada com ${paymentMethod}. Total: R$ ${subtotal.toFixed(2)}. Itens: [${itemsString}].${clientString}`
       );
 
-      // Save sale transaction locally for NF-e reference
-      const saleId = Math.random().toString(36).substring(2, 9);
-      const localSales = JSON.parse(localStorage.getItem('laviola_pdv_sales') || '[]');
-      localSales.push({ id: saleId, ...salePayload });
-      localStorage.setItem('laviola_pdv_sales', JSON.stringify(localSales));
-
-      // Create a DeliveryItem if it's a delivery
+      // Entrega agendada (o módulo Delivery ainda lê do localStorage)
       if (deliveryType === 'delivery') {
         const fullAddress = `${addressStreet.trim()}, ${addressNumber.trim()} - ${addressNeighborhood.trim()}`;
         let scheduledTime = 'O mais breve possível';
@@ -521,44 +513,77 @@ export const VendaAvulsa: React.FC<VendaAvulsaProps> = ({ styles, currentUser })
           const selectedDayLabel = deliverySlots.days.find(d => d.value === deliveryDate)?.label || deliveryDate;
           scheduledTime = `${selectedDayLabel} às ${deliveryTime}`;
         }
-        
+
         const newDelivery = {
-          id: `deliv-${saleId}`,
-          client_id: clientCPF ? `cpf-${clientCPF}` : 'avulso',
+          id: `deliv-${sale.id}`,
+          client_id: clientDoc ? `cpf-${clientDoc}` : 'avulso',
           client_name: clientName.trim() || 'Consumidor Avulso',
           client_address: fullAddress,
-          client_lat: addressLat || -22.9122, // fallback to petshop coord if missing
-          client_lng: addressLng || -43.5606, // fallback
+          client_lat: addressLat || -22.9122,
+          client_lng: addressLng || -43.5606,
           driver_id: '',
           driver_name: '',
           driver_lat: -22.9122,
           driver_lng: -43.5606,
           status: 'agendada',
-          items: itemsString,
+          items: deliveryObs.trim() ? `${itemsString}\n[OBS: ${deliveryObs.trim()}]` : itemsString,
           scheduled_time: scheduledTime,
-          support_reason: deliveryObs.trim() ? `OBS Cliente: ${deliveryObs.trim()}` : null, // Use support_reason or append to items as a hack, or wait, does DeliveryItem have obs? It has support_reason, but appending to items might be better:
+          support_reason: deliveryObs.trim() ? `OBS Cliente: ${deliveryObs.trim()}` : null,
           created_at: new Date().toISOString()
         };
-        
-        // append OBS to items if it exists so it's visible to driver
-        if (deliveryObs.trim()) {
-          newDelivery.items += `\n[OBS: ${deliveryObs.trim()}]`;
-        }
 
         const localDeliveries = JSON.parse(localStorage.getItem('laviola_deliveries') || '[]');
         localDeliveries.push(newDelivery);
         localStorage.setItem('laviola_deliveries', JSON.stringify(localDeliveries));
       }
 
-      setLastSaleSummary(salePayload);
+      setLastSaleSummary(sale);
+      setReceiptNotice(null);
       setCheckoutSuccess(true);
       setIsCheckoutOpen(false);
       clearCart();
       loadProducts();
+
+      // A venda já está gravada; falha de impressora não pode desfazê-la.
+      if (getPrinterSettings().autoPrintOnSale) printReceipt(sale);
     } catch (err: any) {
       setErrorMessage(err.message || 'Erro ao processar e baixar o estoque da venda.');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const printReceipt = async (sale: Sale) => {
+    setReceiptBusy(true);
+    try {
+      await printSaleReceipt(sale, fiscalCfg.cnpj ? companyFromSettings(fiscalCfg) : DEFAULT_COMPANY);
+      setReceiptNotice({ ok: true, text: 'Cupom enviado para a impressora.' });
+    } catch (e) {
+      setReceiptNotice({ ok: false, text: e instanceof Error ? e.message : 'Falha ao imprimir.' });
+    } finally {
+      setReceiptBusy(false);
+    }
+  };
+
+  const issueNfce = async (sale: Sale) => {
+    setReceiptBusy(true);
+    setReceiptNotice(null);
+    try {
+      const fiscal = sale.fiscal?.status === 'processando' ? await consultNfce(sale, fiscalCfg) : await emitNfce(sale, fiscalCfg);
+      const updated = { ...sale, fiscal };
+      setLastSaleSummary(updated);
+      if (fiscal.status === 'autorizada') {
+        setReceiptNotice({ ok: true, text: `Nota fiscal nº ${fiscal.numero} emitida.` });
+        await printReceipt(updated);
+      } else if (fiscal.status === 'processando') {
+        setReceiptNotice({ ok: false, text: 'O governo ainda está confirmando a nota. Clique em "Verificar nota" em instantes.' });
+      } else {
+        setReceiptNotice({ ok: false, text: `A nota foi recusada. ${explainFiscalError(fiscal.mensagem)} (A venda está salva; você pode tentar de novo em Financeiro → Notas fiscais.)` });
+      }
+    } catch (e) {
+      setReceiptNotice({ ok: false, text: e instanceof Error ? e.message : 'Não foi possível emitir a nota agora. A venda está salva; tente de novo em Financeiro → Notas fiscais.' });
+    } finally {
+      setReceiptBusy(false);
     }
   };
 
@@ -590,9 +615,11 @@ export const VendaAvulsa: React.FC<VendaAvulsaProps> = ({ styles, currentUser })
         </div>
       </div>
 
+      <PrinterStatus styles={styles} />
+
       {errorMessage && (
         <div style={{
-          color: 'hsl(0,75%,55%)', fontSize: '0.85rem', margin: '10px 0', 
+          color: 'hsl(0,75%,55%)', fontSize: '0.85rem', margin: '10px 0',
           padding: '8px 12px', backgroundColor: 'hsl(0,75%,55%,0.08)', 
           borderRadius: '6px', border: '1px solid hsl(0,75%,55%,0.25)'
         }}>
@@ -1432,7 +1459,7 @@ export const VendaAvulsa: React.FC<VendaAvulsaProps> = ({ styles, currentUser })
               {lastSaleSummary.client.name && (
                 <div style={{ marginBottom: '8px' }}>
                   <div>CLIENTE: {lastSaleSummary.client.name}</div>
-                  <div>CPF/CNPJ: {lastSaleSummary.client.cpf_cnpj}</div>
+                  <div>CPF/CNPJ: {lastSaleSummary.client.cpf_cnpj || '—'}</div>
                 </div>
               )}
               <div style={{ borderBottom: '1px dashed #ccc', margin: '8px 0' }}></div>
@@ -1464,14 +1491,46 @@ export const VendaAvulsa: React.FC<VendaAvulsaProps> = ({ styles, currentUser })
                 </>
               )}
               
-              {/* Ready for NF-e note */}
               <div style={{
                 marginTop: '15px', padding: '8px', borderRadius: '6px',
                 backgroundColor: 'hsl(210, 85%, 45%, 0.1)', color: styles.primary,
                 fontSize: '0.72rem', textAlign: 'center', fontWeight: 600, border: '1px solid hsl(210, 85%, 45%, 0.2)'
               }}>
-                ✓ DADOS PRONTOS PARA EMISSÃO DE NF-e
+                {lastSaleSummary.fiscal?.status === 'autorizada'
+                  ? `✓ NOTA FISCAL Nº ${lastSaleSummary.fiscal.numero} EMITIDA`
+                  : `VENDA #${lastSaleSummary.number} · SEM NOTA FISCAL`}
               </div>
+            </div>
+
+            {receiptNotice && (
+              <div role="status" style={{
+                marginBottom: '12px', padding: '8px 12px', borderRadius: '6px', fontSize: '0.78rem', textAlign: 'left',
+                color: receiptNotice.ok ? 'hsl(142,60%,35%)' : 'hsl(0,75%,50%)',
+                backgroundColor: receiptNotice.ok ? 'hsl(142,60%,45%,0.1)' : 'hsl(0,75%,55%,0.08)'
+              }}>
+                {receiptNotice.text}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
+              <button
+                type="button"
+                disabled={receiptBusy}
+                onClick={() => printReceipt(lastSaleSummary)}
+                style={{ flex: 1, padding: '10px', borderRadius: '8px', border: `1px solid ${styles.borderColor}`, background: 'none', color: styles.textMain, cursor: 'pointer', fontWeight: 600, fontSize: '0.82rem' }}
+              >
+                {lastSaleSummary.fiscal?.status === 'autorizada' ? 'Imprimir a nota de novo' : 'Imprimir cupom'}
+              </button>
+              {fiscalCfg.enabled && lastSaleSummary.fiscal?.status !== 'autorizada' && (
+                <button
+                  type="button"
+                  disabled={receiptBusy}
+                  onClick={() => issueNfce(lastSaleSummary)}
+                  style={{ flex: 1, padding: '10px', borderRadius: '8px', border: `1px solid ${styles.primary}`, background: 'none', color: styles.primary, cursor: 'pointer', fontWeight: 700, fontSize: '0.82rem' }}
+                >
+                  {receiptBusy ? 'Aguarde...' : lastSaleSummary.fiscal?.status === 'processando' ? 'Verificar nota' : 'Emitir nota fiscal'}
+                </button>
+              )}
             </div>
 
             <button

@@ -79,6 +79,12 @@ service cloud.firestore {
       allow write: if isStaff();
     }
 
+    // ---- CONFIGURAÇÕES (dados fiscais etc.) ----
+    match /settings/{docId} {
+      allow read: if isStaff();
+      allow write: if hasRole('desenvolvedor') || hasRole('proprietaria') || hasRole('developer') || hasRole('owner');
+    }
+
     // ---- PERMISSÕES DE SISTEMA ----
     match /permissions/{permId} {
       allow read: if isAuth();

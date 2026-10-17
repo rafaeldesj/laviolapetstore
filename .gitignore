@@ -28,3 +28,5 @@ dist-ssr
 
 firebase-service-account.json
 migrate.cjs
+
+.claude/settings.local.json

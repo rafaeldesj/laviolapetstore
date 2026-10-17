@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { BarChart3, PawPrint, CalendarDays, Wallet, Package, CreditCard, PieChart } from 'lucide-react';
 import { supabase, mockSupabaseDb, isSupabaseConfigured } from '../supabaseClient';
 import type { Product } from '../supabaseClient';
+import { fetchSales } from '../utils/salesService';
 
 interface RelatoriosProps {
   styles: any;
@@ -68,7 +69,7 @@ export const Relatorios: React.FC<RelatoriosProps> = ({ styles }) => {
       setStockTotal(totalStockItems);
 
       // 4. Calculate Revenue & Payment/Category Stats from Sales
-      const pdvSales = JSON.parse(localStorage.getItem('laviola_pdv_sales') || '[]');
+      const pdvSales: any[] = await fetchSales().catch((): any[] => []);
       const customTrans = JSON.parse(localStorage.getItem('laviola_custom_transactions') || '[]');
 
       // Compute total monthly revenue
