@@ -14,6 +14,21 @@ export interface AuthUser {
   uid?: string;
 }
 
+/** Traduz os erros do login (inclusive os do Firebase, em inglês) para mensagens em português. */
+const loginErrorMessage = (err: { code?: string; message?: string }): string => {
+  const wrongCredentials = [
+    'auth/invalid-credential', 'auth/wrong-password', 'auth/user-not-found',
+    'auth/invalid-email', 'auth/missing-password', 'auth/invalid-login-credentials',
+  ];
+  if (err.message === 'User not found.' || (err.code && wrongCredentials.includes(err.code))) {
+    return 'Usuário ou senha incorretos.';
+  }
+  if (err.code === 'auth/too-many-requests') return 'Muitas tentativas. Aguarde alguns minutos e tente de novo.';
+  if (err.code === 'auth/user-disabled') return 'Este usuário está desativado. Fale com a administração.';
+  if (err.code === 'auth/network-request-failed') return 'Sem conexão com a internet. Verifique e tente de novo.';
+  return 'Não foi possível entrar. Tente novamente.';
+};
+
 export const useAuth = () => {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -136,7 +151,7 @@ export const useAuth = () => {
         }
       }
     } catch (err: any) {
-      throw new Error(err.message || 'Erro ao fazer login.');
+      throw new Error(loginErrorMessage(err));
     }
   };
 
