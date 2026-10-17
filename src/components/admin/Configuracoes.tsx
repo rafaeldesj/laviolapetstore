@@ -919,7 +919,7 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
       case 'RESET_PASSWORD':
         return 'rgba(59, 130, 246, 0.15)';
       default:
-        return 'rgba(255, 255, 255, 0.05)';
+        return 'rgba(128,128,128,0.125)';
     }
   };
 
@@ -1028,7 +1028,7 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
 
           {/* Aba Formas de Pagamento */}
           {configTab === 'payments' && isAdmin && (
-            <div style={{ background: 'rgba(255,255,255,0.02)', padding: '1.5rem', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.05)' }}>
+            <div style={{ background: 'rgba(128,128,128,0.05)', padding: '1.5rem', borderRadius: '16px', border: '1px solid rgba(128,128,128,0.125)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
                 <Wallet size={20} style={{ color: 'var(--primary-gold)' }} />
                 <h3 style={{ fontSize: '1.25rem', margin: 0, fontWeight: 700 }}>Gerenciar Formas de Pagamento</h3>
@@ -1042,7 +1042,7 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
                 <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 600, display: 'block', marginBottom: '0.5rem' }}>
                   Configurar Formas de Pagamento para a Opção:
                 </span>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', background: 'rgba(255,255,255,0.02)', padding: '0.4rem', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', background: 'rgba(128,128,128,0.05)', padding: '0.4rem', borderRadius: '12px', border: '1px solid rgba(128,128,128,0.125)' }}>
                   {[
                     { id: 'pdv', label: 'PDV (Presencial) 🏪' },
                     { id: 'dine_in_table', label: 'Comer na Mesa 🍽️' },
@@ -1100,8 +1100,8 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
                           alignItems: 'center',
                           justifyContent: 'space-between',
                           padding: '1rem',
-                          background: 'rgba(255,255,255,0.01)',
-                          border: '1px solid rgba(255,255,255,0.04)',
+                          background: 'rgba(128,128,128,0.025)',
+                          border: '1px solid rgba(128,128,128,0.1)',
                           borderRadius: '12px',
                           transition: 'all 0.2s',
                           flexWrap: 'wrap',
@@ -1128,7 +1128,7 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
                                 color: isDisabled ? 'var(--text-secondary)' : '#fff',
                                 background: 'transparent',
                                 border: 'none',
-                                borderBottom: '1px dashed rgba(255,255,255,0.15)',
+                                borderBottom: '1px dashed rgba(128,128,128,0.35)',
                                 outline: 'none',
                                 padding: '2px 0',
                                 width: '100%',
@@ -1160,7 +1160,7 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
                                 color: 'var(--text-secondary)',
                                 background: 'transparent',
                                 border: 'none',
-                                borderBottom: '1px dashed rgba(255,255,255,0.15)',
+                                borderBottom: '1px dashed rgba(128,128,128,0.35)',
                                 outline: 'none',
                                 padding: '2px 0',
                                 width: '100%',
@@ -1179,7 +1179,7 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
                           {/* Segmented Control for Theme Selection */}
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                             <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Tema:</span>
-                            <div style={{ display: 'inline-flex', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '20px', padding: '2px' }}>
+                            <div style={{ display: 'inline-flex', background: 'rgba(128,128,128,0.075)', border: '1px solid rgba(128,128,128,0.2)', borderRadius: '20px', padding: '2px' }}>
                               <button
                                 type="button"
                                 onClick={() => {
@@ -1213,7 +1213,7 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
                                   } : prev);
                                 }}
                                 style={{
-                                  background: currentTheme === 'dark' ? 'rgba(255,255,255,0.1)' : 'transparent',
+                                  background: currentTheme === 'dark' ? 'rgba(128,128,128,0.25)' : 'transparent',
                                   border: 'none',
                                   color: currentTheme === 'dark' ? '#ffffff' : 'var(--text-secondary)',
                                   padding: '0.25rem 0.75rem',
@@ -1261,8 +1261,8 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
                                 display: 'flex',
                                 alignItems: 'center',
                                 gap: '0.75rem',
-                                background: 'rgba(255,255,255,0.03)',
-                                border: '1px solid rgba(255,255,255,0.07)',
+                                background: 'rgba(128,128,128,0.075)',
+                                border: '1px solid rgba(128,128,128,0.175)',
                                 borderRadius: '10px',
                                 padding: '0.4rem 0.75rem'
                               }}>
@@ -1353,8 +1353,8 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
 
                 {/* Opção de Exigir Aprovação do Caixa para pagamentos físicos */}
                 <div style={{
-                  background: 'rgba(255, 255, 255, 0.02)',
-                  border: '1px solid rgba(255, 255, 255, 0.05)',
+                  background: 'rgba(128,128,128,0.05)',
+                  border: '1px solid rgba(128,128,128,0.125)',
                   padding: '1.25rem',
                   borderRadius: '12px',
                   marginBottom: '2rem',
@@ -1382,7 +1382,7 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
                       htmlFor="require-cashier-approval" 
                       style={{ 
                         fontSize: '0.95rem', 
-                        color: '#fff', 
+                        color: 'var(--text-primary, #1e293b)', 
                         fontWeight: 600,
                         cursor: 'pointer', 
                         userSelect: 'none' 
@@ -1456,7 +1456,7 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
                   >
                     {loadingDevices ? (
                       <>
-                        <div className="spinner" style={{ width: '14px', height: '14px', border: '2px solid rgba(255,255,255,0.2)', borderTopColor: '#fff', flexShrink: 0 }} />
+                        <div className="spinner" style={{ width: '14px', height: '14px', border: '2px solid rgba(128,128,128,0.35)', borderTopColor: '#fff', flexShrink: 0 }} />
                         Buscando...
                       </>
                     ) : (
@@ -1526,19 +1526,19 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
 
                       return (
                         <div key={device.id} style={{
-                          background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)',
+                          background: 'rgba(128,128,128,0.075)', border: '1px solid rgba(128,128,128,0.2)',
                           borderRadius: '14px', padding: '1rem 1.25rem',
                           display: 'flex', flexWrap: 'wrap', gap: '1rem', alignItems: 'center',
                           transition: 'border-color 0.2s',
-                          borderLeft: isPDV ? '3px solid #10b981' : '3px solid rgba(255,255,255,0.1)'
+                          borderLeft: isPDV ? '3px solid #10b981' : '3px solid rgba(128,128,128,0.25)'
                         }}>
                           {/* Device info */}
                           <div style={{ flex: 1, minWidth: '180px', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-                              <span style={{ fontWeight: 700, fontSize: '0.92rem', color: '#fff' }}>{modelDisplay}</span>
+                              <span style={{ fontWeight: 700, fontSize: '0.92rem', color: 'var(--text-primary, #1e293b)' }}>{modelDisplay}</span>
                               <span style={{
-                                background: isPDV ? 'rgba(16,185,129,0.15)' : 'rgba(255,255,255,0.06)',
-                                border: isPDV ? '1px solid rgba(16,185,129,0.3)' : '1px solid rgba(255,255,255,0.1)',
+                                background: isPDV ? 'rgba(16,185,129,0.15)' : 'rgba(128,128,128,0.15)',
+                                border: isPDV ? '1px solid rgba(16,185,129,0.3)' : '1px solid rgba(128,128,128,0.25)',
                                 color: isPDV ? '#34d399' : 'var(--text-secondary)',
                                 borderRadius: '20px', padding: '0.15rem 0.6rem', fontSize: '0.72rem', fontWeight: 700
                               }}>
@@ -1555,7 +1555,7 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
                                 Loja: {device.external_store_id} {device.external_pos_id ? `· Caixa: ${device.external_pos_id}` : ''}
                               </span>
                             )}
-                            <span style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.25)', fontFamily: 'monospace', wordBreak: 'break-all' }}>
+                            <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary, #64748b)', fontFamily: 'monospace', wordBreak: 'break-all' }}>
                               ID: {device.pos_id || device.id}
                             </span>
                           </div>
@@ -1567,8 +1567,8 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
                               value={assignedSlot}
                               onChange={(e) => setDeviceModelMap(prev => ({ ...prev, [device.id]: e.target.value }))}
                               style={{
-                                background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
-                                borderRadius: '8px', padding: '0.4rem 0.6rem', color: '#fff', fontSize: '0.82rem',
+                                background: 'rgba(128,128,128,0.125)', border: '1px solid rgba(128,128,128,0.25)',
+                                borderRadius: '8px', padding: '0.4rem 0.6rem', color: 'var(--text-primary, #1e293b)', fontSize: '0.82rem',
                                 cursor: 'pointer', outline: 'none'
                               }}
                             >
@@ -1583,8 +1583,8 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
                               value={devicePosMap[device.id] || ''}
                               onChange={(e) => setDevicePosMap(prev => ({ ...prev, [device.id]: e.target.value }))}
                               style={{
-                                background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
-                                borderRadius: '8px', padding: '0.4rem 0.6rem', color: '#fff', fontSize: '0.82rem',
+                                background: 'rgba(128,128,128,0.125)', border: '1px solid rgba(128,128,128,0.25)',
+                                borderRadius: '8px', padding: '0.4rem 0.6rem', color: 'var(--text-primary, #1e293b)', fontSize: '0.82rem',
                                 cursor: 'pointer', outline: 'none'
                               }}
                             >
@@ -1607,12 +1607,12 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
                               title={isPDV ? 'Clique para desativar o Modo PDV (voltar ao modo autônomo)' : 'Clique para ativar o Modo PDV (integração com o sistema)'}
                               style={{
                                 position: 'relative', width: '52px', height: '28px', borderRadius: '14px', border: 'none',
-                                background: isChangingMode ? 'rgba(255,255,255,0.1)' : (isPDV ? '#10b981' : 'rgba(255,255,255,0.1)'),
+                                background: isChangingMode ? 'rgba(128,128,128,0.25)' : (isPDV ? '#10b981' : 'rgba(128,128,128,0.25)'),
                                 cursor: isChangingMode ? 'wait' : 'pointer', transition: 'background 0.3s', flexShrink: 0
                               }}
                             >
                               {isChangingMode ? (
-                                <div className="spinner" style={{ width: '14px', height: '14px', border: '2px solid rgba(255,255,255,0.2)', borderTopColor: '#fff', position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)' }} />
+                                <div className="spinner" style={{ width: '14px', height: '14px', border: '2px solid rgba(128,128,128,0.35)', borderTopColor: '#fff', position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)' }} />
                               ) : (
                                 <div style={{
                                   position: 'absolute', top: '3px',
@@ -1642,14 +1642,14 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
                           padding: '0.65rem 1.5rem', borderRadius: '10px', border: 'none',
                           background: (savingDeviceSelection || Object.values(deviceModelMap).every(v => !v))
                             ? 'rgba(16,185,129,0.3)' : '#10b981',
-                          color: '#fff', fontWeight: 700, fontSize: '0.88rem',
+                          color: 'var(--text-primary, #1e293b)', fontWeight: 700, fontSize: '0.88rem',
                           cursor: (savingDeviceSelection || Object.values(deviceModelMap).every(v => !v)) ? 'not-allowed' : 'pointer',
                           transition: 'all 0.2s'
                         }}
                       >
                         {savingDeviceSelection ? (
                           <>
-                            <div className="spinner" style={{ width: '14px', height: '14px', border: '2px solid rgba(255,255,255,0.2)', borderTopColor: '#fff', flexShrink: 0 }} />
+                            <div className="spinner" style={{ width: '14px', height: '14px', border: '2px solid rgba(128,128,128,0.35)', borderTopColor: '#fff', flexShrink: 0 }} />
                             Salvando...
                           </>
                         ) : '✅ Salvar Configuração'}
@@ -1660,7 +1660,7 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
               </div>
 
               {/* Formulário de Configuração de IDs */}
-              <form onSubmit={handleSaveStoreConfig} style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem', background: 'rgba(255, 255, 255, 0.02)', border: '1px solid rgba(255, 255, 255, 0.05)', borderRadius: '12px', padding: '1.5rem', marginBottom: '1rem' }}>
+              <form onSubmit={handleSaveStoreConfig} style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem', background: 'rgba(128,128,128,0.05)', border: '1px solid rgba(128,128,128,0.125)', borderRadius: '12px', padding: '1.5rem', marginBottom: '1rem' }}>
                 <h4 style={{ margin: 0, color: 'var(--primary-gold)', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                   ⚙️ Configurar IDs das Maquininhas Point
                 </h4>
@@ -1727,7 +1727,7 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
 
                 {/* Cabeçalho */}
-                <div style={{ borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '1rem' }}>
+                <div style={{ borderBottom: '1px solid rgba(128,128,128,0.15)', paddingBottom: '1rem' }}>
                   <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.6rem', fontSize: '1.1rem' }}>
                     📋 O que fazer agora — Passo a Passo
                   </h3>
@@ -1737,44 +1737,44 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
                 </div>
 
                 {/* PASSO A */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', background: 'rgba(255,255,255,0.02)', borderRadius: '14px', padding: '1.25rem', border: '1px solid rgba(255,255,255,0.06)' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', background: 'rgba(128,128,128,0.05)', borderRadius: '14px', padding: '1.25rem', border: '1px solid rgba(128,128,128,0.15)' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                     <span style={{ background: 'linear-gradient(135deg,#3b82f6,#6366f1)', color: '#fff', borderRadius: '50%', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '1rem', flexShrink: 0 }}>A</span>
                     <h4 style={{ margin: 0, fontSize: '1rem' }}>Identifique qual maquininha é qual</h4>
                   </div>
                   <p style={{ margin: 0, fontSize: '0.88rem', color: 'var(--text-secondary)', lineHeight: 1.7 }}>
-                    As maquininhas apareceram como <strong style={{ color: '#fff' }}>"Unknown"</strong> porque a API do MP não retornou o modelo. Veja como descobrir qual ID corresponde a qual aparelho físico:
+                    As maquininhas apareceram como <strong style={{ color: 'var(--text-primary, #1e293b)' }}>"Unknown"</strong> porque a API do MP não retornou o modelo. Veja como descobrir qual ID corresponde a qual aparelho físico:
                   </p>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                     {/* Método 1 */}
                     <div style={{ background: 'rgba(59,130,246,0.07)', border: '1px solid rgba(59,130,246,0.2)', borderRadius: '10px', padding: '0.85rem 1rem' }}>
                       <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#60a5fa', display: 'block', marginBottom: '0.4rem' }}>📊 MÉTODO 1 — Pelo painel do Mercado Pago (mais preciso)</span>
                       <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-                        <strong style={{ color: '#fff' }}>1.</strong> Abra: <a href="https://www.mercadopago.com.br/stores-and-pos" target="_blank" rel="noopener noreferrer" style={{ color: '#60a5fa', textDecoration: 'underline' }}>mercadopago.com.br/stores-and-pos</a><br />
-                        <strong style={{ color: '#fff' }}>2.</strong> Clique em <strong style={{ color: '#fff' }}>Caixas</strong> — cada caixa cadastrado mostra o <strong style={{ color: '#fff' }}>nome que você deu</strong> + o ID numérico.<br />
-                        <strong style={{ color: '#fff' }}>3.</strong> Compare os IDs de lá com os IDs exibidos nos cards acima (ex: <code style={{ background: 'rgba(255,255,255,0.08)', padding: '0.1rem 0.4rem', borderRadius: '4px' }}>119579640</code>).
+                        <strong style={{ color: 'var(--text-primary, #1e293b)' }}>1.</strong> Abra: <a href="https://www.mercadopago.com.br/stores-and-pos" target="_blank" rel="noopener noreferrer" style={{ color: '#60a5fa', textDecoration: 'underline' }}>mercadopago.com.br/stores-and-pos</a><br />
+                        <strong style={{ color: 'var(--text-primary, #1e293b)' }}>2.</strong> Clique em <strong style={{ color: 'var(--text-primary, #1e293b)' }}>Caixas</strong> — cada caixa cadastrado mostra o <strong style={{ color: 'var(--text-primary, #1e293b)' }}>nome que você deu</strong> + o ID numérico.<br />
+                        <strong style={{ color: 'var(--text-primary, #1e293b)' }}>3.</strong> Compare os IDs de lá com os IDs exibidos nos cards acima (ex: <code style={{ background: 'rgba(128,128,128,0.2)', padding: '0.1rem 0.4rem', borderRadius: '4px' }}>119579640</code>).
                       </p>
                     </div>
                     {/* Método 2 */}
                     <div style={{ background: 'rgba(168,85,247,0.07)', border: '1px solid rgba(168,85,247,0.2)', borderRadius: '10px', padding: '0.85rem 1rem' }}>
                       <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#c084fc', display: 'block', marginBottom: '0.4rem' }}>🔌 MÉTODO 2 — Teste prático (mais rápido)</span>
                       <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-                        <strong style={{ color: '#fff' }}>1.</strong> Nos cards acima, ative o <strong style={{ color: '#fff' }}>toggle PDV</strong> em UMA maquininha de cada vez.<br />
-                        <strong style={{ color: '#fff' }}>2.</strong> Olhe qual aparelho físico muda a tela para <em>"Aguardando integração"</em> — esse é o correspondente.<br />
-                        <strong style={{ color: '#fff' }}>3.</strong> Anote e repita para as demais.
+                        <strong style={{ color: 'var(--text-primary, #1e293b)' }}>1.</strong> Nos cards acima, ative o <strong style={{ color: 'var(--text-primary, #1e293b)' }}>toggle PDV</strong> em UMA maquininha de cada vez.<br />
+                        <strong style={{ color: 'var(--text-primary, #1e293b)' }}>2.</strong> Olhe qual aparelho físico muda a tela para <em>"Aguardando integração"</em> — esse é o correspondente.<br />
+                        <strong style={{ color: 'var(--text-primary, #1e293b)' }}>3.</strong> Anote e repita para as demais.
                       </p>
                     </div>
                   </div>
                 </div>
 
                 {/* PASSO B */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', background: 'rgba(255,255,255,0.02)', borderRadius: '14px', padding: '1.25rem', border: '1px solid rgba(255,255,255,0.06)' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', background: 'rgba(128,128,128,0.05)', borderRadius: '14px', padding: '1.25rem', border: '1px solid rgba(128,128,128,0.15)' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                     <span style={{ background: 'linear-gradient(135deg,#3b82f6,#6366f1)', color: '#fff', borderRadius: '50%', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '1rem', flexShrink: 0 }}>B</span>
                     <h4 style={{ margin: 0, fontSize: '1rem' }}>Associe cada dispositivo ao modelo correto</h4>
                   </div>
                   <p style={{ margin: 0, fontSize: '0.88rem', color: 'var(--text-secondary)', lineHeight: 1.7 }}>
-                    Nos cards do <strong style={{ color: '#fff' }}>⚡ Configuração Automática</strong> acima, use o dropdown <strong style={{ color: '#fff' }}>"Este dispositivo é:"</strong> para cada maquininha:
+                    Nos cards do <strong style={{ color: 'var(--text-primary, #1e293b)' }}>⚡ Configuração Automática</strong> acima, use o dropdown <strong style={{ color: 'var(--text-primary, #1e293b)' }}>"Este dispositivo é:"</strong> para cada maquininha:
                   </p>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
                     {[
@@ -1783,8 +1783,8 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
                       { model: 'Point Air 2', desc: '4G + WiFi + NFC, funciona sem celular' },
                       { model: 'Point Mini NFC 2', desc: 'pequenininho, conecta via Bluetooth ao celular' },
                     ].map(item => (
-                      <div key={item.model} style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '8px', padding: '0.55rem 1rem', display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
-                        <span style={{ fontWeight: 700, fontSize: '0.88rem', color: '#fff', minWidth: '140px' }}>📟 {item.model}</span>
+                      <div key={item.model} style={{ background: 'rgba(128,128,128,0.05)', border: '1px solid rgba(128,128,128,0.15)', borderRadius: '8px', padding: '0.55rem 1rem', display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+                        <span style={{ fontWeight: 700, fontSize: '0.88rem', color: 'var(--text-primary, #1e293b)', minWidth: '140px' }}>📟 {item.model}</span>
                         <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{item.desc}</span>
                       </div>
                     ))}
@@ -1792,36 +1792,36 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
                 </div>
 
                 {/* PASSO C */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', background: 'rgba(255,255,255,0.02)', borderRadius: '14px', padding: '1.25rem', border: '1px solid rgba(255,255,255,0.06)' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', background: 'rgba(128,128,128,0.05)', borderRadius: '14px', padding: '1.25rem', border: '1px solid rgba(128,128,128,0.15)' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                     <span style={{ background: 'linear-gradient(135deg,#3b82f6,#6366f1)', color: '#fff', borderRadius: '50%', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '1rem', flexShrink: 0 }}>C</span>
                     <h4 style={{ margin: 0, fontSize: '1rem' }}>Ative o Modo PDV (integrado) nas maquininhas</h4>
                   </div>
                   <p style={{ margin: 0, fontSize: '0.88rem', color: 'var(--text-secondary)', lineHeight: 1.7 }}>
-                    Você pode fazer isso de <strong style={{ color: '#fff' }}>duas formas</strong> — pelo sistema aqui (mais fácil) <strong style={{ color: '#fff' }}>OU</strong> diretamente na maquininha:
+                    Você pode fazer isso de <strong style={{ color: 'var(--text-primary, #1e293b)' }}>duas formas</strong> — pelo sistema aqui (mais fácil) <strong style={{ color: 'var(--text-primary, #1e293b)' }}>OU</strong> diretamente na maquininha:
                   </p>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                     <div style={{ background: 'rgba(16,185,129,0.07)', border: '1px solid rgba(16,185,129,0.2)', borderRadius: '10px', padding: '0.85rem 1rem' }}>
                       <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#34d399', display: 'block', marginBottom: '0.4rem' }}>✅ OPÇÃO 1 — Pelo sistema (recomendado)</span>
                       <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-                        Nos cards acima, clique no <strong style={{ color: '#fff' }}>toggle "Modo PDV"</strong> para ativar (verde = integrado).<br />
+                        Nos cards acima, clique no <strong style={{ color: 'var(--text-primary, #1e293b)' }}>toggle "Modo PDV"</strong> para ativar (verde = integrado).<br />
                         Quando ficar verde, a maquininha muda automaticamente e exibe <em>"Aguardando integração"</em>.
                       </p>
                     </div>
                     <div style={{ background: 'rgba(59,130,246,0.07)', border: '1px solid rgba(59,130,246,0.2)', borderRadius: '10px', padding: '0.85rem 1rem' }}>
                       <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#60a5fa', display: 'block', marginBottom: '0.4rem' }}>📟 OPÇÃO 2 — Direto na maquininha (Smart 2 / Pro 3 / Air 2)</span>
                       <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-                        <strong style={{ color: '#fff' }}>1.</strong> Na tela inicial, toque nos <strong style={{ color: '#fff' }}>3 pontinhos (⋮)</strong> no canto superior direito.<br />
-                        <strong style={{ color: '#fff' }}>2.</strong> Procure: <strong style={{ color: '#fff' }}>"Modo PDV"</strong>, <strong style={{ color: '#fff' }}>"Modo integrado"</strong> ou <strong style={{ color: '#fff' }}>"Integração com sistema"</strong>.<br />
-                        <strong style={{ color: '#fff' }}>3.</strong> Ative o toggle — a tela vai mostrar <em>"Aguardando integração"</em>.
+                        <strong style={{ color: 'var(--text-primary, #1e293b)' }}>1.</strong> Na tela inicial, toque nos <strong style={{ color: 'var(--text-primary, #1e293b)' }}>3 pontinhos (⋮)</strong> no canto superior direito.<br />
+                        <strong style={{ color: 'var(--text-primary, #1e293b)' }}>2.</strong> Procure: <strong style={{ color: 'var(--text-primary, #1e293b)' }}>"Modo PDV"</strong>, <strong style={{ color: 'var(--text-primary, #1e293b)' }}>"Modo integrado"</strong> ou <strong style={{ color: 'var(--text-primary, #1e293b)' }}>"Integração com sistema"</strong>.<br />
+                        <strong style={{ color: 'var(--text-primary, #1e293b)' }}>3.</strong> Ative o toggle — a tela vai mostrar <em>"Aguardando integração"</em>.
                       </p>
                     </div>
                     <div style={{ background: 'rgba(168,85,247,0.07)', border: '1px solid rgba(168,85,247,0.2)', borderRadius: '10px', padding: '0.85rem 1rem' }}>
                       <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#c084fc', display: 'block', marginBottom: '0.4rem' }}>📱 OPÇÃO 2 — Point Mini NFC 2 (via app no celular)</span>
                       <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-                        <strong style={{ color: '#fff' }}>1.</strong> Abra o app <strong style={{ color: '#fff' }}>Mercado Pago</strong> no celular já pareado com o Mini NFC 2.<br />
-                        <strong style={{ color: '#fff' }}>2.</strong> Vá em <strong style={{ color: '#fff' }}>Cobrar → Minha maquininha → Configurações → Modo de uso</strong>.<br />
-                        <strong style={{ color: '#fff' }}>3.</strong> Selecione <strong style={{ color: '#fff' }}>"PDV (Integrado)"</strong> e confirme.
+                        <strong style={{ color: 'var(--text-primary, #1e293b)' }}>1.</strong> Abra o app <strong style={{ color: 'var(--text-primary, #1e293b)' }}>Mercado Pago</strong> no celular já pareado com o Mini NFC 2.<br />
+                        <strong style={{ color: 'var(--text-primary, #1e293b)' }}>2.</strong> Vá em <strong style={{ color: 'var(--text-primary, #1e293b)' }}>Cobrar → Minha maquininha → Configurações → Modo de uso</strong>.<br />
+                        <strong style={{ color: 'var(--text-primary, #1e293b)' }}>3.</strong> Selecione <strong style={{ color: 'var(--text-primary, #1e293b)' }}>"PDV (Integrado)"</strong> e confirme.
                       </p>
                     </div>
                   </div>
@@ -1831,17 +1831,17 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
                 </div>
 
                 {/* PASSO D */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', background: 'rgba(255,255,255,0.02)', borderRadius: '14px', padding: '1.25rem', border: '1px solid rgba(255,255,255,0.06)' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', background: 'rgba(128,128,128,0.05)', borderRadius: '14px', padding: '1.25rem', border: '1px solid rgba(128,128,128,0.15)' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                     <span style={{ background: 'linear-gradient(135deg,#3b82f6,#6366f1)', color: '#fff', borderRadius: '50%', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '1rem', flexShrink: 0 }}>D</span>
                     <h4 style={{ margin: 0, fontSize: '1rem' }}>Salve e teste o pagamento</h4>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.88rem', color: 'var(--text-secondary)', lineHeight: 1.7 }}>
                     <p style={{ margin: 0 }}>
-                      <strong style={{ color: '#fff' }}>1.</strong> No card de cada maquininha acima, selecione o modelo no dropdown e garanta que o toggle PDV está <strong style={{ color: '#34d399' }}>verde ✓</strong>.<br />
-                      <strong style={{ color: '#fff' }}>2.</strong> Clique no botão <strong style={{ color: '#10b981' }}>✅ Salvar Configuração</strong> — os IDs são gravados automaticamente.<br />
-                      <strong style={{ color: '#fff' }}>3.</strong> Teste: abra o cardápio digital, faça um pedido e escolha <strong style={{ color: '#fff' }}>"Débito Maquininha"</strong>.<br />
-                      <strong style={{ color: '#fff' }}>4.</strong> A maquininha deve vibrar/acender e exibir o valor para passar o cartão. ✅
+                      <strong style={{ color: 'var(--text-primary, #1e293b)' }}>1.</strong> No card de cada maquininha acima, selecione o modelo no dropdown e garanta que o toggle PDV está <strong style={{ color: '#34d399' }}>verde ✓</strong>.<br />
+                      <strong style={{ color: 'var(--text-primary, #1e293b)' }}>2.</strong> Clique no botão <strong style={{ color: '#10b981' }}>✅ Salvar Configuração</strong> — os IDs são gravados automaticamente.<br />
+                      <strong style={{ color: 'var(--text-primary, #1e293b)' }}>3.</strong> Teste: abra o cardápio digital, faça um pedido e escolha <strong style={{ color: 'var(--text-primary, #1e293b)' }}>"Débito Maquininha"</strong>.<br />
+                      <strong style={{ color: 'var(--text-primary, #1e293b)' }}>4.</strong> A maquininha deve vibrar/acender e exibir o valor para passar o cartão. ✅
                     </p>
                   </div>
                   <div style={{ background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.25)', borderRadius: '8px', padding: '0.75rem 1rem', fontSize: '0.85rem', color: '#34d399', lineHeight: 1.6 }}>
@@ -1856,7 +1856,7 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
           {/* Aba 1: Meu Perfil */}
           {configTab === 'profile' && (
             <form onSubmit={handleSaveProfile} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-              <h3 style={{ borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '0.5rem', margin: 0 }}>Meu Perfil e Endereço</h3>
+              <h3 style={{ borderBottom: '1px solid rgba(128,128,128,0.15)', paddingBottom: '0.5rem', margin: 0 }}>Meu Perfil e Endereço</h3>
               
               <div className="responsive-grid-2">
                 <div className="input-group">
@@ -1985,14 +1985,14 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
               </div>
 
               {/* Seção Cartão Salvo */}
-              <div style={{ marginTop: '1rem', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '1.5rem' }}>
+              <div style={{ marginTop: '1rem', borderTop: '1px solid rgba(128,128,128,0.15)', paddingTop: '1.5rem' }}>
                 <h4 style={{ margin: '0 0 0.5rem 0', color: 'var(--primary-gold)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                   <CreditCard size={18} /> Cartão de Crédito no Cofre (PagBank)
                 </h4>
                 {userData?.pagbank_card_token ? (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.02)', padding: '1rem', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(128,128,128,0.05)', padding: '1rem', borderRadius: '12px', border: '1px solid rgba(128,128,128,0.125)' }}>
                     <div>
-                      <strong style={{ textTransform: 'uppercase', color: '#fff' }}>{userData.pagbank_card_brand}</strong>
+                      <strong style={{ textTransform: 'uppercase', color: 'var(--text-primary, #1e293b)' }}>{userData.pagbank_card_brand}</strong>
                       <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Terminado em **** {userData.pagbank_card_last_digits}</p>
                     </div>
                     <button
@@ -2024,7 +2024,7 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
           {/* Aba 2: Funcionamento da Loja */}
           {configTab === 'store' && isAdmin && (
             <form onSubmit={handleSaveStoreConfig} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-              <h3 style={{ borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '0.5rem', margin: 0 }}>Funcionamento da Pastelaria</h3>
+              <h3 style={{ borderBottom: '1px solid rgba(128,128,128,0.15)', paddingBottom: '0.5rem', margin: 0 }}>Funcionamento da Pastelaria</h3>
               
               {loadingStore ? (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-secondary)' }}>
@@ -2034,9 +2034,9 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
               ) : (
                 <>
                   {/* Status Aberto/Fechado */}
-                  <div className="input-group" style={{ background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '12px', padding: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div className="input-group" style={{ background: 'rgba(128,128,128,0.025)', border: '1px solid rgba(128,128,128,0.125)', borderRadius: '12px', padding: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div>
-                      <strong style={{ fontSize: '1rem', color: '#fff' }}>Status da Loja (Novos Pedidos)</strong>
+                      <strong style={{ fontSize: '1rem', color: 'var(--text-primary, #1e293b)' }}>Status da Loja (Novos Pedidos)</strong>
                       <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
                         {storeConfig.isOpen 
                           ? '🟢 Loja aberta e recebendo pedidos normalmente.' 
@@ -2063,8 +2063,8 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
 
                   {/* Fechamento Excepcional (Hoje) */}
                   <div style={{
-                    background: 'rgba(255,255,255,0.01)',
-                    border: '1px solid rgba(255,255,255,0.05)',
+                    background: 'rgba(128,128,128,0.025)',
+                    border: '1px solid rgba(128,128,128,0.125)',
                     borderRadius: '12px',
                     padding: '1rem',
                     display: 'flex',
@@ -2073,7 +2073,7 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
                   }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <div>
-                        <strong style={{ fontSize: '1.05rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                        <strong style={{ fontSize: '1.05rem', color: 'var(--text-primary, #1e293b)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                           ⚠️ Fechamento Excepcional (Hoje)
                         </strong>
                         <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
@@ -2129,8 +2129,8 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
                             lineHeight: '1.4',
                             borderRadius: '8px',
                             background: 'rgba(0,0,0,0.2)',
-                            border: '1px solid rgba(255,255,255,0.1)',
-                            color: '#fff'
+                            border: '1px solid rgba(128,128,128,0.25)',
+                            color: 'var(--text-primary, #1e293b)'
                           }}
                           required={storeConfig.isTemporarilyClosed}
                         />
@@ -2169,8 +2169,8 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
                   </div>
 
                   {/* Dias de Funcionamento */}
-                  <div style={{ background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '12px', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                    <strong style={{ fontSize: '1rem', color: '#fff' }}>📅 Dias de Funcionamento</strong>
+                  <div style={{ background: 'rgba(128,128,128,0.025)', border: '1px solid rgba(128,128,128,0.125)', borderRadius: '12px', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    <strong style={{ fontSize: '1rem', color: 'var(--text-primary, #1e293b)' }}>📅 Dias de Funcionamento</strong>
                     <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
                       Selecione os dias da semana em que a pastelaria abre para receber pedidos.
                     </p>
@@ -2198,7 +2198,7 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
                         };
 
                         return (
-                          <label key={day.index} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', background: isChecked ? 'rgba(245, 158, 11, 0.1)' : 'rgba(255,255,255,0.02)', border: isChecked ? '1px solid var(--primary-gold)' : '1px solid rgba(255,255,255,0.08)', borderRadius: '8px', padding: '0.4rem 0.8rem', fontSize: '0.85rem', color: '#fff', cursor: 'pointer', userSelect: 'none', transition: 'all 0.2s' }}>
+                          <label key={day.index} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', background: isChecked ? 'rgba(245, 158, 11, 0.1)' : 'rgba(128,128,128,0.05)', border: isChecked ? '1px solid var(--primary-gold)' : '1px solid rgba(128,128,128,0.2)', borderRadius: '8px', padding: '0.4rem 0.8rem', fontSize: '0.85rem', color: 'var(--text-primary, #1e293b)', cursor: 'pointer', userSelect: 'none', transition: 'all 0.2s' }}>
                             <input
                               type="checkbox"
                               checked={isChecked}
@@ -2213,8 +2213,8 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
                   </div>
 
                   {/* Esquema de Taxa de Entrega */}
-                  <div style={{ background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '12px', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                    <strong style={{ fontSize: '1rem', color: '#fff' }}>🛵 Esquema de Taxa de Entrega</strong>
+                  <div style={{ background: 'rgba(128,128,128,0.025)', border: '1px solid rgba(128,128,128,0.125)', borderRadius: '12px', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    <strong style={{ fontSize: '1rem', color: 'var(--text-primary, #1e293b)' }}>🛵 Esquema de Taxa de Entrega</strong>
                     <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
                       Configure a taxa de entrega baseada na distância calculada por geolocalização.
                     </p>
@@ -2281,7 +2281,7 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
                   </div>
 
                   {/* Seção de Ingredientes Adicionais */}
-                  <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '1.5rem', marginTop: '0.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  <div style={{ borderTop: '1px solid rgba(128,128,128,0.15)', paddingTop: '1.5rem', marginTop: '0.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                     <h3 style={{ margin: 0, fontSize: '1.1rem', color: 'var(--primary-gold)' }}>⚙️ Gestão de Ingredientes Adicionais</h3>
                     
                     <div className="responsive-grid-2">
@@ -2361,8 +2361,8 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
                         display: 'flex',
                         flexWrap: 'wrap',
                         gap: '0.5rem',
-                        background: 'rgba(255,255,255,0.01)',
-                        border: '1px solid rgba(255,255,255,0.04)',
+                        background: 'rgba(128,128,128,0.025)',
+                        border: '1px solid rgba(128,128,128,0.1)',
                         borderRadius: '12px',
                         padding: '0.75rem',
                         minHeight: '60px'
@@ -2396,7 +2396,7 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
                               style={{
                                 background: 'transparent',
                                 border: 'none',
-                                color: 'rgba(255,255,255,0.4)',
+                                color: 'var(--text-secondary, #64748b)',
                                 cursor: 'pointer',
                                 fontSize: '0.75rem',
                                 padding: '0 0.1rem',
@@ -2429,7 +2429,7 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
           {/* Aba 3: Fidelidade */}
           {configTab === 'loyalty' && isAdmin && (
             <form onSubmit={handleSaveStoreConfig} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-              <h3 style={{ borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '0.5rem', margin: 0 }}>Regras do Cartão Fidelidade</h3>
+              <h3 style={{ borderBottom: '1px solid rgba(128,128,128,0.15)', paddingBottom: '0.5rem', margin: 0 }}>Regras do Cartão Fidelidade</h3>
 
               <div className="input-group" style={{ maxWidth: '300px' }}>
                 <label>Carimbos necessários para pastel grátis</label>
@@ -2461,14 +2461,14 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
           {configTab === 'advanced' && (isDev || role === 'owner') && (
             <form onSubmit={handleSaveDevMPConfig} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
               <div>
-                <h3 style={{ borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '0.5rem', margin: 0, color: '#a855f7' }}>Split de Pagamentos & Mercado Pago 💳</h3>
+                <h3 style={{ borderBottom: '1px solid rgba(128,128,128,0.15)', paddingBottom: '0.5rem', margin: 0, color: '#a855f7' }}>Split de Pagamentos & Mercado Pago 💳</h3>
                 <p style={{ margin: '0.5rem 0 0 0', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
                   Configure as regras de repasse (split) de vendas automatizadas entre a conta de manutenção do desenvolvedor e a conta do estabelecimento.
                 </p>
               </div>
 
               {/* 1. Escolha da porcentagem do Split */}
-              <div style={{ background: 'rgba(255, 255, 255, 0.02)', border: '1px solid rgba(255, 255, 255, 0.05)', borderRadius: '12px', padding: '1.25rem' }}>
+              <div style={{ background: 'rgba(128,128,128,0.05)', border: '1px solid rgba(128,128,128,0.125)', borderRadius: '12px', padding: '1.25rem' }}>
                 <label style={{ display: 'block', fontWeight: 600, fontSize: '0.9rem', marginBottom: '0.75rem', color: 'var(--primary-gold)' }}>
                   Opções de Divisão (Split)
                 </label>
@@ -2490,8 +2490,8 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
                         style={{
                           padding: '0.6rem 1rem',
                           borderRadius: '8px',
-                          border: isSelected ? '1px solid var(--primary-gold)' : '1px solid rgba(255, 255, 255, 0.08)',
-                          background: isSelected ? 'rgba(245, 158, 11, 0.15)' : 'rgba(255, 255, 255, 0.02)',
+                          border: isSelected ? '1px solid var(--primary-gold)' : '1px solid rgba(128,128,128,0.2)',
+                          background: isSelected ? 'rgba(245, 158, 11, 0.15)' : 'rgba(128,128,128,0.05)',
                           color: isSelected ? 'var(--primary-gold)' : 'var(--text-secondary)',
                           cursor: disabled ? 'not-allowed' : 'pointer',
                           opacity: disabled ? 0.6 : 1,
@@ -2508,7 +2508,7 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
               </div>
 
               {/* 2. Configuração do Desenvolvedor */}
-              <div style={{ background: 'rgba(255, 255, 255, 0.02)', border: '1px solid rgba(255, 255, 255, 0.05)', borderRadius: '12px', padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div style={{ background: 'rgba(128,128,128,0.05)', border: '1px solid rgba(128,128,128,0.125)', borderRadius: '12px', padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                 <label style={{ display: 'block', fontWeight: 600, fontSize: '0.9rem', color: '#a855f7' }}>
                   Conta do Desenvolvedor (Recebe {storeConfig.devPercentage ?? 1}%)
                 </label>
@@ -2553,7 +2553,7 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
               </div>
 
               {/* 3. Conexão do Estabelecimento */}
-              <div style={{ background: 'rgba(255, 255, 255, 0.02)', border: '1px solid rgba(255, 255, 255, 0.05)', borderRadius: '12px', padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div style={{ background: 'rgba(128,128,128,0.05)', border: '1px solid rgba(128,128,128,0.125)', borderRadius: '12px', padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                 <label style={{ display: 'block', fontWeight: 600, fontSize: '0.9rem', color: '#38bdf8' }}>
                   Conta do Estabelecimento (Recebe {100 - (storeConfig.devPercentage ?? 1)}%)
                 </label>
@@ -2600,8 +2600,8 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
                         padding: '0.65rem 1.25rem',
                         borderRadius: '8px',
                         border: 'none',
-                        background: storeConfig.devClientId ? '#009ee3' : 'rgba(255,255,255,0.1)',
-                        color: '#fff',
+                        background: storeConfig.devClientId ? '#009ee3' : 'rgba(128,128,128,0.25)',
+                        color: storeConfig.devClientId ? '#fff' : 'var(--text-secondary, #64748b)',
                         fontWeight: 600,
                         fontSize: '0.85rem',
                         cursor: storeConfig.devClientId ? 'pointer' : 'not-allowed',
@@ -2612,8 +2612,8 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
                     >
                       <span>Conectar com Mercado Pago ({100 - (storeConfig.devPercentage ?? 1)}%)</span>
                     </button>
-                    <p style={{ margin: 0, fontSize: '0.72rem', color: 'rgba(255,255,255,0.35)', lineHeight: 1.5 }}>
-                      ⚠️ Requer a variável de ambiente <strong style={{ color: 'rgba(255,255,255,0.55)' }}>MP_APP_SECRET</strong> configurada no Vercel com o Client Secret da sua aplicação MP.
+                    <p style={{ margin: 0, fontSize: '0.72rem', color: 'var(--text-secondary, #64748b)', lineHeight: 1.5 }}>
+                      ⚠️ Requer a variável de ambiente <strong style={{ color: 'var(--text-secondary, #64748b)' }}>MP_APP_SECRET</strong> configurada no Vercel com o Client Secret da sua aplicação MP.
                     </p>
                   </div>
                 )}
@@ -2641,7 +2641,7 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
           {configTab === 'audit_logs' && isAdmin && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
               <div>
-                <h3 style={{ borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '0.5rem', margin: 0 }}>Histórico Visível (Timeline)</h3>
+                <h3 style={{ borderBottom: '1px solid rgba(128,128,128,0.15)', paddingBottom: '0.5rem', margin: 0 }}>Histórico Visível (Timeline)</h3>
                 <p style={{ margin: '0.5rem 0 0 0', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
                   Sempre que um administrador realizar uma ação crítica no banco de dados (ex: deletar), isso ficará guardado aqui em formato fácil de ler.
                 </p>
@@ -2652,11 +2652,11 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
                   <div className="spinner" style={{ width: '32px', height: '32px', border: '3px solid rgba(245, 158, 11, 0.1)', borderTopColor: 'var(--primary-gold)' }} />
                 </div>
               ) : auditLogs.length === 0 ? (
-                <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)', background: 'rgba(0,0,0,0.1)', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.03)' }}>
+                <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)', background: 'rgba(0,0,0,0.1)', borderRadius: '12px', border: '1px solid rgba(128,128,128,0.075)' }}>
                   Nenhum log de auditoria encontrado.
                 </div>
               ) : (
-                <div style={{ position: 'relative', borderLeft: '2px solid rgba(255, 255, 255, 0.05)', paddingLeft: '0.5rem', margin: '0.5rem 0 0 0.5rem' }}>
+                <div style={{ position: 'relative', borderLeft: '2px solid rgba(128,128,128,0.125)', paddingLeft: '0.5rem', margin: '0.5rem 0 0 0.5rem' }}>
                   {auditLogs.map((log) => (
                     <div key={log.id} style={{ position: 'relative', paddingLeft: '2rem', marginBottom: '1.75rem' }}>
                       {/* Círculo do timeline com o ícone */}
@@ -2678,8 +2678,8 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
 
                       {/* Card do log */}
                       <div style={{
-                        background: 'rgba(255, 255, 255, 0.02)',
-                        border: '1px solid rgba(255, 255, 255, 0.05)',
+                        background: 'rgba(128,128,128,0.05)',
+                        border: '1px solid rgba(128,128,128,0.125)',
                         borderRadius: '12px',
                         padding: '1.25rem',
                         display: 'flex',
@@ -2697,7 +2697,7 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
 
                         <div style={{
                           background: 'rgba(0, 0, 0, 0.15)',
-                          border: '1px solid rgba(255, 255, 255, 0.03)',
+                          border: '1px solid rgba(128,128,128,0.075)',
                           borderRadius: '8px',
                           padding: '0.75rem 1rem',
                           fontSize: '0.9rem',
@@ -2746,14 +2746,14 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
             return (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
                 <div>
-                  <h3 style={{ borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '0.5rem', margin: 0, color: 'var(--primary-gold)' }}>Fechamento de Comissões (Faturamento Dev) 💼</h3>
+                  <h3 style={{ borderBottom: '1px solid rgba(128,128,128,0.15)', paddingBottom: '0.5rem', margin: 0, color: 'var(--primary-gold)' }}>Fechamento de Comissões (Faturamento Dev) 💼</h3>
                   <p style={{ margin: '0.5rem 0 0 0', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
                     Visualize e gerencie os valores a pagar referentes à taxa de comissão de <strong>{pct}%</strong> sobre as vendas realizadas por fora do split online.
                   </p>
                 </div>
 
                 {/* Filtros de Métodos de Pagamento Offline */}
-                <div style={{ background: 'rgba(255, 255, 255, 0.02)', border: '1px solid rgba(255, 255, 255, 0.05)', borderRadius: '12px', padding: '1.25rem' }}>
+                <div style={{ background: 'rgba(128,128,128,0.05)', border: '1px solid rgba(128,128,128,0.125)', borderRadius: '12px', padding: '1.25rem' }}>
                   <label style={{ display: 'block', fontWeight: 600, fontSize: '0.9rem', marginBottom: '0.75rem', color: 'var(--text-primary)' }}>
                     Métodos de Pagamento Sujeitos a Comissão
                   </label>
@@ -2781,10 +2781,10 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
                 <div className="responsive-grid-2" style={{ gap: '1.5rem' }}>
                   
                   {/* Semana */}
-                  <div style={{ background: 'rgba(255, 255, 255, 0.02)', border: '1px solid rgba(255, 255, 255, 0.05)', borderRadius: '12px', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  <div style={{ background: 'rgba(128,128,128,0.05)', border: '1px solid rgba(128,128,128,0.125)', borderRadius: '12px', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <span style={{ fontSize: '0.85rem', color: '#10b981', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Fechamento Semanal</span>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', background: 'rgba(255,255,255,0.05)', padding: '0.2rem 0.6rem', borderRadius: '20px' }}>Toda Segunda-feira</span>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', background: 'rgba(128,128,128,0.125)', padding: '0.2rem 0.6rem', borderRadius: '20px' }}>Toda Segunda-feira</span>
                     </div>
                     <div>
                       <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Período Atual:</div>
@@ -2792,7 +2792,7 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
                         {weeklyPeriod.start.toLocaleDateString('pt-BR')} a {weeklyPeriod.end.toLocaleDateString('pt-BR')}
                       </div>
                     </div>
-                    <div className="responsive-grid-2" style={{ borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '1rem' }}>
+                    <div className="responsive-grid-2" style={{ borderTop: '1px solid rgba(128,128,128,0.125)', paddingTop: '1rem' }}>
                       <div>
                         <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Vendas Offline:</div>
                         <div style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--text-primary, #1e293b)' }}>R$ {totalWeeklySales.toFixed(2)}</div>
@@ -2814,10 +2814,10 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
                   </div>
 
                   {/* Mensal */}
-                  <div style={{ background: 'rgba(255, 255, 255, 0.02)', border: '1px solid rgba(255, 255, 255, 0.05)', borderRadius: '12px', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  <div style={{ background: 'rgba(128,128,128,0.05)', border: '1px solid rgba(128,128,128,0.125)', borderRadius: '12px', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <span style={{ fontSize: '0.85rem', color: '#a855f7', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Fechamento Mensal</span>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', background: 'rgba(255,255,255,0.05)', padding: '0.2rem 0.6rem', borderRadius: '20px' }}>Todo dia 10</span>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', background: 'rgba(128,128,128,0.125)', padding: '0.2rem 0.6rem', borderRadius: '20px' }}>Todo dia 10</span>
                     </div>
                     <div>
                       <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Período Atual:</div>
@@ -2825,7 +2825,7 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
                         {monthlyPeriod.start.toLocaleDateString('pt-BR')} a {monthlyPeriod.end.toLocaleDateString('pt-BR')}
                       </div>
                     </div>
-                    <div className="responsive-grid-2" style={{ borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '1rem' }}>
+                    <div className="responsive-grid-2" style={{ borderTop: '1px solid rgba(128,128,128,0.125)', paddingTop: '1rem' }}>
                       <div>
                         <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Vendas Offline:</div>
                         <div style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--text-primary, #1e293b)' }}>R$ {totalMonthlySales.toFixed(2)}</div>
@@ -2849,7 +2849,7 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
                 </div>
 
                 {/* Tabela de Pedidos do Período Atual */}
-                <div style={{ background: 'rgba(255, 255, 255, 0.02)', border: '1px solid rgba(255, 255, 255, 0.05)', borderRadius: '12px', padding: '1.25rem', overflow: 'hidden' }}>
+                <div style={{ background: 'rgba(128,128,128,0.05)', border: '1px solid rgba(128,128,128,0.125)', borderRadius: '12px', padding: '1.25rem', overflow: 'hidden' }}>
                   <label style={{ display: 'block', fontWeight: 600, fontSize: '0.9rem', marginBottom: '1rem', color: 'var(--text-primary)' }}>
                     Detalhamento dos Pedidos no Período
                   </label>
@@ -2866,7 +2866,7 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
                     <div style={{ overflowX: 'auto' }}>
                       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem', textAlign: 'left' }}>
                         <thead>
-                          <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                          <tr style={{ borderBottom: '1px solid rgba(128,128,128,0.15)' }}>
                             <th style={{ padding: '0.75rem 0.5rem', color: 'var(--text-secondary)' }}>ID Pedido</th>
                             <th style={{ padding: '0.75rem 0.5rem', color: 'var(--text-secondary)' }}>Data/Hora</th>
                             <th style={{ padding: '0.75rem 0.5rem', color: 'var(--text-secondary)' }}>Cliente</th>
@@ -2879,7 +2879,7 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
                           {Array.from(new Set([...weeklyOrders, ...monthlyOrders])).map((order) => {
                             const commVal = order.total * (pct / 100);
                             return (
-                              <tr key={order.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                              <tr key={order.id} style={{ borderBottom: '1px solid rgba(128,128,128,0.075)' }}>
                                 <td style={{ padding: '0.75rem 0.5rem', fontWeight: 600 }}>#{order.dailySeq || order.id?.substring(0, 5).toUpperCase()}</td>
                                 <td style={{ padding: '0.75rem 0.5rem', color: 'var(--text-secondary)' }}>{new Date(order.createdAt).toLocaleString('pt-BR')}</td>
                                 <td style={{ padding: '0.75rem 0.5rem' }}>{order.clientName}</td>
@@ -2907,7 +2907,7 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
           {configTab === 'printer' && (isAdmin || role === 'collaborator') && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
               <div>
-                <h3 style={{ borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '0.5rem', margin: 0, color: 'var(--primary-gold)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <h3 style={{ borderBottom: '1px solid rgba(128,128,128,0.15)', paddingBottom: '0.5rem', margin: 0, color: 'var(--primary-gold)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                   <Printer size={22} style={{ color: 'var(--primary-gold)' }} />
                   Configuração da Impressora Térmica 🖨️
                 </h3>
@@ -2931,15 +2931,15 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
               <div className="responsive-grid-2" style={{ gap: '1.5rem' }}>
                 
                 {/* Métodos de Impressão e Tamanho */}
-                <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '16px', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
-                  <h4 style={{ margin: 0, color: 'var(--text-primary, #1e293b)', fontSize: '1rem', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '0.5rem' }}>Preferências de Impressão</h4>
+                <div style={{ background: 'rgba(128,128,128,0.05)', border: '1px solid rgba(128,128,128,0.125)', borderRadius: '16px', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
+                  <h4 style={{ margin: 0, color: 'var(--text-primary, #1e293b)', fontSize: '1rem', borderBottom: '1px solid rgba(128,128,128,0.125)', paddingBottom: '0.5rem' }}>Preferências de Impressão</h4>
                   
                   <div>
                     <label style={{ display: 'block', fontSize: '0.82rem', color: 'var(--text-secondary)', marginBottom: '0.4rem', fontWeight: 600 }}>MÉTODO DE IMPRESSÃO</label>
                     <select
                       value={printerSettings.method}
                       onChange={(e) => handleSavePrinterSettings({ ...printerSettings, method: e.target.value as PrinterSettings['method'] })}
-                      style={{ width: '100%', padding: '0.65rem 0.85rem', borderRadius: '10px', background: '#0b0f19', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', cursor: 'pointer', fontSize: '0.9rem' }}
+                      style={{ width: '100%', padding: '0.65rem 0.85rem', borderRadius: '10px', background: 'var(--field-bg, #ffffff)', border: '1px solid rgba(128,128,128,0.25)', color: '#fff', cursor: 'pointer', fontSize: '0.9rem' }}
                     >
                       <option value="browser">Navegador (Padrão do Sistema) - Recomendado p/ Cabo USB</option>
                       <option value="bluetooth">Bluetooth Direto (Web Bluetooth BLE API)</option>
@@ -2960,7 +2960,7 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
                       <select
                         value={printerSettings.baudRate || 9600}
                         onChange={(e) => handleSavePrinterSettings({ ...printerSettings, baudRate: parseInt(e.target.value) })}
-                        style={{ width: '100%', padding: '0.65rem 0.85rem', borderRadius: '10px', background: '#0b0f19', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', cursor: 'pointer', fontSize: '0.9rem' }}
+                        style={{ width: '100%', padding: '0.65rem 0.85rem', borderRadius: '10px', background: 'var(--field-bg, #ffffff)', border: '1px solid rgba(128,128,128,0.25)', color: '#fff', cursor: 'pointer', fontSize: '0.9rem' }}
                       >
                         <option value={9600}>9600 bps (Padrão)</option>
                         <option value={19200}>19200 bps</option>
@@ -2977,7 +2977,7 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
                       <select
                         value={printerSettings.paperSize}
                         onChange={(e) => handleSavePrinterSettings({ ...printerSettings, paperSize: e.target.value as '58mm' | '80mm' })}
-                        style={{ width: '100%', padding: '0.65rem 0.85rem', borderRadius: '10px', background: '#0b0f19', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', cursor: 'pointer', fontSize: '0.9rem' }}
+                        style={{ width: '100%', padding: '0.65rem 0.85rem', borderRadius: '10px', background: 'var(--field-bg, #ffffff)', border: '1px solid rgba(128,128,128,0.25)', color: '#fff', cursor: 'pointer', fontSize: '0.9rem' }}
                       >
                         <option value="58mm">58mm (Padrão Pequena)</option>
                         <option value="80mm">80mm (Grande/Larga)</option>
@@ -2992,19 +2992,19 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
                         max={5}
                         value={printerSettings.copies}
                         onChange={(e) => handleSavePrinterSettings({ ...printerSettings, copies: Math.max(1, parseInt(e.target.value) || 1) })}
-                        style={{ width: '100%', padding: '0.65rem 0.85rem', borderRadius: '10px', background: '#0b0f19', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', fontSize: '0.9rem' }}
+                        style={{ width: '100%', padding: '0.65rem 0.85rem', borderRadius: '10px', background: 'var(--field-bg, #ffffff)', border: '1px solid rgba(128,128,128,0.25)', color: '#fff', fontSize: '0.9rem' }}
                       />
                     </div>
                   </div>
                 </div>
 
                 {/* Status de Conexão de Hardware */}
-                <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '16px', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
-                  <h4 style={{ margin: 0, color: 'var(--text-primary, #1e293b)', fontSize: '1rem', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '0.5rem' }}>Conexão de Hardware</h4>
+                <div style={{ background: 'rgba(128,128,128,0.05)', border: '1px solid rgba(128,128,128,0.125)', borderRadius: '16px', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
+                  <h4 style={{ margin: 0, color: 'var(--text-primary, #1e293b)', fontSize: '1rem', borderBottom: '1px solid rgba(128,128,128,0.125)', paddingBottom: '0.5rem' }}>Conexão de Hardware</h4>
                   
                   {printerSettings.method === 'bluetooth' && (
                     <>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', background: 'rgba(0,0,0,0.15)', padding: '0.75rem 1rem', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.03)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', background: 'rgba(0,0,0,0.15)', padding: '0.75rem 1rem', borderRadius: '10px', border: '1px solid rgba(128,128,128,0.075)' }}>
                         <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: isBtConnected ? '#10b981' : '#ef4444', display: 'inline-block' }}></span>
                         <span style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-primary, #1e293b)' }}>
                           {isBtConnected ? `Conectado: ${btDeviceName}` : 'Impressora Bluetooth Desconectada'}
@@ -3036,7 +3036,7 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
 
                   {printerSettings.method === 'serial' && (
                     <>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', background: 'rgba(0,0,0,0.15)', padding: '0.75rem 1rem', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.03)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', background: 'rgba(0,0,0,0.15)', padding: '0.75rem 1rem', borderRadius: '10px', border: '1px solid rgba(128,128,128,0.075)' }}>
                         <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: isSerialConn ? '#10b981' : '#ef4444', display: 'inline-block' }}></span>
                         <span style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-primary, #1e293b)' }}>
                           {isSerialConn ? `Conectado via USB: ${serialDeviceName}` : 'Impressora USB/Cabo Desconectada'}
@@ -3068,7 +3068,7 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
 
                   {printerSettings.method === 'usb' && (
                     <>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', background: 'rgba(0,0,0,0.15)', padding: '0.75rem 1rem', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.03)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', background: 'rgba(0,0,0,0.15)', padding: '0.75rem 1rem', borderRadius: '10px', border: '1px solid rgba(128,128,128,0.075)' }}>
                         <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: isUsbConn ? '#10b981' : '#ef4444', display: 'inline-block' }}></span>
                         <span style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-primary, #1e293b)' }}>
                           {isUsbConn ? `Conectado via USB: ${usbDeviceName}` : 'Impressora USB Desconectada'}
@@ -3108,10 +3108,10 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
                         <span style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--primary-gold)', display: 'block', marginBottom: '0.3rem' }}>
                           ⚡ DICA: IMPRESSÃO DIRETA/SILENCIOSA
                         </span>
-                        <span style={{ fontSize: '0.78rem', color: '#cbd5e1', display: 'block', lineHeight: '1.3', marginBottom: '0.6rem' }}>
+                        <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary, #64748b)', display: 'block', lineHeight: '1.3', marginBottom: '0.6rem' }}>
                           Para imprimir direto sem abrir a janela de confirmação de impressão do navegador, adicione o parâmetro abaixo no final do campo <strong>Destino</strong> nas propriedades do atalho do Chrome:
                         </span>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: '#0b0f19', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '8px', padding: '0.5rem 0.75rem', justifyContent: 'space-between' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'var(--field-bg, #ffffff)', border: '1px solid rgba(128,128,128,0.2)', borderRadius: '8px', padding: '0.5rem 0.75rem', justifyContent: 'space-between' }}>
                           <code style={{ fontSize: '0.85rem', color: '#10b981', fontFamily: 'monospace', fontWeight: 600 }}>--kiosk-printing</code>
                           <button
                             type="button"
@@ -3119,9 +3119,9 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
                               navigator.clipboard.writeText('--kiosk-printing');
                               alert('Parâmetro copiado para a área de transferência!');
                             }}
-                            style={{ padding: '0.3rem 0.6rem', background: 'rgba(255,255,255,0.05)', color: '#fff', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', transition: 'background 0.2s' }}
-                            onMouseOver={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.1)')}
-                            onMouseOut={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.05)')}
+                            style={{ padding: '0.3rem 0.6rem', background: 'rgba(128,128,128,0.125)', color: 'var(--text-primary, #1e293b)', border: '1px solid rgba(128,128,128,0.25)', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', transition: 'background 0.2s' }}
+                            onMouseOver={(e) => (e.currentTarget.style.background = 'rgba(128,128,128,0.25)')}
+                            onMouseOut={(e) => (e.currentTarget.style.background = 'rgba(128,128,128,0.125)')}
                           >
                             Copiar
                           </button>
@@ -3130,7 +3130,7 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
                     </div>
                   )}
 
-                  <div style={{ borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+                  <div style={{ borderTop: '1px solid rgba(128,128,128,0.125)', paddingTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
                     <button
                       type="button"
                       onClick={handleTestPrint}
@@ -3145,11 +3145,11 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
               </div>
 
               {/* Automações de Impressão */}
-              <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '16px', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
-                <h4 style={{ margin: 0, color: 'var(--text-primary, #1e293b)', fontSize: '1rem', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '0.5rem' }}>Automação do Caixa</h4>
+              <div style={{ background: 'rgba(128,128,128,0.05)', border: '1px solid rgba(128,128,128,0.125)', borderRadius: '16px', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
+                <h4 style={{ margin: 0, color: 'var(--text-primary, #1e293b)', fontSize: '1rem', borderBottom: '1px solid rgba(128,128,128,0.125)', paddingBottom: '0.5rem' }}>Automação do Caixa</h4>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1.25rem' }}>
 
-                  <label style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', cursor: 'pointer', background: 'rgba(0,0,0,0.05)', padding: '0.85rem 1rem', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.02)' }}>
+                  <label style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', cursor: 'pointer', background: 'rgba(0,0,0,0.05)', padding: '0.85rem 1rem', borderRadius: '10px', border: '1px solid rgba(128,128,128,0.05)' }}>
                     <input
                       type="checkbox"
                       checked={printerSettings.autoPrintOnSale}
@@ -3162,7 +3162,7 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
                     </div>
                   </label>
 
-                  <label style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', cursor: 'pointer', background: 'rgba(0,0,0,0.05)', padding: '0.85rem 1rem', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.02)' }}>
+                  <label style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', cursor: 'pointer', background: 'rgba(0,0,0,0.05)', padding: '0.85rem 1rem', borderRadius: '10px', border: '1px solid rgba(128,128,128,0.05)' }}>
                     <input
                       type="checkbox"
                       checked={printerSettings.openDrawer}
@@ -3188,7 +3188,7 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
           {configTab === 'elgin_i8' && (isAdmin || role === 'collaborator') && (
             <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', height: '100%' }}>
               <div>
-                <h3 style={{ borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '0.5rem', margin: 0, color: 'var(--primary-gold)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <h3 style={{ borderBottom: '1px solid rgba(128,128,128,0.15)', paddingBottom: '0.5rem', margin: 0, color: 'var(--primary-gold)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                   <Printer size={22} style={{ color: 'var(--primary-gold)' }} />
                   Impressora Bematech Elgin i8 (Térmica Não Fiscal)
                 </h3>
@@ -3210,19 +3210,19 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
               )}
 
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.5rem' }}>
-                <div style={{ background: 'rgba(255,255,255,0.02)', padding: '1.5rem', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.05)' }}>
-                  <h4 style={{ margin: '0 0 1rem 0', color: '#fff', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <div style={{ background: 'rgba(128,128,128,0.05)', padding: '1.5rem', borderRadius: '16px', border: '1px solid rgba(128,128,128,0.125)' }}>
+                  <h4 style={{ margin: '0 0 1rem 0', color: 'var(--text-primary, #1e293b)', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                     <Settings size={18} style={{ color: 'var(--text-secondary)' }} />
                     Tripla Interface de Comunicação
                   </h4>
                   
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                     <div>
-                      <label style={{ display: 'block', marginBottom: '0.5rem', color: '#cbd5e1', fontSize: '0.85rem' }}>Modo de Conexão (Elgin i8)</label>
+                      <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-secondary, #64748b)', fontSize: '0.85rem' }}>Modo de Conexão (Elgin i8)</label>
                       <select
                         value={printerSettings.method}
                         onChange={(e) => handleSavePrinterSettings({ ...printerSettings, method: e.target.value as PrinterSettings['method'] })}
-                        style={{ width: '100%', padding: '0.75rem 1rem', borderRadius: '12px', background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', cursor: 'pointer', fontSize: '0.9rem' }}
+                        style={{ width: '100%', padding: '0.75rem 1rem', borderRadius: '12px', background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(128,128,128,0.25)', color: 'var(--text-primary, #1e293b)', cursor: 'pointer', fontSize: '0.9rem' }}
                       >
                         <option value="browser">USB / Spooler do Windows (Padrão)</option>
                         <option value="serial">USB Serial / COM Direta</option>
@@ -3238,9 +3238,9 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
 
                     {printerSettings.method === 'serial' && (
                       <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '0.5rem' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem', background: 'rgba(0,0,0,0.2)', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem', background: 'rgba(0,0,0,0.2)', borderRadius: '10px', border: '1px solid rgba(128,128,128,0.125)' }}>
                           <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: isSerialConn ? '#10b981' : '#ef4444', display: 'inline-block' }}></span>
-                          <span style={{ fontSize: '0.9rem', fontWeight: 600, color: '#fff' }}>
+                          <span style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-primary, #1e293b)' }}>
                             {isSerialConn ? 'Serial COM Conectada: ' + serialDeviceName : 'Porta Serial Fechada'}
                           </span>
                         </div>
@@ -3272,17 +3272,17 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
                   </div>
                 </div>
 
-                <div style={{ background: 'rgba(255,255,255,0.02)', padding: '1.5rem', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.05)' }}>
-                  <h4 style={{ margin: '0 0 1rem 0', color: '#fff', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <div style={{ background: 'rgba(128,128,128,0.05)', padding: '1.5rem', borderRadius: '16px', border: '1px solid rgba(128,128,128,0.125)' }}>
+                  <h4 style={{ margin: '0 0 1rem 0', color: 'var(--text-primary, #1e293b)', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                     <ClipboardList size={18} style={{ color: 'var(--text-secondary)' }} />
                     Hardware & Impressão (80mm)
                   </h4>
                   
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                     <div>
-                      <label style={{ display: 'block', marginBottom: '0.5rem', color: '#cbd5e1', fontSize: '0.85rem' }}>Guilhotina Integrada</label>
+                      <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-secondary, #64748b)', fontSize: '0.85rem' }}>Guilhotina Integrada</label>
                       <select
-                        style={{ width: '100%', padding: '0.75rem 1rem', borderRadius: '12px', background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', cursor: 'pointer', fontSize: '0.9rem' }}
+                        style={{ width: '100%', padding: '0.75rem 1rem', borderRadius: '12px', background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(128,128,128,0.25)', color: 'var(--text-primary, #1e293b)', cursor: 'pointer', fontSize: '0.9rem' }}
                       >
                         <option value="auto">Corte Automático (Padrão de Fábrica)</option>
                         <option value="manual">Corte Manual</option>
@@ -3291,21 +3291,21 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
 
                     <div style={{ display: 'flex', gap: '1rem' }}>
                       <div style={{ flex: 1 }}>
-                        <label style={{ display: 'block', marginBottom: '0.5rem', color: '#cbd5e1', fontSize: '0.85rem' }}>Largura do Papel</label>
+                        <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-secondary, #64748b)', fontSize: '0.85rem' }}>Largura do Papel</label>
                         <input
                           type="text"
                           readOnly
                           value="80mm (Bobina Padrão)"
-                          style={{ width: '100%', padding: '0.75rem 1rem', borderRadius: '12px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', color: '#94a3b8', fontSize: '0.9rem', cursor: 'not-allowed' }}
+                          style={{ width: '100%', padding: '0.75rem 1rem', borderRadius: '12px', background: 'rgba(128,128,128,0.05)', border: '1px solid rgba(128,128,128,0.125)', color: 'var(--text-secondary, #64748b)', fontSize: '0.9rem', cursor: 'not-allowed' }}
                         />
                       </div>
                       <div style={{ flex: 1 }}>
-                        <label style={{ display: 'block', marginBottom: '0.5rem', color: '#cbd5e1', fontSize: '0.85rem' }}>Velocidade Max.</label>
+                        <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-secondary, #64748b)', fontSize: '0.85rem' }}>Velocidade Max.</label>
                         <input
                           type="text"
                           readOnly
                           value="250 mm/s"
-                          style={{ width: '100%', padding: '0.75rem 1rem', borderRadius: '12px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', color: '#94a3b8', fontSize: '0.9rem', cursor: 'not-allowed' }}
+                          style={{ width: '100%', padding: '0.75rem 1rem', borderRadius: '12px', background: 'rgba(128,128,128,0.05)', border: '1px solid rgba(128,128,128,0.125)', color: 'var(--text-secondary, #64748b)', fontSize: '0.9rem', cursor: 'not-allowed' }}
                         />
                       </div>
                     </div>
@@ -3314,15 +3314,15 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
                         <span style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--primary-gold)', display: 'block', marginBottom: '0.3rem' }}>
                           💡 IMPRESSÃO DIRETA WINDOWS (MODO USB)
                         </span>
-                        <span style={{ fontSize: '0.78rem', color: '#cbd5e1', display: 'block', lineHeight: '1.3', marginBottom: '0.6rem' }}>
+                        <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary, #64748b)', display: 'block', lineHeight: '1.3', marginBottom: '0.6rem' }}>
                           Para emitir cupons diretamente via USB sem pop-up no Windows, use o modo silencioso do Chrome adicionando ao atalho:
                         </span>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: '#0b0f19', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '8px', padding: '0.5rem 0.75rem', justifyContent: 'space-between' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'var(--field-bg, #ffffff)', border: '1px solid rgba(128,128,128,0.2)', borderRadius: '8px', padding: '0.5rem 0.75rem', justifyContent: 'space-between' }}>
                           <code style={{ fontSize: '0.85rem', color: '#10b981', fontFamily: 'monospace', fontWeight: 600 }}>--kiosk-printing</code>
                           <button
                             type="button"
                             onClick={() => navigator.clipboard.writeText('--kiosk-printing')}
-                            style={{ padding: '0.3rem 0.6rem', background: 'rgba(255,255,255,0.05)', color: '#fff', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '6px', fontSize: '0.75rem', cursor: 'pointer' }}
+                            style={{ padding: '0.3rem 0.6rem', background: 'rgba(128,128,128,0.125)', color: 'var(--text-primary, #1e293b)', border: '1px solid rgba(128,128,128,0.25)', borderRadius: '6px', fontSize: '0.75rem', cursor: 'pointer' }}
                           >
                             Copiar
                           </button>
@@ -3330,7 +3330,7 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
                     </div>
                   </div>
 
-                  <div style={{ borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '1rem', marginTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+                  <div style={{ borderTop: '1px solid rgba(128,128,128,0.125)', paddingTop: '1rem', marginTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
                     <button
                       type="button"
                       onClick={handleTestPrint}

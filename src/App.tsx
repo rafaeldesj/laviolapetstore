@@ -63,6 +63,14 @@ function App() {
     });
   }, [styles.bodyStyle]);
 
+  // Cores de texto/campos usadas pelas telas internas; acompanham o tema claro ou o de alto contraste.
+  useEffect(() => {
+    const root = document.documentElement.style;
+    root.setProperty('--text-primary', highContrast ? '#ffffff' : '#1e293b');
+    root.setProperty('--text-secondary', highContrast ? '#dddddd' : '#64748b');
+    root.setProperty('--field-bg', highContrast ? '#121212' : '#ffffff');
+  }, [highContrast]);
+
   useEffect(() => {
     const isPrivate = ['venda-avulsa', 'pets', 'agendamentos', 'financeiro', 'estoque', 'prontuario', 'relatorios', 'pagamentos', 'usuarios', 'registros', 'configuracoes', 'delivery'].includes(activeSection);
     const requiresMgmt = ['usuarios', 'registros'].includes(activeSection);
