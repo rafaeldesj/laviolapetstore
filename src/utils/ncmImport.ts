@@ -74,10 +74,22 @@ function findColumn(header: string[], ...keys: string[]): number {
   return header.findIndex(h => keys.some(k => norm(h).startsWith(k)));
 }
 
+/** Converte as células de uma planilha Excel em texto (números inteiros sem casas, datas ignoradas). */
+export function excelRowsToText(rows: unknown[][]): string[][] {
+  return rows.map(r => r.map(v => (v === null || v === undefined ? '' : v instanceof Date ? '' : String(v))));
+}
+
 export function analyzeNcmSheet(text: string, products: ImportableProduct[]): NcmImportReport {
+  return analyzeNcmRows(parseCsv(text), products);
+}
+
+export function analyzeNcmRows(allRows: string[][], products: ImportableProduct[]): NcmImportReport {
   const report: NcmImportReport = { changes: [], unchanged: 0, skippedEmpty: 0, invalid: [], notFound: [] };
-  const rows = parseCsv(text);
-  if (rows.length < 2) throw new Error('A planilha está vazia. Use a planilha baixada pelo botão "Baixar planilha dos meus produtos".');
+
+  // Planilhas de outros sistemas costumam ter título/linhas em branco antes do cabeçalho: procuramos a linha da coluna NCM.
+  const headerAt = allRows.slice(0, 15).findIndex(r => r.some(h => norm(h || '').startsWith('ncm')));
+  const rows = headerAt > 0 ? allRows.slice(headerAt) : allRows;
+  if (rows.length < 2) throw new Error('A planilha está vazia ou não tem uma coluna "NCM". Use a planilha baixada pelo botão "Baixar planilha dos meus produtos" ou a exportação do sistema atual.');
 
   const header = rows[0];
   const iId = findColumn(header, 'id');
@@ -116,7 +128,8 @@ export function analyzeNcmSheet(text: string, products: ImportableProduct[]): Nc
 
     if (!product) { report.notFound.push({ line, name: name || code || id || '(sem nome)' }); return; }
 
-    const ncm = digits(rawNcm);
+    // Excel guarda NCM como número e perde o zero da frente (ex.: 5119900 → 05119900).
+    const ncm = digits(rawNcm).length === 7 ? `0${digits(rawNcm)}` : digits(rawNcm);
     if (ncm.length !== 8) { report.invalid.push({ line, name: product.name, value: rawNcm }); return; }
 
     const origin = get(r, iOrigin) || product.origin || '0';

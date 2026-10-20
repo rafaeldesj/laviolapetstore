@@ -37,7 +37,7 @@ export const Financeiro: React.FC<FinanceiroProps> = ({ styles, readOnly = false
     // 1. Get POS Sales (Firestore, compartilhado entre todos os computadores)
     let pdvSales: any[] = [];
     try {
-      pdvSales = await fetchSales();
+      pdvSales = (await fetchSales()).filter(sale => !sale.voided);
     } catch (e) {
       console.error('Erro ao carregar vendas do PDV:', e);
       setErrorMessage('Não foi possível carregar as vendas do PDV.');

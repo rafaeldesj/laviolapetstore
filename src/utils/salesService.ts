@@ -1,5 +1,5 @@
 import { collection, doc, getDocs, runTransaction, setDoc, updateDoc } from 'firebase/firestore';
-import { db } from '../firebaseClient';
+import { auth, db } from '../firebaseClient';
 import type { ReceiptFiscal, ReceiptItem } from './printer';
 
 export interface SaleItem extends ReceiptItem {
@@ -27,6 +27,11 @@ export interface Sale {
   type: 'store' | 'delivery' | null;
   delivery: Record<string, unknown> | null;
   fiscal: ReceiptFiscal | null;
+  /** Venda cancelada (ex.: erro de digitação): os produtos voltaram ao estoque e ela não entra nos totais. */
+  voided?: boolean;
+  voided_at?: string;
+  voided_reason?: string;
+  voided_by?: string;
 }
 
 const LEGACY_KEY = 'laviola_pdv_sales';
@@ -65,6 +70,39 @@ export async function finalizeSale(sale: Omit<Sale, 'id' | 'number'>): Promise<S
   });
 
   return saved;
+}
+
+/** Cancela a venda e devolve os produtos ao estoque, tudo na mesma transação. */
+export async function voidSale(sale: Sale, reason: string): Promise<Sale> {
+  if (!db) throw new Error('Firebase não configurado.');
+  const firestore = db;
+  const saleRef = doc(firestore, 'sales', sale.id);
+
+  return runTransaction(firestore, async (tx) => {
+    const saleSnap = await tx.get(saleRef);
+    if (!saleSnap.exists()) throw new Error('Venda não encontrada.');
+    const current = { ...(saleSnap.data() as Sale), id: sale.id };
+    if (current.voided) return { ...sale, ...current };
+
+    const qtyByProduct = new Map<string, number>();
+    current.items.forEach(i => qtyByProduct.set(i.product_id, (qtyByProduct.get(i.product_id) || 0) + i.quantity));
+    const refs = [...qtyByProduct.keys()].map(id => doc(firestore, 'products', id));
+    const snaps = await Promise.all(refs.map(r => tx.get(r)));
+
+    snaps.forEach((snap, idx) => {
+      // Produto apagado do estoque depois da venda: não há o que devolver.
+      if (snap.exists()) tx.update(refs[idx], { quantity: (Number(snap.data().quantity) || 0) + (qtyByProduct.get(refs[idx].id) || 0) });
+    });
+
+    const patch = {
+      voided: true,
+      voided_at: new Date().toISOString(),
+      voided_reason: reason,
+      voided_by: auth?.currentUser?.displayName || auth?.currentUser?.email || '',
+    };
+    tx.update(saleRef, patch);
+    return { ...sale, ...current, ...patch };
+  });
 }
 
 export async function updateSaleFiscal(saleId: string, fiscal: ReceiptFiscal): Promise<void> {

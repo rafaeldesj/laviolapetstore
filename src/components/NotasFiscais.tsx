@@ -2,11 +2,12 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { fetchSales } from '../utils/salesService';
 import type { Sale } from '../utils/salesService';
 import {
-  cancelNfce, companyFromSettings, consultNfce, DEFAULT_FISCAL_SETTINGS, emitNfce, explainFiscalError, getFiscalSettings,
+  cancelWindow, companyFromSettings, consultNfce, DEFAULT_FISCAL_SETTINGS, emitNfce, explainFiscalError, getFiscalSettings,
 } from '../utils/fiscal';
 import type { FiscalSettings } from '../utils/fiscal';
 import { DEFAULT_COMPANY, printSaleReceipt } from '../utils/printer';
-import { buildMonthlyPackage, downloadBlob } from '../utils/accountingExport';
+import { buildMonthlyPackage, buildTotalSheet, downloadBlob, monthTotal } from '../utils/accountingExport';
+import { CancelDialog } from './CancelDialog';
 import { CertAlert } from './CertAlert';
 
 interface NotasFiscaisProps {
@@ -20,15 +21,10 @@ type Filter = 'todas' | 'sem_nota' | 'problema' | 'emitidas' | 'canceladas';
 const brl = (n: number) => `R$ ${(n || 0).toFixed(2).replace('.', ',')}`;
 const dayKey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
-const REASONS = [
-  'Cliente desistiu da compra',
-  'Erro nos itens ou valores da venda',
-  'Forma de pagamento lançada errada',
-];
-
 /** Tudo o que a pessoa precisa saber sobre a nota de cada venda, num lugar só. */
 function noteState(sale: Sale): { key: Filter; label: string; color: string } {
   const st = sale.fiscal?.status;
+  if (sale.voided) return { key: 'canceladas', label: st === 'cancelada' ? 'Venda e nota canceladas' : 'Venda cancelada', color: 'hsl(215,15%,45%)' };
   if (!st) return { key: 'sem_nota', label: 'Sem nota', color: 'hsl(215,15%,45%)' };
   if (st === 'autorizada') return { key: 'emitidas', label: `Nota emitida nº ${sale.fiscal?.numero ?? ''}`.trim(), color: 'hsl(142,60%,35%)' };
   if (st === 'cancelada') return { key: 'canceladas', label: 'Nota cancelada', color: 'hsl(215,15%,45%)' };
@@ -47,9 +43,13 @@ export const NotasFiscais: React.FC<NotasFiscaisProps> = ({ styles, mode = 'full
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
   const [batch, setBatch] = useState<{ done: number; total: number } | null>(null);
   const [cancelSale, setCancelSale] = useState<Sale | null>(null);
-  const [reason, setReason] = useState(REASONS[0]);
-  const [reasonText, setReasonText] = useState('');
-  const [month, setMonth] = useState(() => dayKey(new Date()).slice(0, 7));
+  // O contador baixa sempre o mês anterior; os demais começam no mês atual.
+  const [month, setMonth] = useState(() => {
+    const d = new Date();
+    d.setDate(1);
+    if (mode === 'accounting') d.setMonth(d.getMonth() - 1);
+    return dayKey(d).slice(0, 7);
+  });
   const [exporting, setExporting] = useState<{ done: number; total: number } | null>(null);
 
   const load = useCallback(async () => {
@@ -79,16 +79,17 @@ export const NotasFiscais: React.FC<NotasFiscaisProps> = ({ styles, mode = 'full
     return c;
   }, [daySales]);
   const shown = filter === 'todas' ? daySales : daySales.filter(s => noteState(s).key === filter);
-  const dayTotal = daySales.reduce((a, s) => a + s.subtotal, 0);
+  const dayTotal = daySales.filter(s => !s.voided).reduce((a, s) => a + s.subtotal, 0);
   const monthSummary = useMemo(() => {
     const inMonth = sales.filter(s => dayKey(new Date(s.timestamp)).slice(0, 7) === month);
     const sum = (list: Sale[]) => list.reduce((a, s) => a + s.subtotal, 0);
+    const active = inMonth.filter(s => !s.voided);
     const emitted = inMonth.filter(s => s.fiscal?.status === 'autorizada');
     const cancelled = inMonth.filter(s => s.fiscal?.status === 'cancelada');
-    const noNote = inMonth.filter(s => s.fiscal?.status !== 'autorizada' && s.fiscal?.status !== 'cancelada');
-    return { sales: inMonth.length, total: sum(inMonth), emitted: emitted.length, emittedValue: sum(emitted), cancelled: cancelled.length, noNote: noNote.length, noNoteValue: sum(noNote) };
+    const noNote = active.filter(s => s.fiscal?.status !== 'autorizada' && s.fiscal?.status !== 'cancelada');
+    return { sales: active.length, total: monthTotal(sales, month).total, emitted: emitted.length, emittedValue: sum(emitted), cancelled: cancelled.length, noNote: noNote.length, noNoteValue: sum(noNote) };
   }, [sales, month]);
-  const pending = daySales.filter(s => ['sem_nota', 'problema'].includes(noteState(s).key) && s.fiscal?.status !== 'processando');
+  const pending = daySales.filter(s => !s.voided && ['sem_nota', 'problema'].includes(noteState(s).key) && s.fiscal?.status !== 'processando');
 
   const company = cfg.cnpj ? companyFromSettings(cfg) : DEFAULT_COMPANY;
 
@@ -136,30 +137,15 @@ export const NotasFiscais: React.FC<NotasFiscaisProps> = ({ styles, mode = 'full
     }
   };
 
-  const confirmCancel = async () => {
-    if (!cancelSale) return;
-    const text = `${reason}${reasonText.trim() ? ` - ${reasonText.trim()}` : ''}`;
-    setBusyId(cancelSale.id);
-    try {
-      const fiscal = await cancelNfce(cancelSale, cfg, text);
-      replaceSale({ ...cancelSale, fiscal });
-      setNotice({ ok: true, text: `Nota da venda #${cancelSale.number} cancelada.` });
-      setCancelSale(null);
-      setReasonText('');
-    } catch (e) {
-      setNotice({ ok: false, text: e instanceof Error ? e.message : 'Não foi possível cancelar.' });
-    } finally {
-      setBusyId(null);
-    }
-  };
-
-  const exportMonth = async (what: 'zip' | 'csv') => {
+  const exportMonth = async (what: 'zip' | 'csv' | 'total') => {
     setNotice(null);
     setExporting({ done: 0, total: 0 });
     try {
-      const result = await buildMonthlyPackage(sales, cfg, month, what === 'zip', (done, total) => setExporting({ done, total }));
+      const result = what === 'total'
+        ? buildTotalSheet(sales, month)
+        : await buildMonthlyPackage(sales, cfg, month, what === 'zip', (done, total) => setExporting({ done, total }));
       if (result.count === 0) {
-        setNotice({ ok: false, text: 'Não há notas emitidas neste mês.' });
+        setNotice({ ok: false, text: what === 'total' ? 'Não há vendas neste mês.' : 'Não há notas emitidas neste mês.' });
       } else {
         downloadBlob(result.blob, result.fileName);
         setNotice({
@@ -242,15 +228,18 @@ export const NotasFiscais: React.FC<NotasFiscaisProps> = ({ styles, mode = 'full
       <div style={{ padding: '12px 14px', borderRadius: '10px', border: `1px solid ${styles.borderColor}`, marginBottom: '16px' }}>
         <strong style={{ color: styles.textMain }}>{readOnly ? 'Baixar as notas do mês' : 'Enviar para o contador'}</strong>
         <div style={{ fontSize: '0.78rem', margin: '4px 0 10px', color: styles.sidebarWidgetText?.color }}>
-          {readOnly ? 'Escolha o mês e baixe os arquivos das notas (XML) e o resumo em planilha.' : 'Escolha o mês e baixe os arquivos das notas (XML) para mandar ao contador. O contador também pode baixar sozinho, entrando em Contabilidade.'}
+          {readOnly ? 'Escolha o mês: a planilha traz só o total vendido; o ZIP traz os XMLs de todas as notas.' : 'Escolha o mês e baixe a planilha com o total vendido e os XMLs das notas para mandar ao contador. O contador também pode baixar sozinho, entrando em Contabilidade.'}
         </div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center' }}>
           <input type="month" value={month} max={dayKey(new Date()).slice(0, 7)} onChange={(e) => e.target.value && setMonth(e.target.value)} aria-label="Mês" style={{ ...styles.formInput, width: 'auto' }} />
-          <button type="button" className="btn-save" disabled={!!exporting || !cfg.endpoint} onClick={() => exportMonth('zip')} style={{ ...smallBtn, border: 'none' }}>
-            {exporting ? (exporting.total ? `Baixando... ${exporting.done} de ${exporting.total}` : 'Preparando...') : '⬇ Baixar XMLs do mês (arquivo ZIP)'}
+          <button type="button" className="btn-save" disabled={!!exporting} onClick={() => exportMonth('total')} style={{ ...smallBtn, border: 'none' }}>
+            ⬇ Planilha do mês (total das vendas)
+          </button>
+          <button type="button" disabled={!!exporting || !cfg.endpoint} onClick={() => exportMonth('zip')} style={smallBtn}>
+            {exporting ? (exporting.total ? `Baixando... ${exporting.done} de ${exporting.total}` : 'Preparando...') : '⬇ XMLs das notas (arquivo ZIP)'}
           </button>
           <button type="button" disabled={!!exporting} onClick={() => exportMonth('csv')} style={smallBtn}>
-            ⬇ Resumo do mês (planilha)
+            ⬇ Resumo nota a nota (planilha)
           </button>
         </div>
       </div>
@@ -349,8 +338,19 @@ export const NotasFiscais: React.FC<NotasFiscaisProps> = ({ styles, mode = 'full
                     </button>
                   )}
                   {!readOnly && cfg.enabled && st.key === 'emitidas' && (
-                    <button type="button" disabled={busy} onClick={() => { setCancelSale(sale); setReason(REASONS[0]); setReasonText(''); }} style={{ ...smallBtn, color: 'hsl(0,75%,45%)' }}>
-                      Cancelar nota
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => setCancelSale(sale)}
+                      title={cancelWindow(sale, cfg).allowed ? 'Cancelar esta nota (erro de digitação, desistência...)' : 'O prazo para cancelar já passou'}
+                      style={{ ...smallBtn, color: 'hsl(0,75%,45%)', borderColor: 'hsl(0,75%,55%,0.4)', opacity: cancelWindow(sale, cfg).allowed ? 1 : 0.55 }}
+                    >
+                      🚫 Cancelar nota
+                    </button>
+                  )}
+                  {!readOnly && !sale.voided && (st.key === 'sem_nota' || isProblem) && (
+                    <button type="button" disabled={busy} onClick={() => setCancelSale(sale)} style={{ ...smallBtn, color: 'hsl(0,75%,45%)', borderColor: 'hsl(0,75%,55%,0.4)' }}>
+                      🚫 Cancelar venda
                     </button>
                   )}
                 </div>
@@ -361,35 +361,17 @@ export const NotasFiscais: React.FC<NotasFiscaisProps> = ({ styles, mode = 'full
       )}
 
       {cancelSale && (
-        <div style={styles.modalOverlay}>
-          <div style={{ ...styles.modalContent, maxWidth: '460px' }} role="dialog" aria-modal="true" aria-labelledby="cancel-title">
-            <div style={styles.modalHeader}>
-              <h2 id="cancel-title" style={styles.modalTitle}>Cancelar a nota da venda #{cancelSale.number}?</h2>
-              <button onClick={() => setCancelSale(null)} style={styles.modalCloseBtn(false)} aria-label="Fechar">✕</button>
-            </div>
-            <p style={{ fontSize: '0.83rem', marginBottom: '12px' }}>
-              O governo só aceita o cancelamento <strong>poucos minutos depois da emissão</strong>. Isso cancela <strong>só a nota</strong>:
-              o estoque e o valor da venda <strong>não</strong> voltam sozinhos.
-            </p>
-            <label style={styles.formLabel} htmlFor="cancel-reason">Motivo</label>
-            <select id="cancel-reason" value={reason} onChange={(e) => setReason(e.target.value)} style={{ ...styles.formInput, marginBottom: '10px' }}>
-              {REASONS.map(r => <option key={r} value={r}>{r}</option>)}
-            </select>
-            <label style={styles.formLabel} htmlFor="cancel-extra">Quer explicar melhor? (opcional)</label>
-            <input id="cancel-extra" type="text" value={reasonText} onChange={(e) => setReasonText(e.target.value)} style={{ ...styles.formInput, marginBottom: '16px' }} />
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-              <button type="button" style={smallBtn} onClick={() => setCancelSale(null)}>Voltar</button>
-              <button
-                type="button"
-                disabled={busyId === cancelSale.id}
-                onClick={confirmCancel}
-                style={{ padding: '8px 16px', borderRadius: '8px', border: 'none', background: 'hsl(0,75%,50%)', color: '#fff', fontWeight: 700, cursor: 'pointer' }}
-              >
-                {busyId === cancelSale.id ? 'Cancelando...' : 'Sim, cancelar a nota'}
-              </button>
-            </div>
-          </div>
-        </div>
+        <CancelDialog
+          styles={styles}
+          sale={cancelSale}
+          cfg={cfg}
+          onClose={() => setCancelSale(null)}
+          onDone={(updated, message) => {
+            replaceSale(updated);
+            setCancelSale(null);
+            setNotice({ ok: true, text: message });
+          }}
+        />
       )}
     </div>
   );

@@ -15,6 +15,8 @@ export interface FiscalSettings {
   regime: '' | 'simples' | 'outro';
   /** Validade do certificado digital (AAAA-MM-DD), para o aviso de renovação. */
   cert_validade: string;
+  /** Prazo para cancelar uma nota depois de emitida (RJ: 24 horas). */
+  cancel_horas: number;
   ambiente: 'homologacao' | 'producao';
   /** URL base da Cloud Function `fiscal` (ex.: https://southamerica-east1-<projeto>.cloudfunctions.net/fiscal) */
   endpoint: string;
@@ -34,8 +36,9 @@ export interface FiscalSettings {
 
 export const DEFAULT_FISCAL_SETTINGS: FiscalSettings = {
   enabled: false,
-  regime: '',
+  regime: 'simples', // confirmado pelo contador em 20/10/2026
   cert_validade: '',
+  cancel_horas: 24,
   ambiente: 'homologacao',
   endpoint: '',
   cnpj: '',
@@ -288,6 +291,14 @@ export async function cancelNfce(sale: Sale, cfg: FiscalSettings, justificativa:
   const fiscal: ReceiptFiscal = { ...(sale.fiscal as ReceiptFiscal), status: 'cancelada', mensagem: undefined };
   await updateSaleFiscal(sale.id, fiscal);
   return fiscal;
+}
+
+/** Dentro do prazo para cancelar? (O governo tem a última palavra; isto evita tentativas inúteis.) */
+export function cancelWindow(sale: Sale, cfg: FiscalSettings, now: number = Date.now()): { allowed: boolean; minutesLeft: number } {
+  const emitted = sale.fiscal?.emitido_em ? new Date(sale.fiscal.emitido_em).getTime() : NaN;
+  if (Number.isNaN(emitted)) return { allowed: true, minutesLeft: Infinity };
+  const left = emitted + (cfg.cancel_horas || 24) * 3600000 - now;
+  return { allowed: left > 0, minutesLeft: Math.floor(left / 60000) };
 }
 
 /** Verifica se a URL do emissor responde e se o usuário logado tem permissão. */

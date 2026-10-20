@@ -10,10 +10,11 @@ import type { AuthUser } from '../hooks/useAuth';
 import { DeliveryMap, type MapAddress } from './DeliveryMap';
 import { PrinterStatus } from './PrinterStatus';
 import { CertAlert } from './CertAlert';
+import { CancelDialog } from './CancelDialog';
 import { finalizeSale } from '../utils/salesService';
 import type { Sale } from '../utils/salesService';
 import { printSaleReceipt, getPrinterSettings, DEFAULT_COMPANY } from '../utils/printer';
-import { companyFromSettings, consultNfce, emitNfce, explainFiscalError, getFiscalSettings, isValidCpfOrCnpj, DEFAULT_FISCAL_SETTINGS } from '../utils/fiscal';
+import { cancelWindow, companyFromSettings, consultNfce, emitNfce, explainFiscalError, getFiscalSettings, isValidCpfOrCnpj, DEFAULT_FISCAL_SETTINGS } from '../utils/fiscal';
 import type { FiscalSettings } from '../utils/fiscal';
 
 interface VendaAvulsaProps {
@@ -54,6 +55,7 @@ export const VendaAvulsa: React.FC<VendaAvulsaProps> = ({ styles, currentUser })
   const [lastSaleSummary, setLastSaleSummary] = useState<Sale | null>(null);
   const [fiscalCfg, setFiscalCfg] = useState<FiscalSettings>(DEFAULT_FISCAL_SETTINGS);
   const [receiptBusy, setReceiptBusy] = useState<boolean>(false);
+  const [isCancelOpen, setIsCancelOpen] = useState<boolean>(false);
   const [receiptNotice, setReceiptNotice] = useState<{ ok: boolean; text: string } | null>(null);
   const [deliveryType, setDeliveryType] = useState<'store' | 'delivery' | null>(null);
   const [hoveredType, setHoveredType] = useState<'store' | 'delivery' | null>(null);
@@ -1437,6 +1439,21 @@ export const VendaAvulsa: React.FC<VendaAvulsaProps> = ({ styles, currentUser })
         </div>
       )}
 
+      {isCancelOpen && lastSaleSummary && (
+        <CancelDialog
+          styles={styles}
+          sale={lastSaleSummary}
+          cfg={fiscalCfg}
+          onClose={() => setIsCancelOpen(false)}
+          onDone={(updated, message) => {
+            setLastSaleSummary(updated);
+            setReceiptNotice({ ok: true, text: message });
+            setIsCancelOpen(false);
+            loadProducts();
+          }}
+        />
+      )}
+
       {/* MODAL: SUCCESS CHECKOUT DETAILED SUMMARY */}
       {checkoutSuccess && lastSaleSummary && (
         <div style={styles.modalOverlay}>
@@ -1498,9 +1515,11 @@ export const VendaAvulsa: React.FC<VendaAvulsaProps> = ({ styles, currentUser })
                 backgroundColor: 'hsl(210, 85%, 45%, 0.1)', color: styles.primary,
                 fontSize: '0.72rem', textAlign: 'center', fontWeight: 600, border: '1px solid hsl(210, 85%, 45%, 0.2)'
               }}>
-                {lastSaleSummary.fiscal?.status === 'autorizada'
-                  ? `✓ NOTA FISCAL Nº ${lastSaleSummary.fiscal.numero} EMITIDA`
-                  : `VENDA #${lastSaleSummary.number} · SEM NOTA FISCAL`}
+                {lastSaleSummary.voided
+                  ? `VENDA #${lastSaleSummary.number} CANCELADA`
+                  : lastSaleSummary.fiscal?.status === 'autorizada'
+                    ? `✓ NOTA FISCAL Nº ${lastSaleSummary.fiscal.numero} EMITIDA`
+                    : `VENDA #${lastSaleSummary.number} · SEM NOTA FISCAL`}
               </div>
             </div>
 
@@ -1517,13 +1536,24 @@ export const VendaAvulsa: React.FC<VendaAvulsaProps> = ({ styles, currentUser })
             <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
               <button
                 type="button"
-                disabled={receiptBusy}
+                disabled={receiptBusy || !!lastSaleSummary.voided}
                 onClick={() => printReceipt(lastSaleSummary)}
                 style={{ flex: 1, padding: '10px', borderRadius: '8px', border: `1px solid ${styles.borderColor}`, background: 'none', color: styles.textMain, cursor: 'pointer', fontWeight: 600, fontSize: '0.82rem' }}
               >
                 {lastSaleSummary.fiscal?.status === 'autorizada' ? 'Imprimir a nota de novo' : 'Imprimir cupom'}
               </button>
-              {fiscalCfg.enabled && lastSaleSummary.fiscal?.status !== 'autorizada' && (
+              {lastSaleSummary.fiscal?.status === 'autorizada' && cancelWindow(lastSaleSummary, fiscalCfg).allowed && (
+                <button
+                  type="button"
+                  disabled={receiptBusy}
+                  onClick={() => setIsCancelOpen(true)}
+                  title="Digitou algo errado? Cancele a nota e refaça a venda"
+                  style={{ flex: 1, padding: '10px', borderRadius: '8px', border: '1px solid hsl(0,75%,55%,0.5)', background: 'none', color: 'hsl(0,75%,45%)', cursor: 'pointer', fontWeight: 700, fontSize: '0.82rem' }}
+                >
+                  🚫 Cancelar nota
+                </button>
+              )}
+              {fiscalCfg.enabled && !lastSaleSummary.voided && lastSaleSummary.fiscal?.status !== 'autorizada' && lastSaleSummary.fiscal?.status !== 'cancelada' && (
                 <button
                   type="button"
                   disabled={receiptBusy}

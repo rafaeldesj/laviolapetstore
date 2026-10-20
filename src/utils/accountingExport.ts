@@ -41,6 +41,33 @@ export function buildSummaryCsv(sales: Sale[]): string {
   return '﻿' + [header.map(text).join(';'), ...rows].join('\r\n');
 }
 
+const monthKey = (iso: string) => {
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+};
+
+/** Total vendido no mês (vendas canceladas não contam). */
+export function monthTotal(sales: Sale[], month: string): { total: number; count: number } {
+  const list = sales.filter(s => !s.voided && monthKey(s.timestamp) === month);
+  return { total: list.reduce((a, s) => a + s.subtotal, 0), count: list.length };
+}
+
+function buildTotalCsv(sales: Sale[], month: string): string {
+  const { total } = monthTotal(sales, month);
+  const [y, m] = month.split('-');
+  return '\uFEFF' + [
+    ['Mês', 'Total das vendas (R$)'].map(text).join(';'),
+    [text(`${m}/${y}`), text(money(total))].join(';'),
+  ].join('\r\n');
+}
+
+/** A planilha que o contador pediu: só o total vendido no mês. */
+export function buildTotalSheet(sales: Sale[], month: string): MonthlyPackage {
+  const { count } = monthTotal(sales, month);
+  const csv = buildTotalCsv(sales, month);
+  return { blob: new Blob([csv], { type: 'text/csv;charset=utf-8' }), fileName: `total-vendas-${month}.csv`, count, failed: [] };
+}
+
 /** Roda `fn` sobre os itens com no máximo `limit` chamadas ao mesmo tempo. */
 async function pool<T>(items: T[], limit: number, fn: (item: T) => Promise<void>) {
   let next = 0;
@@ -91,6 +118,7 @@ export async function buildMonthlyPackage(
   });
 
   zip.file('resumo.csv', buildSummaryCsv(notes));
+  zip.file('total-do-mes.csv', buildTotalCsv(sales, month));
   const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
   return { blob, fileName: `${base}.zip`, count: notes.length, failed };
 }

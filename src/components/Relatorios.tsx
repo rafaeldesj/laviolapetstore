@@ -69,7 +69,7 @@ export const Relatorios: React.FC<RelatoriosProps> = ({ styles }) => {
       setStockTotal(totalStockItems);
 
       // 4. Calculate Revenue & Payment/Category Stats from Sales
-      const pdvSales: any[] = await fetchSales().catch((): any[] => []);
+      const pdvSales: any[] = (await fetchSales().catch((): any[] => [])).filter(sale => !sale.voided);
       const customTrans = JSON.parse(localStorage.getItem('laviola_custom_transactions') || '[]');
 
       // Compute total monthly revenue

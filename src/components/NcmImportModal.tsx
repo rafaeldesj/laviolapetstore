@@ -1,7 +1,8 @@
 import React, { useRef, useState } from 'react';
 import { doc, writeBatch } from 'firebase/firestore';
 import { db } from '../firebaseClient';
-import { analyzeNcmSheet, buildProductsCsv } from '../utils/ncmImport';
+import { readSheet } from 'read-excel-file/browser';
+import { analyzeNcmRows, analyzeNcmSheet, buildProductsCsv, excelRowsToText } from '../utils/ncmImport';
 import type { ImportableProduct, NcmImportReport } from '../utils/ncmImport';
 
 interface NcmImportModalProps {
@@ -41,7 +42,13 @@ export const NcmImportModal: React.FC<NcmImportModalProps> = ({ styles, products
     setError(null);
     if (!file) return;
     try {
-      setReport(analyzeNcmSheet(await file.text(), products));
+      if (/\.xlsx$/i.test(file.name)) {
+        setReport(analyzeNcmRows(excelRowsToText(await readSheet(file)), products));
+      } else if (/\.xls$/i.test(file.name)) {
+        throw new Error('Este é um Excel antigo (.xls). Abra no Excel e salve como "Pasta de Trabalho do Excel (.xlsx)" ou como CSV.');
+      } else {
+        setReport(analyzeNcmSheet(await file.text(), products));
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Não consegui ler a planilha.');
     }
@@ -86,7 +93,7 @@ export const NcmImportModal: React.FC<NcmImportModalProps> = ({ styles, products
           {missing > 0
             ? <> Hoje <strong>{missing} de {products.length}</strong> produtos ainda estão sem ele.</>
             : <> Todos os seus produtos já têm NCM. 🎉</>}
-          {' '}Peça a lista de NCM ao seu contador.
+          {' '}Não tem a lista? Peça à empresa que emite as notas hoje para <strong>exportar o cadastro de produtos com o NCM</strong> (Excel) e envie no passo 3.
         </p>
 
         {done !== null ? (
@@ -121,9 +128,9 @@ export const NcmImportModal: React.FC<NcmImportModalProps> = ({ styles, products
             <div style={step}>
               <span style={bubble}>3</span>
               <div>
-                <strong>Envie a planilha preenchida</strong>
+                <strong>Envie a planilha preenchida (CSV ou Excel .xlsx)</strong>
                 <div style={{ marginTop: '8px' }}>
-                  <input ref={fileRef} type="file" accept=".csv,text/csv" onChange={(e) => onFile(e.target.files?.[0])} />
+                  <input ref={fileRef} type="file" accept=".csv,.xlsx,text/csv" onChange={(e) => onFile(e.target.files?.[0])} />
                 </div>
               </div>
             </div>
