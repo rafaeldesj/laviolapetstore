@@ -11,6 +11,8 @@ import { CertAlert } from './CertAlert';
 
 interface NotasFiscaisProps {
   styles: any;
+  /** 'accounting' = visão do contador: consulta e baixa arquivos, sem emitir, cancelar ou imprimir. */
+  mode?: 'full' | 'accounting';
 }
 
 type Filter = 'todas' | 'sem_nota' | 'problema' | 'emitidas' | 'canceladas';
@@ -34,7 +36,8 @@ function noteState(sale: Sale): { key: Filter; label: string; color: string } {
   return { key: 'problema', label: 'Nota recusada', color: 'hsl(0,75%,45%)' };
 }
 
-export const NotasFiscais: React.FC<NotasFiscaisProps> = ({ styles }) => {
+export const NotasFiscais: React.FC<NotasFiscaisProps> = ({ styles, mode = 'full' }) => {
+  const readOnly = mode === 'accounting';
   const [sales, setSales] = useState<Sale[]>([]);
   const [cfg, setCfg] = useState<FiscalSettings>(DEFAULT_FISCAL_SETTINGS);
   const [loading, setLoading] = useState(true);
@@ -77,6 +80,14 @@ export const NotasFiscais: React.FC<NotasFiscaisProps> = ({ styles }) => {
   }, [daySales]);
   const shown = filter === 'todas' ? daySales : daySales.filter(s => noteState(s).key === filter);
   const dayTotal = daySales.reduce((a, s) => a + s.subtotal, 0);
+  const monthSummary = useMemo(() => {
+    const inMonth = sales.filter(s => dayKey(new Date(s.timestamp)).slice(0, 7) === month);
+    const sum = (list: Sale[]) => list.reduce((a, s) => a + s.subtotal, 0);
+    const emitted = inMonth.filter(s => s.fiscal?.status === 'autorizada');
+    const cancelled = inMonth.filter(s => s.fiscal?.status === 'cancelada');
+    const noNote = inMonth.filter(s => s.fiscal?.status !== 'autorizada' && s.fiscal?.status !== 'cancelada');
+    return { sales: inMonth.length, total: sum(inMonth), emitted: emitted.length, emittedValue: sum(emitted), cancelled: cancelled.length, noNote: noNote.length, noNoteValue: sum(noNote) };
+  }, [sales, month]);
   const pending = daySales.filter(s => ['sem_nota', 'problema'].includes(noteState(s).key) && s.fiscal?.status !== 'processando');
 
   const company = cfg.cnpj ? companyFromSettings(cfg) : DEFAULT_COMPANY;
@@ -187,8 +198,8 @@ export const NotasFiscais: React.FC<NotasFiscaisProps> = ({ styles }) => {
 
   return (
     <div style={{ marginTop: '20px' }}>
-      <CertAlert cfg={cfg} />
-      {!cfg.enabled && (
+      {!readOnly && <CertAlert cfg={cfg} />}
+      {!readOnly && !cfg.enabled && (
         <div style={{ padding: '10px 14px', borderRadius: '8px', marginBottom: '14px', fontSize: '0.82rem', background: 'hsl(36,95%,45%,0.08)', border: '1px solid hsl(36,95%,45%,0.25)', color: 'hsl(36,95%,28%)' }}>
           A emissão de notas ainda não foi ligada. Quem é dono do sistema liga em <strong>Configurações → Nota Fiscal</strong>. Enquanto isso, os cupons continuam saindo normalmente.
         </div>
@@ -211,10 +222,27 @@ export const NotasFiscais: React.FC<NotasFiscaisProps> = ({ styles }) => {
         </span>
       </div>
 
+      {readOnly && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '12px', marginBottom: '16px' }}>
+          {[
+            { label: 'Notas emitidas no mês', value: String(monthSummary.emitted), sub: brl(monthSummary.emittedValue), color: 'hsl(142,60%,35%)' },
+            { label: 'Notas canceladas', value: String(monthSummary.cancelled), sub: '', color: 'hsl(215,15%,45%)' },
+            { label: 'Vendas sem nota', value: String(monthSummary.noNote), sub: brl(monthSummary.noNoteValue), color: monthSummary.noNote > 0 ? 'hsl(36,95%,38%)' : 'hsl(215,15%,45%)' },
+            { label: 'Total vendido no mês', value: brl(monthSummary.total), sub: `${monthSummary.sales} venda(s)`, color: styles.primary },
+          ].map(card => (
+            <div key={card.label} style={{ padding: '12px 14px', borderRadius: '10px', border: `1px solid ${styles.borderColor}`, backgroundColor: styles.cardBackground || '#fff' }}>
+              <div style={{ fontSize: '0.75rem', color: styles.sidebarWidgetText?.color }}>{card.label}</div>
+              <div style={{ fontSize: '1.4rem', fontWeight: 700, color: card.color }}>{card.value}</div>
+              {card.sub && <div style={{ fontSize: '0.78rem', color: styles.sidebarWidgetText?.color }}>{card.sub}</div>}
+            </div>
+          ))}
+        </div>
+      )}
+
       <div style={{ padding: '12px 14px', borderRadius: '10px', border: `1px solid ${styles.borderColor}`, marginBottom: '16px' }}>
-        <strong style={{ color: styles.textMain }}>Enviar para o contador</strong>
+        <strong style={{ color: styles.textMain }}>{readOnly ? 'Baixar as notas do mês' : 'Enviar para o contador'}</strong>
         <div style={{ fontSize: '0.78rem', margin: '4px 0 10px', color: styles.sidebarWidgetText?.color }}>
-          Escolha o mês e baixe os arquivos das notas (XML) para mandar ao contador.
+          {readOnly ? 'Escolha o mês e baixe os arquivos das notas (XML) e o resumo em planilha.' : 'Escolha o mês e baixe os arquivos das notas (XML) para mandar ao contador. O contador também pode baixar sozinho, entrando em Contabilidade.'}
         </div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center' }}>
           <input type="month" value={month} max={dayKey(new Date()).slice(0, 7)} onChange={(e) => e.target.value && setMonth(e.target.value)} aria-label="Mês" style={{ ...styles.formInput, width: 'auto' }} />
@@ -235,7 +263,7 @@ export const NotasFiscais: React.FC<NotasFiscaisProps> = ({ styles }) => {
         {chip('canceladas', 'Canceladas')}
       </div>
 
-      {cfg.enabled && pending.length > 0 && (
+      {!readOnly && cfg.enabled && pending.length > 0 && (
         <div style={{ marginBottom: '14px' }}>
           <button
             type="button"
@@ -305,22 +333,22 @@ export const NotasFiscais: React.FC<NotasFiscaisProps> = ({ styles }) => {
                 )}
 
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '10px' }}>
-                  {cfg.enabled && st.key === 'sem_nota' && (
+                  {!readOnly && cfg.enabled && st.key === 'sem_nota' && (
                     <button type="button" disabled={busy} onClick={() => emitOne(sale)} className="btn-save" style={{ ...smallBtn, border: 'none' }}>
                       {busyId === sale.id ? 'Emitindo...' : 'Emitir nota'}
                     </button>
                   )}
-                  {cfg.enabled && isProblem && (
+                  {!readOnly && cfg.enabled && isProblem && (
                     <button type="button" disabled={busy} onClick={() => emitOne(sale)} className="btn-save" style={{ ...smallBtn, border: 'none' }}>
                       {busyId === sale.id ? 'Aguarde...' : sale.fiscal?.status === 'processando' ? 'Verificar' : 'Tentar de novo'}
                     </button>
                   )}
-                  {st.key !== 'canceladas' && (
+                  {!readOnly && st.key !== 'canceladas' && (
                     <button type="button" disabled={busy} onClick={() => reprint(sale)} style={smallBtn}>
                       🖨 {st.key === 'emitidas' ? 'Imprimir a nota' : 'Imprimir cupom'}
                     </button>
                   )}
-                  {cfg.enabled && st.key === 'emitidas' && (
+                  {!readOnly && cfg.enabled && st.key === 'emitidas' && (
                     <button type="button" disabled={busy} onClick={() => { setCancelSale(sale); setReason(REASONS[0]); setReasonText(''); }} style={{ ...smallBtn, color: 'hsl(0,75%,45%)' }}>
                       Cancelar nota
                     </button>

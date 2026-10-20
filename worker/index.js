@@ -11,6 +11,7 @@ const FOCUS_HOSTS = {
   homologacao: 'https://homologacao.focusnfe.com.br',
   producao: 'https://api.focusnfe.com.br',
 };
+const ACCOUNTANT = ['contador', 'accountant'];
 const STAFF = ['desenvolvedor', 'proprietaria', 'gerente', 'colaborador', 'developer', 'owner', 'manager', 'collaborator'];
 const JWKS_URL = 'https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com';
 
@@ -39,11 +40,10 @@ async function verifyFirebaseToken(token, projectId) {
 }
 
 // profiles/{uid} tem leitura aberta nas regras do Firestore, então basta a REST pública.
-async function isStaff(uid, projectId) {
+async function getRole(uid, projectId) {
   const r = await fetch(`https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/profiles/${uid}`);
-  if (!r.ok) return false;
-  const role = (await r.json()).fields?.role?.stringValue;
-  return STAFF.includes(role);
+  if (!r.ok) return null;
+  return (await r.json()).fields?.role?.stringValue || null;
 }
 
 function absolutize(body, host) {
@@ -73,7 +73,10 @@ export default {
       const bearer = /^Bearer (.+)$/.exec(request.headers.get('Authorization') || '');
       if (!bearer) return json({ mensagem: 'Acesso negado.' }, 401);
       const user = await verifyFirebaseToken(bearer[1], env.FIREBASE_PROJECT_ID);
-      if (!(await isStaff(user.sub, env.FIREBASE_PROJECT_ID))) return json({ mensagem: 'Acesso negado.' }, 403);
+      const role = await getRole(user.sub, env.FIREBASE_PROJECT_ID);
+      const isStaff = STAFF.includes(role);
+      // O contador só consulta e baixa arquivos; emitir e cancelar é só da equipe.
+      if (!isStaff && !(ACCOUNTANT.includes(role) && request.method === 'GET')) return json({ mensagem: 'Acesso negado.' }, 403);
 
       const auth = 'Basic ' + btoa(`${env.FOCUS_NFE_TOKEN}:`);
       const url = new URL(request.url);

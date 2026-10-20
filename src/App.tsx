@@ -21,6 +21,7 @@ import { Registros } from './components/admin/Registros';
 import { Configuracoes } from './components/admin/Configuracoes';
 import { VendaAvulsa } from './components/VendaAvulsa';
 import { Delivery } from './components/Delivery';
+import { Contabilidade } from './components/Contabilidade';
 import { useAuth } from './hooks/useAuth';
 import { roleHierarchy } from './supabaseClient';
 import { getStyles } from './styles';
@@ -40,6 +41,8 @@ function App() {
   const userSpecialty = (user?.profile as any)?.collaborator_category?.name as string | undefined;
   const isManager = userRole ? roleHierarchy[userRole] >= roleHierarchy['manager'] : false;
   const isOwnerOrDev = userRole === 'developer' || userRole === 'owner';
+  const isAccountant = userRole === 'accountant';
+  const canSeeAccounting = isManager || isAccountant;
 
   const [highContrast, setHighContrast] = useState<boolean>(() => {
     return localStorage.getItem('laviola_high_contrast') === 'true';
@@ -72,13 +75,20 @@ function App() {
   }, [highContrast]);
 
   useEffect(() => {
-    const isPrivate = ['venda-avulsa', 'pets', 'agendamentos', 'financeiro', 'estoque', 'prontuario', 'relatorios', 'pagamentos', 'usuarios', 'registros', 'configuracoes', 'delivery'].includes(activeSection);
+    const isPrivate = ['venda-avulsa', 'pets', 'agendamentos', 'financeiro', 'estoque', 'prontuario', 'relatorios', 'pagamentos', 'usuarios', 'registros', 'configuracoes', 'delivery', 'contabilidade'].includes(activeSection);
     const requiresMgmt = ['usuarios', 'registros'].includes(activeSection);
     const requiresOwnerDev = ['configuracoes'].includes(activeSection);
     const requiresStock = activeSection === 'estoque';
     const isStockAllowed = userRole === 'developer' || userRole === 'owner' || userRole === 'manager' || userSpecialty === 'Estoquista';
 
-    if (isPrivate && !user) {
+    // O contador só pode ficar nas áreas da contabilidade e nas páginas públicas.
+    const accountantAllowed = ['inicio', 'servicos', 'promocoes', 'sobre', 'contato', 'contabilidade', 'financeiro'];
+
+    if (isAccountant && !accountantAllowed.includes(activeSection)) {
+      setActiveSection('contabilidade');
+    } else if (activeSection === 'contabilidade' && user && !canSeeAccounting) {
+      setActiveSection('inicio');
+    } else if (isPrivate && !user) {
       setActiveSection('inicio');
     } else if (requiresMgmt && user && !isManager) {
       setActiveSection('inicio');
@@ -87,7 +97,12 @@ function App() {
     } else if (requiresStock && user && !isStockAllowed) {
       setActiveSection('inicio');
     }
-  }, [user, activeSection, isManager, isOwnerOrDev, userRole, userSpecialty]);
+  }, [user, activeSection, isManager, isOwnerOrDev, isAccountant, canSeeAccounting, userRole, userSpecialty]);
+
+  // Ao entrar, o contador já cai na tela dele.
+  useEffect(() => {
+    if (isAccountant) setActiveSection('contabilidade');
+  }, [isAccountant]);
 
   return (
     <>
@@ -167,8 +182,12 @@ function App() {
               />
             )}
 
-            {activeSection === 'financeiro' && user && isManager && (
-              <Financeiro styles={styles} />
+            {activeSection === 'contabilidade' && user && canSeeAccounting && (
+              <Contabilidade styles={styles} />
+            )}
+
+            {activeSection === 'financeiro' && user && (isManager || isAccountant) && (
+              <Financeiro styles={styles} readOnly={isAccountant} />
             )}
 
             {activeSection === 'estoque' && user && (

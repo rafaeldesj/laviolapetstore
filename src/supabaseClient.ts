@@ -15,7 +15,7 @@ export const supabase = isSupabaseConfigured
   ? createClient(supabaseUrl, supabaseAnonKey)
   : null;
 
-export type UserRole = 'developer' | 'owner' | 'manager' | 'collaborator' | 'client';
+export type UserRole = 'developer' | 'owner' | 'manager' | 'collaborator' | 'accountant' | 'client';
 
 export interface CollaboratorCategory {
   id: string;
@@ -65,6 +65,7 @@ export const roleHierarchy: Record<UserRole, number> = {
   owner: 3,
   manager: 2,
   collaborator: 1,
+  accountant: 0.5,
   client: 0,
 };
 
@@ -73,6 +74,7 @@ export const roleLabels: Record<UserRole, string> = {
   owner: 'Proprietário',
   manager: 'Gerente',
   collaborator: 'Colaborador',
+  accountant: 'Contador',
   client: 'Cliente',
 };
 

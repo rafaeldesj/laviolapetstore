@@ -7,6 +7,8 @@ import { NotasFiscais } from './NotasFiscais';
 
 interface FinanceiroProps {
   styles: any;
+  /** Contador: vê tudo, mas não lança nem apaga nada. */
+  readOnly?: boolean;
 }
 
 interface Transaction {
@@ -18,7 +20,7 @@ interface Transaction {
   payment_method: string;
 }
 
-export const Financeiro: React.FC<FinanceiroProps> = ({ styles }) => {
+export const Financeiro: React.FC<FinanceiroProps> = ({ styles, readOnly = false }) => {
   const { user: currentUser } = useAuth();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isFormOpen, setIsFormOpen] = useState<boolean>(false);
@@ -174,12 +176,14 @@ export const Financeiro: React.FC<FinanceiroProps> = ({ styles }) => {
           </p>
         </div>
 
-        <button
-          onClick={() => setIsFormOpen(true)}
-          style={styles.btnAcc(false)}
-        >
-          <PlusCircle size={16} /> Novo Lançamento
-        </button>
+        {!readOnly && (
+          <button
+            onClick={() => setIsFormOpen(true)}
+            style={styles.btnAcc(false)}
+          >
+            <PlusCircle size={16} /> Novo Lançamento
+          </button>
+        )}
       </div>
 
       <div role="tablist" style={{ display: 'flex', gap: '8px', marginTop: '20px' }}>
@@ -201,7 +205,7 @@ export const Financeiro: React.FC<FinanceiroProps> = ({ styles }) => {
         ))}
       </div>
 
-      {view === 'notas' && <NotasFiscais styles={styles} />}
+      {view === 'notas' && <NotasFiscais styles={styles} mode={readOnly ? 'accounting' : 'full'} />}
 
       {view === 'caixa' && (<>
       {/* KPI Cards */}
@@ -278,7 +282,7 @@ export const Financeiro: React.FC<FinanceiroProps> = ({ styles }) => {
                         {isEntrada ? '+' : '-'} R$ {tx.value.toFixed(2)}
                       </td>
                       <td style={{ padding: '12px 8px', textAlign: 'center' }}>
-                        {!isPdv && (
+                        {!isPdv && !readOnly && (
                           <button
                             onClick={() => handleDeleteTransaction(tx)}
                             className="btn-action-icon btn-action-danger"

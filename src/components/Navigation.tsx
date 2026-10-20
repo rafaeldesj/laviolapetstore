@@ -3,7 +3,7 @@ import {
   Home, Scissors, Tag, Info, Phone,
   PawPrint, CalendarDays, Wallet, Package, 
   ClipboardList, BarChart3, Users, History, Settings, CreditCard, ShoppingCart, Menu, X, Truck,
-  User, Printer, Store, Shield, QrCode, Lock, Terminal, FileText, Receipt
+  User, Printer, Store, Shield, QrCode, Lock, Terminal, FileText, Receipt, Calculator
 } from 'lucide-react';
 import type { UserRole } from '../supabaseClient';
 import { roleHierarchy } from '../supabaseClient';
@@ -18,6 +18,10 @@ interface NavItem {
   requiresStockAccess?: boolean;
   requiresStaff?: boolean;
   requiresClientOnly?: boolean;
+  /** Visível para gerente, proprietário, desenvolvedor e contador. */
+  requiresAccounting?: boolean;
+  /** O contador também enxerga este item (os demais itens internos ficam escondidos dele). */
+  accountant?: boolean;
 }
 
 interface NavigationProps {
@@ -43,6 +47,7 @@ export const Navigation: React.FC<NavigationProps> = ({ styles, activeSection, s
   const isManager = userRole ? roleHierarchy[userRole] >= roleHierarchy['manager'] : false;
   const isStaff = userRole ? roleHierarchy[userRole] >= roleHierarchy['collaborator'] : false;
   const isClient = userRole === 'client';
+  const isAccountant = userRole === 'accountant';
 
   const allNavItems: NavItem[] = [
     { id: 'inicio',       label: 'Início',               icon: <Home size={16} />,          requiresLogin: false },
@@ -53,7 +58,8 @@ export const Navigation: React.FC<NavigationProps> = ({ styles, activeSection, s
     { id: 'agendamentos', label: 'Agendamentos',         icon: <CalendarDays size={16} />,  requiresLogin: true },
     { id: 'delivery',     label: 'Delivery',             icon: <Truck size={16} />,         requiresLogin: true },
     { id: 'pagamentos',   label: 'Pagamentos',           icon: <CreditCard size={16} />,    requiresLogin: true, requiresClientOnly: true },
-    { id: 'financeiro',   label: 'Financeiro / Caixa',  icon: <Wallet size={16} />,        requiresLogin: true, requiresManager: true },
+    { id: 'contabilidade',label: 'Contabilidade',        icon: <Calculator size={16} />,    requiresLogin: true, requiresAccounting: true, accountant: true },
+    { id: 'financeiro',   label: 'Financeiro / Caixa',  icon: <Wallet size={16} />,        requiresLogin: true, requiresManager: true, accountant: true },
     { id: 'estoque',      label: 'Estoque / Produtos',  icon: <Package size={16} />,       requiresLogin: true, requiresStockAccess: true },
     { id: 'prontuario',   label: 'Prontuário Vet.',     icon: <ClipboardList size={16} />, requiresLogin: true, requiresStaff: true },
     { id: 'relatorios',   label: 'Relatórios',          icon: <BarChart3 size={16} />,     requiresLogin: true, requiresStaff: true },
@@ -73,6 +79,9 @@ export const Navigation: React.FC<NavigationProps> = ({ styles, activeSection, s
   );
 
   const visibleItems = allNavItems.filter(item => {
+    // O contador só vê as áreas da contabilidade (e as páginas públicas do site).
+    if (isAccountant) return !item.requiresLogin || !!item.accountant;
+    if (item.requiresAccounting) return isLoggedIn && isManager;
     if (item.requiresClientOnly) return isLoggedIn && isClient;
     if (item.requiresStaff)      return isLoggedIn && isStaff;
     if (item.requiresStockAccess) return isStockAllowed;

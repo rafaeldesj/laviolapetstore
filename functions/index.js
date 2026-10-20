@@ -16,14 +16,18 @@ const HOSTS = {
   homologacao: 'https://homologacao.focusnfe.com.br',
   producao: 'https://api.focusnfe.com.br',
 };
+const ACCOUNTANT = ['contador', 'accountant'];
 const STAFF = ['desenvolvedor', 'proprietaria', 'gerente', 'colaborador', 'developer', 'owner', 'manager', 'collaborator'];
 
-async function requireStaff(req) {
+// Equipe: tudo. Contador: só consulta e baixa arquivos (GET).
+async function requireAccess(req) {
   const m = /^Bearer (.+)$/.exec(req.get('Authorization') || '');
   if (!m) return null;
   const decoded = await admin.auth().verifyIdToken(m[1]);
   const profile = await admin.firestore().doc(`profiles/${decoded.uid}`).get();
-  return profile.exists && STAFF.includes(profile.data().role) ? decoded : null;
+  const role = profile.exists ? profile.data().role : null;
+  if (STAFF.includes(role)) return decoded;
+  return ACCOUNTANT.includes(role) && req.method === 'GET' ? decoded : null;
 }
 
 // A Focus devolve caminhos relativos (/arquivos/...); completamos com o host do ambiente.
@@ -38,7 +42,7 @@ exports.fiscal = onRequest(
   { secrets: [FOCUS_TOKEN], cors: true, region: 'southamerica-east1', timeoutSeconds: 60 },
   async (req, res) => {
     try {
-      if (!(await requireStaff(req))) return res.status(403).json({ mensagem: 'Acesso negado.' });
+      if (!(await requireAccess(req))) return res.status(403).json({ mensagem: 'Acesso negado.' });
 
       const auth = 'Basic ' + Buffer.from(`${FOCUS_TOKEN.value()}:`).toString('base64');
       const route = req.path.replace(/\/+$/, '');

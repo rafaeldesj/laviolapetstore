@@ -67,6 +67,7 @@ export const useAuth = () => {
         if (profile.role as string === 'gerente') profile.role = 'manager';
         if (profile.role as string === 'colaborador') profile.role = 'collaborator';
         if (profile.role as string === 'cliente') profile.role = 'client';
+        if (profile.role as string === 'contador') profile.role = 'accountant';
       }
       
       return {

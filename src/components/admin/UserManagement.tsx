@@ -20,6 +20,7 @@ const roleBadgeColors: Record<UserRole, string> = {
   owner: 'hsl(36, 95%, 50%)',
   manager: 'hsl(210, 85%, 45%)',
   collaborator: 'hsl(142, 60%, 45%)',
+  accountant: 'hsl(190, 70%, 40%)',
   client: 'hsl(220, 15%, 55%)',
 };
 

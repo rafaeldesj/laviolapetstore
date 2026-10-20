@@ -18,6 +18,18 @@ service cloud.firestore {
       return isAuth() && getProfile().role == role;
     }
 
+    // Helper: contador (só enxerga vendas/notas; não acessa pets, agenda, entregas etc.)
+    function isAccountant() {
+      return isAuth()
+        && exists(/databases/$(database)/documents/profiles/$(request.auth.uid))
+        && getProfile().role in ['accountant', 'contador'];
+    }
+
+    // Helper: logado e que não é contador
+    function isNotAccountant() {
+      return isAuth() && !isAccountant();
+    }
+
     // Helper: cargos com acesso administrativo
     function isStaff() {
       return isAuth() && getProfile().role in [
@@ -37,26 +49,26 @@ service cloud.firestore {
     // ---- PETS ----
     // Staff vê todos; cliente vê apenas os seus
     match /pets/{petId} {
-      allow read: if isAuth();
+      allow read: if isNotAccountant();
       allow write: if isStaff();
     }
 
     // ---- AGENDAMENTOS ----
     match /appointments/{apptId} {
-      allow read: if isAuth();
-      allow create: if isAuth();
+      allow read: if isNotAccountant();
+      allow create: if isNotAccountant();
       allow update, delete: if isStaff();
     }
 
     // ---- PRODUTOS / ESTOQUE ----
     match /products/{productId} {
-      allow read: if isAuth();
+      allow read: if isNotAccountant();
       allow write: if isStaff();
     }
 
     // ---- ENTREGAS (DELIVERY) ----
     match /deliveries/{deliveryId} {
-      allow read: if isAuth();
+      allow read: if isNotAccountant();
       allow write: if isStaff();
     }
 
@@ -69,19 +81,19 @@ service cloud.firestore {
 
     // ---- PRONTUÁRIOS VETERINÁRIOS ----
     match /prontuarios/{docId} {
-      allow read: if isAuth();
+      allow read: if isNotAccountant();
       allow write: if isStaff();
     }
 
     // ---- RELATÓRIOS / VENDAS ----
     match /sales/{saleId} {
-      allow read: if isStaff();
+      allow read: if isStaff() || isAccountant();
       allow write: if isStaff();
     }
 
     // ---- CONFIGURAÇÕES (dados fiscais etc.) ----
     match /settings/{docId} {
-      allow read: if isStaff();
+      allow read: if isStaff() || isAccountant();
       allow write: if hasRole('desenvolvedor') || hasRole('proprietaria') || hasRole('developer') || hasRole('owner');
     }
 
