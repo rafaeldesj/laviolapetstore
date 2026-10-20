@@ -63,7 +63,9 @@ export const CancelDialog: React.FC<CancelDialogProps> = ({ styles, sale, cfg, o
     }
   };
 
-  const hoursLabel = `${cfg.cancel_horas || 24} horas`;
+  const limitHours = cfg.cancel_horas || 24;
+  const hoursLabel = limitHours < 1 ? `${Math.round(limitHours * 60)} minutos` : `${limitHours} horas`;
+  const leftLabel = win.minutesLeft < 60 ? `${Math.max(1, win.minutesLeft)} min` : `${Math.round(win.minutesLeft / 60)} h`;
 
   return (
     <div style={styles.modalOverlay}>
@@ -90,7 +92,7 @@ export const CancelDialog: React.FC<CancelDialogProps> = ({ styles, sale, cfg, o
             <p style={{ fontSize: '0.83rem', marginBottom: '12px' }}>
               {hasNote
                 ? <>Dá para cancelar em até <strong>{hoursLabel}</strong> depois de emitir, e <strong>só se a mercadoria ainda não saiu da loja</strong>.
-                    {Number.isFinite(win.minutesLeft) && win.minutesLeft < 24 * 60 && <> Ainda restam cerca de <strong>{Math.max(1, Math.round(win.minutesLeft / 60))} h</strong>.</>}</>
+                    {Number.isFinite(win.minutesLeft) && win.minutesLeft < 24 * 60 && <> Ainda restam cerca de <strong>{leftLabel}</strong>.</>}</>
                 : <>Os produtos desta venda voltam ao estoque e ela deixa de contar nos totais.</>}
             </p>
 

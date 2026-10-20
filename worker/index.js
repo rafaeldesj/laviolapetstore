@@ -3,7 +3,9 @@
 // Deploy (uma vez, grátis):
 //   cd worker
 //   npx wrangler login
-//   npx wrangler secret put FOCUS_NFE_TOKEN      (cole o token da conta Focus NFe)
+//   npx wrangler secret put FOCUS_NFE_TOKEN_HOMOLOGACAO   (token do modo de teste da Focus NFe)
+//   npx wrangler secret put FOCUS_NFE_TOKEN_PRODUCAO      (token do modo real; só quando for valer)
+//   (se a Focus der um token único, use só: npx wrangler secret put FOCUS_NFE_TOKEN)
 //   npx wrangler deploy
 // A URL final (https://laviola-fiscal.<sua-conta>.workers.dev) vai em Configurações > Nota Fiscal.
 
@@ -78,7 +80,8 @@ export default {
       // O contador só consulta e baixa arquivos; emitir e cancelar é só da equipe.
       if (!isStaff && !(ACCOUNTANT.includes(role) && request.method === 'GET')) return json({ mensagem: 'Acesso negado.' }, 403);
 
-      const auth = 'Basic ' + btoa(`${env.FOCUS_NFE_TOKEN}:`);
+      // Um token por ambiente (teste/real); se só houver o token único, ele serve para os dois.
+      const authFor = (ambiente) => 'Basic ' + btoa(`${env[`FOCUS_NFE_TOKEN_${String(ambiente).toUpperCase()}`] || env.FOCUS_NFE_TOKEN}:`);
       const url = new URL(request.url);
       const route = url.pathname.replace(/\/+$/, '');
 
@@ -88,7 +91,7 @@ export default {
         if (!host || !ref || !payload) return json({ mensagem: 'Requisição inválida.' }, 400);
         const r = await fetch(`${host}/v2/nfce?ref=${encodeURIComponent(ref)}`, {
           method: 'POST',
-          headers: { Authorization: auth, 'Content-Type': 'application/json' },
+          headers: { Authorization: authFor(ambiente), 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
         });
         return json(absolutize(await r.json().catch(() => ({})), host), r.status);
@@ -102,7 +105,7 @@ export default {
         const caminho = url.searchParams.get('caminho') || '';
         const target = caminho.startsWith('/') ? host + caminho : caminho;
         if (!host || !target.startsWith(host + '/arquivos/')) return json({ mensagem: 'Arquivo inválido.' }, 400);
-        const r = await fetch(target, { headers: { Authorization: auth } });
+        const r = await fetch(target, { headers: { Authorization: authFor(url.searchParams.get('ambiente')) } });
         return new Response(r.body, { status: r.status, headers: { ...cors, 'Content-Type': r.headers.get('Content-Type') || 'application/xml' } });
       }
 
@@ -113,7 +116,7 @@ export default {
         if (!host || !justificativa) return json({ mensagem: 'Requisição inválida.' }, 400);
         const r = await fetch(`${host}/v2/nfce/${del[1]}`, {
           method: 'DELETE',
-          headers: { Authorization: auth, 'Content-Type': 'application/json' },
+          headers: { Authorization: authFor(ambiente), 'Content-Type': 'application/json' },
           body: JSON.stringify({ justificativa }),
         });
         return json(absolutize(await r.json().catch(() => ({})), host), r.status);
@@ -123,7 +126,7 @@ export default {
       if (request.method === 'GET' && get) {
         const host = FOCUS_HOSTS[url.searchParams.get('ambiente')];
         if (!host) return json({ mensagem: 'Ambiente inválido.' }, 400);
-        const r = await fetch(`${host}/v2/nfce/${get[1]}?completa=0`, { headers: { Authorization: auth } });
+        const r = await fetch(`${host}/v2/nfce/${get[1]}?completa=0`, { headers: { Authorization: authFor(url.searchParams.get('ambiente')) } });
         return json(absolutize(await r.json().catch(() => ({})), host), r.status);
       }
 

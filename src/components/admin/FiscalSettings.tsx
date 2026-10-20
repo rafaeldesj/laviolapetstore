@@ -169,8 +169,8 @@ export const FiscalSettingsPanel: React.FC = () => {
             <input style={field} value={cfg.unidade} onChange={e => set('unidade', e.target.value)} />
           </div>
           <div>
-            <label style={label}>PRAZO PARA CANCELAR UMA NOTA (horas)</label>
-            <input style={field} type="number" min={1} max={720} value={cfg.cancel_horas} onChange={e => set('cancel_horas', Math.max(1, Number(e.target.value) || 24))} />
+            <label style={label}>PRAZO PARA CANCELAR UMA NOTA (horas; 0,5 = meia hora)</label>
+            <input style={field} type="number" min={0.5} step={0.5} max={720} value={cfg.cancel_horas} onChange={e => set('cancel_horas', Math.max(0.5, Number(e.target.value) || 24))} />
           </div>
           <div>
             <label style={label}>NCM PADRÃO (opcional)</label>
