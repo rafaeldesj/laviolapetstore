@@ -13,11 +13,6 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data;
     }
 
-    // Helper: verifica cargo
-    function hasRole(role) {
-      return isAuth() && getProfile().role == role;
-    }
-
     // Helper: contador (só enxerga vendas/notas; não acessa pets, agenda, entregas etc.)
     function isAccountant() {
       return isAuth()
@@ -38,12 +33,58 @@ service cloud.firestore {
       ];
     }
 
+    // ---- HIERARQUIA DE CARGOS ----
+    // Quanto maior o número, maior o poder. Aceita os nomes em português (legado) e em inglês.
+    function roleRank(role) {
+      return role in ['developer', 'desenvolvedor'] ? 8
+           : role in ['owner', 'proprietaria'] ? 6
+           : role in ['manager', 'gerente'] ? 4
+           : role in ['collaborator', 'colaborador'] ? 2
+           : role in ['accountant', 'contador'] ? 1
+           : 0;
+    }
+
+    function isDeveloper() {
+      return isAuth() && roleRank(getProfile().role) == 8;
+    }
+
+    function isOwner() {
+      return isAuth() && roleRank(getProfile().role) == 6;
+    }
+
+    function myRank() {
+      return roleRank(getProfile().role);
+    }
+
     // ---- PERFIS ----
     // Usuário vê e edita apenas o próprio perfil; staff vê todos
+    // O CARGO (campo role) é protegido:
+    //  - qualquer um lê (inclusive o próprio);
+    //  - o cadastro público só nasce como cliente, no próprio uid;
+    //  - ninguém altera o próprio cargo, exceto o desenvolvedor;
+    //  - a equipe só mexe em cargos ABAIXO do seu (e só atribui cargos abaixo do seu).
     match /profiles/{userId} {
       allow read: if true; // Aberto para permitir resolução de Username/Telefone na tela de login
-      allow create: if true; // Permite criação pelo frontend (contorna o delay de propagação do token de auth)
-      allow update, delete: if isAuth() && (request.auth.uid == userId || isStaff());
+
+      allow create: if
+        (isAuth() && request.auth.uid == userId
+          && request.resource.data.get('role', '') in ['client', 'cliente'])
+        || isDeveloper()
+        || (isStaff() && myRank() > roleRank(request.resource.data.get('role', '')));
+
+      allow update: if isAuth() && (
+        isDeveloper()
+        || (request.auth.uid == userId
+            && request.resource.data.get('role', '') == resource.data.get('role', ''))
+        || (isStaff()
+            && myRank() > roleRank(resource.data.get('role', ''))
+            && myRank() > roleRank(request.resource.data.get('role', '')))
+      );
+
+      allow delete: if isAuth() && (
+        isDeveloper()
+        || (isStaff() && myRank() > roleRank(resource.data.get('role', '')))
+      );
     }
 
     // ---- PETS ----
@@ -94,13 +135,13 @@ service cloud.firestore {
     // ---- CONFIGURAÇÕES (dados fiscais etc.) ----
     match /settings/{docId} {
       allow read: if isStaff() || isAccountant();
-      allow write: if hasRole('desenvolvedor') || hasRole('proprietaria') || hasRole('developer') || hasRole('owner');
+      allow write: if isDeveloper() || isOwner();
     }
 
     // ---- PERMISSÕES DE SISTEMA ----
     match /permissions/{permId} {
       allow read: if isAuth();
-      allow write: if hasRole('desenvolvedor') || hasRole('proprietaria');
+      allow write: if isDeveloper() || isOwner();
     }
 
   }
