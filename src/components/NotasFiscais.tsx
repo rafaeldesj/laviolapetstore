@@ -6,6 +6,8 @@ import {
 } from '../utils/fiscal';
 import type { FiscalSettings } from '../utils/fiscal';
 import { DEFAULT_COMPANY, printSaleReceipt } from '../utils/printer';
+import { buildMonthlyPackage, downloadBlob } from '../utils/accountingExport';
+import { CertAlert } from './CertAlert';
 
 interface NotasFiscaisProps {
   styles: any;
@@ -44,6 +46,8 @@ export const NotasFiscais: React.FC<NotasFiscaisProps> = ({ styles }) => {
   const [cancelSale, setCancelSale] = useState<Sale | null>(null);
   const [reason, setReason] = useState(REASONS[0]);
   const [reasonText, setReasonText] = useState('');
+  const [month, setMonth] = useState(() => dayKey(new Date()).slice(0, 7));
+  const [exporting, setExporting] = useState<{ done: number; total: number } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -138,6 +142,29 @@ export const NotasFiscais: React.FC<NotasFiscaisProps> = ({ styles }) => {
     }
   };
 
+  const exportMonth = async (what: 'zip' | 'csv') => {
+    setNotice(null);
+    setExporting({ done: 0, total: 0 });
+    try {
+      const result = await buildMonthlyPackage(sales, cfg, month, what === 'zip', (done, total) => setExporting({ done, total }));
+      if (result.count === 0) {
+        setNotice({ ok: false, text: 'Não há notas emitidas neste mês.' });
+      } else {
+        downloadBlob(result.blob, result.fileName);
+        setNotice({
+          ok: result.failed.length === 0,
+          text: result.failed.length === 0
+            ? `Pronto! ${result.count} nota(s) no arquivo ${result.fileName}.`
+            : `Baixei ${result.count - result.failed.length} de ${result.count} notas. Não consegui estas: ${result.failed.slice(0, 5).join(', ')}${result.failed.length > 5 ? '…' : ''}. Tente de novo mais tarde.`,
+        });
+      }
+    } catch (e) {
+      setNotice({ ok: false, text: e instanceof Error ? e.message : 'Não consegui montar o arquivo.' });
+    } finally {
+      setExporting(null);
+    }
+  };
+
   const chip = (f: Filter, label: string): React.ReactNode => (
     <button
       key={f}
@@ -160,6 +187,7 @@ export const NotasFiscais: React.FC<NotasFiscaisProps> = ({ styles }) => {
 
   return (
     <div style={{ marginTop: '20px' }}>
+      <CertAlert cfg={cfg} />
       {!cfg.enabled && (
         <div style={{ padding: '10px 14px', borderRadius: '8px', marginBottom: '14px', fontSize: '0.82rem', background: 'hsl(36,95%,45%,0.08)', border: '1px solid hsl(36,95%,45%,0.25)', color: 'hsl(36,95%,28%)' }}>
           A emissão de notas ainda não foi ligada. Quem é dono do sistema liga em <strong>Configurações → Nota Fiscal</strong>. Enquanto isso, os cupons continuam saindo normalmente.
@@ -181,6 +209,22 @@ export const NotasFiscais: React.FC<NotasFiscaisProps> = ({ styles }) => {
         <span style={{ marginLeft: 'auto', fontSize: '0.85rem', color: styles.textMain }}>
           <strong>{daySales.length}</strong> venda(s) · <strong>{brl(dayTotal)}</strong>
         </span>
+      </div>
+
+      <div style={{ padding: '12px 14px', borderRadius: '10px', border: `1px solid ${styles.borderColor}`, marginBottom: '16px' }}>
+        <strong style={{ color: styles.textMain }}>Enviar para o contador</strong>
+        <div style={{ fontSize: '0.78rem', margin: '4px 0 10px', color: styles.sidebarWidgetText?.color }}>
+          Escolha o mês e baixe os arquivos das notas (XML) para mandar ao contador.
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center' }}>
+          <input type="month" value={month} max={dayKey(new Date()).slice(0, 7)} onChange={(e) => e.target.value && setMonth(e.target.value)} aria-label="Mês" style={{ ...styles.formInput, width: 'auto' }} />
+          <button type="button" className="btn-save" disabled={!!exporting || !cfg.endpoint} onClick={() => exportMonth('zip')} style={{ ...smallBtn, border: 'none' }}>
+            {exporting ? (exporting.total ? `Baixando... ${exporting.done} de ${exporting.total}` : 'Preparando...') : '⬇ Baixar XMLs do mês (arquivo ZIP)'}
+          </button>
+          <button type="button" disabled={!!exporting} onClick={() => exportMonth('csv')} style={smallBtn}>
+            ⬇ Resumo do mês (planilha)
+          </button>
+        </div>
       </div>
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '14px' }}>

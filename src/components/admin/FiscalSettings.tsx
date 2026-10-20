@@ -25,6 +25,10 @@ export const FiscalSettingsPanel: React.FC = () => {
 
   const save = async () => {
     setMsg(null);
+    if (cfg.enabled && cfg.regime !== 'simples') {
+      setMsg({ ok: false, text: 'Escolha o regime da empresa (pergunte ao contador). Por enquanto só o Simples Nacional é aceito.' });
+      return;
+    }
     if (cfg.enabled && !isValidCnpj(cfg.cnpj)) {
       setMsg({ ok: false, text: 'Informe um CNPJ válido para ativar a emissão.' });
       return;
@@ -59,6 +63,8 @@ export const FiscalSettingsPanel: React.FC = () => {
   const steps = [
     { done: isValidCnpj(cfg.cnpj), text: 'CNPJ da empresa preenchido' },
     { done: cfg.endpoint.trim().startsWith('https://'), text: 'Endereço do emissor de notas colado' },
+    { done: cfg.regime === 'simples', text: cfg.regime === 'outro' ? 'Regime da empresa: ainda não suportado pelo sistema' : 'Regime da empresa confirmado com o contador' },
+    { done: !!cfg.cert_validade, text: 'Validade do certificado digital anotada (para o aviso de renovação)' },
     { done: cfg.enabled, text: 'Emissão de notas ligada' },
     { done: cfg.ambiente === 'producao', text: cfg.ambiente === 'producao' ? 'Valendo de verdade (modo real)' : 'Ainda em modo de teste (as notas não valem)' },
   ];
@@ -129,6 +135,21 @@ export const FiscalSettingsPanel: React.FC = () => {
         <div>
           <label style={label}>TELEFONE (cabeçalho do cupom)</label>
           <input style={field} value={cfg.telefone} onChange={e => set('telefone', e.target.value)} />
+        </div>
+      </div>
+
+      <div className="responsive-grid-2" style={{ gap: '1rem' }}>
+        <div>
+          <label style={label}>REGIME DA EMPRESA (pergunte ao contador)</label>
+          <select style={field} value={cfg.regime} onChange={e => set('regime', e.target.value as FiscalSettings['regime'])}>
+            <option value="">Escolha...</option>
+            <option value="simples">Simples Nacional</option>
+            <option value="outro">Outro (Lucro Presumido ou Real)</option>
+          </select>
+        </div>
+        <div>
+          <label style={label}>VALIDADE DO CERTIFICADO DIGITAL</label>
+          <input style={field} type="date" value={cfg.cert_validade} onChange={e => set('cert_validade', e.target.value)} />
         </div>
       </div>
 

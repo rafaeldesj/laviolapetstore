@@ -47,7 +47,7 @@ async function isStaff(uid, projectId) {
 }
 
 function absolutize(body, host) {
-  for (const k of ['caminho_danfe', 'caminho_xml_nota_fiscal', 'url_danfe']) {
+  for (const k of ['caminho_danfe', 'caminho_xml_nota_fiscal', 'caminho_xml_cancelamento', 'url_danfe']) {
     if (body && typeof body[k] === 'string' && body[k].startsWith('/')) body[k] = host + body[k];
   }
   return body;
@@ -92,6 +92,16 @@ export default {
       }
 
       if (request.method === 'GET' && route === '/ping') return json({ ok: true });
+
+      // Entrega o conteúdo de um arquivo da Focus (XML da nota) para o navegador, que não consegue buscá-lo direto.
+      if (request.method === 'GET' && route === '/arquivo') {
+        const host = FOCUS_HOSTS[url.searchParams.get('ambiente')];
+        const caminho = url.searchParams.get('caminho') || '';
+        const target = caminho.startsWith('/') ? host + caminho : caminho;
+        if (!host || !target.startsWith(host + '/arquivos/')) return json({ mensagem: 'Arquivo inválido.' }, 400);
+        const r = await fetch(target, { headers: { Authorization: auth } });
+        return new Response(r.body, { status: r.status, headers: { ...cors, 'Content-Type': r.headers.get('Content-Type') || 'application/xml' } });
+      }
 
       const del = /^\/nfce\/([\w-]+)$/.exec(route);
       if (request.method === 'DELETE' && del) {

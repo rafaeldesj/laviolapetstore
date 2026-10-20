@@ -28,7 +28,7 @@ async function requireStaff(req) {
 
 // A Focus devolve caminhos relativos (/arquivos/...); completamos com o host do ambiente.
 function absolutize(body, host) {
-  for (const k of ['caminho_danfe', 'caminho_xml_nota_fiscal', 'url_danfe']) {
+  for (const k of ['caminho_danfe', 'caminho_xml_nota_fiscal', 'caminho_xml_cancelamento', 'url_danfe']) {
     if (body && typeof body[k] === 'string' && body[k].startsWith('/')) body[k] = host + body[k];
   }
   return body;
@@ -56,6 +56,16 @@ exports.fiscal = onRequest(
       }
 
       if (req.method === 'GET' && route === '/ping') return res.json({ ok: true });
+
+      if (req.method === 'GET' && route === '/arquivo') {
+        const host = HOSTS[req.query.ambiente];
+        const caminho = String(req.query.caminho || '');
+        const target = caminho.startsWith('/') ? host + caminho : caminho;
+        if (!host || !target.startsWith(host + '/arquivos/')) return res.status(400).json({ mensagem: 'Arquivo inválido.' });
+        const r = await fetch(target, { headers: { Authorization: auth } });
+        res.status(r.status).type(r.headers.get('Content-Type') || 'application/xml');
+        return res.send(Buffer.from(await r.arrayBuffer()));
+      }
 
       const del = /^\/nfce\/([\w-]+)$/.exec(route);
       if (req.method === 'DELETE' && del) {

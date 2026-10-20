@@ -11,6 +11,10 @@ import type { Sale } from './salesService';
  */
 export interface FiscalSettings {
   enabled: boolean;
+  /** Regime tributário da empresa, confirmado com o contador. Só 'simples' é suportado. */
+  regime: '' | 'simples' | 'outro';
+  /** Validade do certificado digital (AAAA-MM-DD), para o aviso de renovação. */
+  cert_validade: string;
   ambiente: 'homologacao' | 'producao';
   /** URL base da Cloud Function `fiscal` (ex.: https://southamerica-east1-<projeto>.cloudfunctions.net/fiscal) */
   endpoint: string;
@@ -30,6 +34,8 @@ export interface FiscalSettings {
 
 export const DEFAULT_FISCAL_SETTINGS: FiscalSettings = {
   enabled: false,
+  regime: '',
+  cert_validade: '',
   ambiente: 'homologacao',
   endpoint: '',
   cnpj: '',
@@ -131,6 +137,8 @@ function isoWithOffset(date: Date): string {
 
 export function validateSaleForNfce(sale: Sale, cfg: FiscalSettings): string[] {
   const problems: string[] = [];
+  if (cfg.regime === 'outro') problems.push('O sistema ainda só emite notas para empresas do Simples Nacional. Fale com o desenvolvedor.');
+  else if (cfg.regime !== 'simples') problems.push('Falta informar o regime da empresa (Simples Nacional ou outro) em Configurações → Nota Fiscal. Pergunte ao contador.');
   if (!cfg.enabled) problems.push('A emissão de notas ainda não foi ligada (Configurações → Nota Fiscal).');
   if (!cfg.endpoint.trim()) problems.push('O endereço do emissor de notas ainda não foi configurado (Configurações → Nota Fiscal).');
   if (!isValidCnpj(cfg.cnpj)) problems.push('O CNPJ da empresa está em branco ou errado (Configurações → Nota Fiscal).');
@@ -190,6 +198,8 @@ interface FocusResponse {
   qrcode_url?: string;
   caminho_danfe?: string;
   url_danfe?: string;
+  caminho_xml_nota_fiscal?: string;
+  caminho_xml_cancelamento?: string;
   erros?: { mensagem?: string }[];
 }
 
@@ -212,6 +222,8 @@ function toFiscal(res: FocusResponse, cfg: FiscalSettings): ReceiptFiscal {
     protocolo: res.protocolo,
     qrcode_url: res.qrcode_url,
     danfe_url: res.caminho_danfe || res.url_danfe,
+    xml_url: res.caminho_xml_nota_fiscal,
+    xml_cancelamento_url: res.caminho_xml_cancelamento,
     ambiente: cfg.ambiente,
     emitido_em: new Date().toISOString(),
     ...(detalhe ? { mensagem: detalhe } : {}),
@@ -299,4 +311,45 @@ export async function consultNfce(sale: Sale, cfg: FiscalSettings): Promise<Rece
   const fiscal = toFiscal(body, cfg);
   await updateSaleFiscal(sale.id, fiscal);
   return fiscal;
+}
+
+// ---- Certificado digital: aviso de vencimento ----
+export interface CertStatus {
+  level: 'ok' | 'soon' | 'expired';
+  days: number;
+}
+
+export function certStatus(cfg: FiscalSettings, today: Date = new Date()): CertStatus | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(cfg.cert_validade || '')) return null;
+  const [y, m, d] = cfg.cert_validade.split('-').map(Number);
+  const end = new Date(y, m - 1, d).getTime();
+  const start = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+  const days = Math.round((end - start) / 86400000);
+  return { days, level: days < 0 ? 'expired' : days <= 30 ? 'soon' : 'ok' };
+}
+
+// ---- XMLs para o contador ----
+async function fetchFiscalFile(cfg: FiscalSettings, caminho: string): Promise<string> {
+  const token = await auth?.currentUser?.getIdToken();
+  if (!token) throw new Error('Sessão expirada. Entre novamente.');
+  const url = `${cfg.endpoint.replace(/\/$/, '')}/arquivo?ambiente=${cfg.ambiente}&caminho=${encodeURIComponent(caminho)}`;
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  if (!res.ok) throw new Error(`Arquivo indisponível (${res.status}).`);
+  return res.text();
+}
+
+/** Baixa o XML da nota (e o do cancelamento, se houver). Notas antigas sem o endereço guardado são consultadas de novo. */
+export async function getNfceXmls(sale: Sale, cfg: FiscalSettings): Promise<{ xml?: string; xmlCancelamento?: string }> {
+  let xmlPath = sale.fiscal?.xml_url;
+  let cancelPath = sale.fiscal?.xml_cancelamento_url;
+  const needsCancel = sale.fiscal?.status === 'cancelada' && !cancelPath;
+  if (!xmlPath || needsCancel) {
+    const body = await callFiscalApi(cfg, `/nfce/venda-${sale.id}?ambiente=${cfg.ambiente}`, { method: 'GET' });
+    xmlPath = xmlPath || body.caminho_xml_nota_fiscal;
+    cancelPath = cancelPath || body.caminho_xml_cancelamento;
+  }
+  if (!xmlPath) throw new Error('A nota não tem XML disponível.');
+  const xml = await fetchFiscalFile(cfg, xmlPath);
+  const xmlCancelamento = sale.fiscal?.status === 'cancelada' && cancelPath ? await fetchFiscalFile(cfg, cancelPath) : undefined;
+  return { xml, xmlCancelamento };
 }

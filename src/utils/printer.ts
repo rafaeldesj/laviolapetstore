@@ -37,6 +37,9 @@ export interface ReceiptFiscal {
   emitido_em?: string;
   /** Motivo informado quando a nota é recusada (texto do governo). */
   mensagem?: string;
+  /** Endereços dos XMLs na Focus (nota e cancelamento), usados na exportação para o contador. */
+  xml_url?: string;
+  xml_cancelamento_url?: string;
 }
 
 export interface ReceiptSale {

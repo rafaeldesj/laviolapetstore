@@ -9,6 +9,7 @@ import type { Product } from '../supabaseClient';
 import type { AuthUser } from '../hooks/useAuth';
 import { DeliveryMap, type MapAddress } from './DeliveryMap';
 import { PrinterStatus } from './PrinterStatus';
+import { CertAlert } from './CertAlert';
 import { finalizeSale } from '../utils/salesService';
 import type { Sale } from '../utils/salesService';
 import { printSaleReceipt, getPrinterSettings, DEFAULT_COMPANY } from '../utils/printer';
@@ -616,6 +617,7 @@ export const VendaAvulsa: React.FC<VendaAvulsaProps> = ({ styles, currentUser })
       </div>
 
       <PrinterStatus styles={styles} />
+      <CertAlert cfg={fiscalCfg} />
 
       {errorMessage && (
         <div style={{
