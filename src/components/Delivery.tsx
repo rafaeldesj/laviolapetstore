@@ -7,7 +7,7 @@ import type { AuthUser } from '../hooks/useAuth';
 import { formatPhoneBR } from '../utils/formatters';
 import { subscribeDeliveries, syncDeliveries, patchDelivery } from '../utils/deliveriesService';
 import { collection, doc, getDocs, setDoc } from 'firebase/firestore';
-import { createUserWithEmailAndPassword, signOut, updateProfile } from 'firebase/auth';
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, updateProfile } from 'firebase/auth';
 import { db, secondaryAuth, isFirebaseConfigured } from '../firebaseClient';
 import { checkEmailExists, checkPhoneExists, checkUsernameExists } from '../utils/userValidation';
 
@@ -1002,7 +1002,22 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
         if (await checkUsernameExists(username)) throw new Error('Este login (username) já está em uso. Tente outro.');
         if (phone && await checkPhoneExists(phone)) throw new Error('Este celular já está cadastrado em outro usuário.');
 
-        const cred = await createUserWithEmailAndPassword(secondaryAuth, email, newClientPassword);
+        let cred;
+        try {
+          cred = await createUserWithEmailAndPassword(secondaryAuth, email, newClientPassword);
+        } catch (createErr: any) {
+          if (createErr?.code !== 'auth/email-already-in-use') throw createErr;
+          // O login já existe, mas não há cadastro de cliente (sobra de testes antigos). Se a senha digitada for a dele,
+          // reaproveitamos o login e criamos só o cadastro que faltava.
+          try {
+            cred = await signInWithEmailAndPassword(secondaryAuth, email, newClientPassword);
+          } catch {
+            throw new Error(
+              'Este e-mail já tem um login no sistema, mas sem cadastro de cliente (sobra de testes antigos). ' +
+              'Digite a senha que ele já usa, ou use outro e-mail.'
+            );
+          }
+        }
         await updateProfile(cred.user, { displayName: newClientFullName.trim() });
         await setDoc(doc(db, 'profiles', cred.user.uid), {
           id: cred.user.uid,
