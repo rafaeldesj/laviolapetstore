@@ -1019,10 +1019,10 @@ export const VendaAvulsa: React.FC<VendaAvulsaProps> = ({ styles, currentUser })
                           />
                           <input
                             type="text"
-                            placeholder="Número *"
+                            placeholder="Número * (S/N se não tiver)"
                             value={addressNumber}
-                            readOnly
-                            style={{ ...styles.formInput, width: '100%', fontSize: '0.8rem', padding: '6px 8px', marginBottom: 0, backgroundColor: styles.isDark ? '#334155' : '#f1f5f9', cursor: 'not-allowed', color: styles.isDark ? '#94a3b8' : '#64748b' }}
+                            onChange={(e) => setAddressNumber(e.target.value)}
+                            style={{ ...styles.formInput, width: '100%', fontSize: '0.8rem', padding: '6px 8px', marginBottom: 0 }}
                           />
                         </div>
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginTop: '10px' }}>
@@ -1030,8 +1030,8 @@ export const VendaAvulsa: React.FC<VendaAvulsaProps> = ({ styles, currentUser })
                             type="text"
                             placeholder="Bairro *"
                             value={addressNeighborhood}
-                            readOnly
-                            style={{ ...styles.formInput, width: '100%', fontSize: '0.8rem', padding: '6px 8px', marginBottom: 0, backgroundColor: styles.isDark ? '#334155' : '#f1f5f9', cursor: 'not-allowed', color: styles.isDark ? '#94a3b8' : '#64748b' }}
+                            onChange={(e) => setAddressNeighborhood(e.target.value)}
+                            style={{ ...styles.formInput, width: '100%', fontSize: '0.8rem', padding: '6px 8px', marginBottom: 0 }}
                           />
                           <input
                             type="text"

@@ -1038,8 +1038,16 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
 
     const generatedItemsStr = cart.map(item => `${item.quantity}x ${item.product.name}`).join(' + ');
 
-    if (!formClientId || !formDriverId || !addressStreet.trim() || !addressNumber.trim() || !addressNeighborhood.trim() || cart.length === 0) {
-      alert('Por favor, preencha todos os campos obrigatórios e adicione pelo menos um item.');
+    // Diz exatamente o que falta, em vez de uma mensagem genérica.
+    const missing: string[] = [];
+    if (!formClientId) missing.push('o Cliente');
+    if (!formDriverId) missing.push('o Entregador Responsável');
+    if (cart.length === 0) missing.push('pelo menos um produto');
+    if (!addressStreet.trim()) missing.push('a Rua/Avenida');
+    if (!addressNumber.trim()) missing.push('o Número do endereço (se o local não tiver número, digite S/N)');
+    if (!addressNeighborhood.trim()) missing.push('o Bairro');
+    if (missing.length > 0) {
+      alert(`Ainda falta preencher:\n\n• ${missing.join('\n• ')}`);
       return;
     }
 
@@ -2682,10 +2690,10 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
                         />
                         <input
                           type="text"
-                          placeholder="Número *"
+                          placeholder="Número * (S/N se não tiver)"
                           value={addressNumber}
-                          readOnly
-                          style={{ ...styles.formInput, width: '100%', fontSize: '0.8rem', padding: '6px 8px', marginBottom: 0, backgroundColor: styles.isDark ? '#334155' : '#f1f5f9', cursor: 'not-allowed', color: styles.isDark ? '#94a3b8' : '#64748b' }}
+                          onChange={(e) => setAddressNumber(e.target.value)}
+                          style={{ ...styles.formInput, width: '100%', fontSize: '0.8rem', padding: '6px 8px', marginBottom: 0 }}
                         />
                       </div>
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginTop: '10px' }}>
@@ -2693,8 +2701,8 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
                           type="text"
                           placeholder="Bairro *"
                           value={addressNeighborhood}
-                          readOnly
-                          style={{ ...styles.formInput, width: '100%', fontSize: '0.8rem', padding: '6px 8px', marginBottom: 0, backgroundColor: styles.isDark ? '#334155' : '#f1f5f9', cursor: 'not-allowed', color: styles.isDark ? '#94a3b8' : '#64748b' }}
+                          onChange={(e) => setAddressNeighborhood(e.target.value)}
+                          style={{ ...styles.formInput, width: '100%', fontSize: '0.8rem', padding: '6px 8px', marginBottom: 0 }}
                         />
                         <input
                           type="text"
