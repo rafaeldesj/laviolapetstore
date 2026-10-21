@@ -7,3 +7,6 @@ compatibility_date = "2025-01-01"
 FIREBASE_PROJECT_ID = "laviolapetstore-e8de9"
 # Origens autorizadas a chamar o proxy (separe por vírgula)
 ALLOWED_ORIGINS = "https://laviolapet.web.app,https://laviolapetstore.web.app,http://localhost:5173"
+# Chave PÚBLICA do push (a privada fica em segredo: npx wrangler secret put VAPID_PRIVATE_JWK)
+VAPID_PUBLIC_KEY = "BH3HIMpCblEGh9EFzIQ2nMtKYQPpmHuyajU2hORiI54F7fC7FPch2R8W7ak4iKU-OEXpl5GgRgrvy4JUgT8i29k"
+VAPID_SUBJECT = "https://laviolapet.web.app"

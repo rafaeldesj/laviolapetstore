@@ -6,6 +6,8 @@ import type { Product } from '../supabaseClient';
 import type { AuthUser } from '../hooks/useAuth';
 import { formatPhoneBR } from '../utils/formatters';
 import { isDeliverySpecialty } from '../utils/specialties';
+import { notifyDriver } from '../utils/push';
+import { PushSetup } from './PushSetup';
 import { subscribeDeliveries, syncDeliveries, patchDelivery } from '../utils/deliveriesService';
 import { collection, doc, getDocs, setDoc } from 'firebase/firestore';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, updateProfile } from 'firebase/auth';
@@ -859,6 +861,7 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
 
     void persistDeliveries(deliveries, updated);
     setDeliveries(updated);
+    void notifyDriver(driverId); // aviso com som no celular do entregador
 
     if (selectedDelivery?.id === deliveryId) {
       const refreshed = updated.find(d => d.id === deliveryId) || null;
@@ -967,6 +970,7 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
 
     const updated = [newDelivery, ...deliveries];
     void persistDeliveries(deliveries, updated);
+    void notifyDriver(newDelivery.driver_id); // aviso com som no celular do entregador
     setDeliveries(updated);
     setIsFormOpen(false);
 
@@ -1872,6 +1876,8 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
           {/* Left: Deliveries list */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
             <h3 style={{ fontSize: '1rem', fontWeight: 700, color: styles.textMain }}>Suas Entregas</h3>
+
+            {currentUser?.id && <PushSetup styles={styles} uid={currentUser.id} name={currentUser.name || 'Entregador'} />}
             
             {isLocationApproximate && (
               <div style={{

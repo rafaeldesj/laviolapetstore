@@ -15,6 +15,8 @@ const FOCUS_HOSTS = {
 };
 const ACCOUNTANT = ['contador', 'accountant'];
 const STAFF = ['desenvolvedor', 'proprietaria', 'gerente', 'colaborador', 'developer', 'owner', 'manager', 'collaborator'];
+// Serviços de push aceitos (o endereço vem do navegador do entregador; só enviamos para estes).
+const PUSH_HOSTS = /^(fcm\.googleapis\.com|updates\.push\.services\.mozilla\.com|[\w-]+\.notify\.windows\.com|[\w-]+\.push\.apple\.com|web\.push\.apple\.com)$/;
 const JWKS_URL = 'https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com';
 
 const b64urlToBytes = (s) => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0));
@@ -46,6 +48,33 @@ async function getRole(uid, projectId) {
   const r = await fetch(`https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/profiles/${uid}`);
   if (!r.ok) return null;
   return (await r.json()).fields?.role?.stringValue || null;
+}
+
+const b64url = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+
+// Web Push sem conteúdo (não exige criptografia do texto): o serviço do celular só "acorda" o aparelho,
+// e o service worker mostra o aviso fixo de nova entrega. Autenticado por VAPID (JWT ES256).
+async function sendWebPush(endpoint, env) {
+  const url = new URL(endpoint);
+  if (url.protocol !== 'https:' || !PUSH_HOSTS.test(url.hostname)) throw new Error('endereço de push não permitido');
+  const enc = new TextEncoder();
+  const header = b64url(enc.encode(JSON.stringify({ typ: 'JWT', alg: 'ES256' })));
+  const claims = b64url(enc.encode(JSON.stringify({
+    aud: url.origin,
+    exp: Math.floor(Date.now() / 1000) + 12 * 3600,
+    sub: env.VAPID_SUBJECT,
+  })));
+  const key = await crypto.subtle.importKey('jwk', JSON.parse(env.VAPID_PRIVATE_JWK), { name: 'ECDSA', namedCurve: 'P-256' }, false, ['sign']);
+  const signature = await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, key, enc.encode(`${header}.${claims}`));
+  return fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      Authorization: `vapid t=${header}.${claims}.${b64url(signature)}, k=${env.VAPID_PUBLIC_KEY}`,
+      TTL: '3600',
+      Urgency: 'high',
+      'Content-Length': '0',
+    },
+  });
 }
 
 function absolutize(body, host) {
@@ -98,6 +127,20 @@ export default {
       }
 
       if (request.method === 'GET' && route === '/ping') return json({ ok: true });
+
+      // Aviso de nova entrega para o celular do entregador (só a equipe pode disparar).
+      if (request.method === 'POST' && route === '/push') {
+        const { endpoint } = await request.json();
+        if (!endpoint || !env.VAPID_PRIVATE_JWK) return json({ mensagem: 'Requisição inválida.' }, 400);
+        let r;
+        try {
+          r = await sendWebPush(endpoint, env);
+        } catch (e) {
+          return json({ mensagem: 'Endereço de push inválido.' }, 400);
+        }
+        // 404/410: o aparelho cancelou o aviso; quem chamou deve apagar essa inscrição.
+        return json({ ok: r.ok, status: r.status, gone: r.status === 404 || r.status === 410 });
+      }
 
       // Entrega o conteúdo de um arquivo da Focus (XML da nota) para o navegador, que não consegue buscá-lo direto.
       if (request.method === 'GET' && route === '/arquivo') {
