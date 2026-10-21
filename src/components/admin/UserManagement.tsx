@@ -8,6 +8,7 @@ import { createUserWithEmailAndPassword, updateProfile, updatePassword } from 'f
 import { PermissionsPanel } from './PermissionsPanel';
 import type { AuthUser } from '../../hooks/useAuth';
 import { formatPhoneBR } from '../../utils/formatters';
+import { DELIVERY_SPECIALTY } from '../../utils/specialties';
 import { checkEmailExists, checkPhoneExists, checkUsernameExists, generateUsernameSuggestions } from '../../utils/userValidation';
 
 interface UserManagementProps {
@@ -79,6 +80,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
   // Available specialties
   const defaultSpecialties = [
     'Estoquista',
+    DELIVERY_SPECIALTY,
     'Tosador(a) / Banhista',
     'Atendente / Recepcionista',
     'Auxiliar Veterinário',
@@ -120,7 +122,8 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
           .eq('is_active', true)
           .order('name');
         if (cats && cats.length > 0) {
-          setSpecialties(cats.map((c: any) => c.name));
+          // A especialidade de entregador precisa existir sempre, mesmo que ainda não esteja na lista do servidor.
+          setSpecialties(Array.from(new Set([...cats.map((c: any) => c.name as string), DELIVERY_SPECIALTY])));
         }
       }
     } catch (err: any) {

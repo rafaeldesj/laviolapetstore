@@ -5,6 +5,7 @@ import { logAction, supabase, isSupabaseConfigured, mockSupabaseDb } from '../su
 import type { Product } from '../supabaseClient';
 import type { AuthUser } from '../hooks/useAuth';
 import { formatPhoneBR } from '../utils/formatters';
+import { isDeliverySpecialty } from '../utils/specialties';
 import { subscribeDeliveries, syncDeliveries, patchDelivery } from '../utils/deliveriesService';
 import { collection, doc, getDocs, setDoc } from 'firebase/firestore';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, updateProfile } from 'firebase/auth';
@@ -218,10 +219,9 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
 
         setClients(profiles.filter(p => normRole(p.role) === 'client').map(p => ({ id: p.id, name: nameOf(p, 'Cliente') })));
 
-        // Quem está marcado como "Entregador"; se ninguém estiver, vale qualquer colaborador.
-        const collaborators = profiles.filter(p => normRole(p.role) === 'collaborator');
-        const tagged = collaborators.filter(p => String(p.collaborator_specialty || '').trim().toLowerCase() === 'entregador');
-        setDrivers((tagged.length > 0 ? tagged : collaborators).map(p => ({ id: p.id, name: nameOf(p, 'Entregador') })));
+        // Só colaboradores com a especialidade "Entregador / Delivery" podem receber entregas.
+        const deliveryDrivers = profiles.filter(p => normRole(p.role) === 'collaborator' && isDeliverySpecialty(p.collaborator_specialty));
+        setDrivers(deliveryDrivers.map(p => ({ id: p.id, name: nameOf(p, 'Entregador') })));
       })
       .catch(err => console.error('Erro ao carregar clientes e entregadores:', err));
     return () => { cancelled = true; };
@@ -2339,6 +2339,11 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
                     <option key={d.id} value={d.id}>{d.name}</option>
                   ))}
                 </select>
+                {drivers.length === 0 && (
+                  <span role="note" style={{ fontSize: '0.75rem', color: 'hsl(36,95%,32%)' }}>
+                    Nenhum entregador cadastrado. Em Usuários, edite o colaborador e escolha a especialidade "Entregador / Delivery".
+                  </span>
+                )}
               </div>
 
               {/* Itens com Leitor de Código de Barras / Busca */}
