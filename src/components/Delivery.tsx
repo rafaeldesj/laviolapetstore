@@ -1,9 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, Clock, MapPin, Search, Truck, Navigation, Phone, MessageCircle, AlertCircle, LifeBuoy, X, CheckCircle, Package, PlusCircle, Eye, Trash2, Map, Compass, Play, ShoppingCart, Barcode, Minus, Plus } from 'lucide-react';
+import { ArrowLeft, Clock, MapPin, Search, Truck, Navigation, Phone, MessageCircle, AlertCircle, LifeBuoy, X, CheckCircle, Package, PlusCircle, Eye, EyeOff, Trash2, Map, Compass, Play, ShoppingCart, Barcode, Minus, Plus } from 'lucide-react';
 import { DeliveryMap, type MapAddress } from './DeliveryMap';
 import { logAction, supabase, isSupabaseConfigured, mockSupabaseDb } from '../supabaseClient';
 import type { Product } from '../supabaseClient';
 import type { AuthUser } from '../hooks/useAuth';
+import { formatPhoneBR } from '../utils/formatters';
+
+// Senha já preenchida no cadastro de cliente; o operador pode trocar se quiser.
+const DEFAULT_CLIENT_PASSWORD = '123456';
 
 // Declare Leaflet global object L
 declare const L: any;
@@ -137,7 +141,8 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
   const [newClientEmail, setNewClientEmail] = useState('');
   const [newClientUsername, setNewClientUsername] = useState('');
   const [newClientPhone, setNewClientPhone] = useState('');
-  const [newClientPassword, setNewClientPassword] = useState('');
+  const [newClientPassword, setNewClientPassword] = useState(DEFAULT_CLIENT_PASSWORD);
+  const [showClientPassword, setShowClientPassword] = useState(false);
   const [isSavingClient, setIsSavingClient] = useState(false);
 
   // Simulation settings
@@ -1217,7 +1222,8 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
       setNewClientEmail('');
       setNewClientUsername('');
       setNewClientPhone('');
-      setNewClientPassword('');
+      setNewClientPassword(DEFAULT_CLIENT_PASSWORD);
+      setShowClientPassword(false);
       alert('Cliente criado com sucesso!');
     } catch (err: any) {
       alert(err.message || 'Erro ao criar cliente.');
@@ -3157,7 +3163,7 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
       {/* ======================================= */}
       {isClientModalOpen && (
         <div style={{ ...styles.modalOverlay, zIndex: 9999 }}>
-          <div style={{ ...styles.modalContent, maxWidth: '500px' }} role="dialog" aria-modal="true" aria-labelledby="create-client-title">
+          <div style={{ ...styles.modalContent, maxWidth: '500px', overflowX: 'hidden' }} role="dialog" aria-modal="true" aria-labelledby="create-client-title">
             <div style={styles.modalHeader}>
               <h2 id="create-client-title" style={styles.modalTitle}>Novo Cliente</h2>
               <button onClick={() => setIsClientModalOpen(false)} style={styles.modalCloseBtn(false)} aria-label="Fechar">✕</button>
@@ -3165,25 +3171,58 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
             <form onSubmit={handleCreateClient} style={styles.modalForm}>
               <div style={styles.formGroup}>
                 <label style={styles.formLabel}>Nome Completo *</label>
-                <input type="text" value={newClientFullName} onChange={e => setNewClientFullName(e.target.value)} style={styles.formInput} required />
+                <input type="text" value={newClientFullName} onChange={e => setNewClientFullName(e.target.value)} style={{ ...styles.formInput, width: '100%', minWidth: 0 }} required />
               </div>
               <div style={styles.formGroup}>
                 <label style={styles.formLabel}>E-mail *</label>
-                <input type="email" value={newClientEmail} onChange={e => setNewClientEmail(e.target.value)} style={styles.formInput} required />
+                <input type="email" value={newClientEmail} onChange={e => setNewClientEmail(e.target.value)} style={{ ...styles.formInput, width: '100%', minWidth: 0 }} required />
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
-                <div style={styles.formGroup}>
+              {/* minmax(0, 1fr) evita que os campos estourem a largura do modal; em telas estreitas vira uma coluna só */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 170px), 1fr))', gap: '15px' }}>
+                <div style={{ ...styles.formGroup, minWidth: 0 }}>
                   <label style={styles.formLabel}>Login (Username) *</label>
-                  <input type="text" value={newClientUsername} onChange={e => setNewClientUsername(e.target.value)} style={styles.formInput} required />
+                  <input type="text" value={newClientUsername} onChange={e => setNewClientUsername(e.target.value)} style={{ ...styles.formInput, width: '100%', minWidth: 0 }} required />
                 </div>
-                <div style={styles.formGroup}>
+                <div style={{ ...styles.formGroup, minWidth: 0 }}>
                   <label style={styles.formLabel}>Celular</label>
-                  <input type="tel" value={newClientPhone} onChange={e => setNewClientPhone(e.target.value)} style={styles.formInput} />
+                  <input
+                    type="tel"
+                    inputMode="numeric"
+                    autoComplete="tel"
+                    placeholder="(21) 99999-9999"
+                    maxLength={15}
+                    value={newClientPhone}
+                    onChange={e => setNewClientPhone(formatPhoneBR(e.target.value))}
+                    style={{ ...styles.formInput, width: '100%', minWidth: 0 }}
+                  />
                 </div>
               </div>
-              <div style={styles.formGroup}>
-                <label style={styles.formLabel}>Senha *</label>
-                <input type="password" value={newClientPassword} onChange={e => setNewClientPassword(e.target.value)} style={styles.formInput} required minLength={6} />
+              <div style={{ ...styles.formGroup, minWidth: 0 }}>
+                <label style={styles.formLabel} htmlFor="new-client-password">Senha *</label>
+                <div style={{ position: 'relative' }}>
+                  <input
+                    id="new-client-password"
+                    type={showClientPassword ? 'text' : 'password'}
+                    value={newClientPassword}
+                    onChange={e => setNewClientPassword(e.target.value)}
+                    autoComplete="new-password"
+                    style={{ ...styles.formInput, width: '100%', minWidth: 0, paddingRight: '42px' }}
+                    required
+                    minLength={6}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowClientPassword(v => !v)}
+                    aria-label={showClientPassword ? 'Ocultar senha' : 'Mostrar senha'}
+                    title={showClientPassword ? 'Ocultar senha' : 'Mostrar senha'}
+                    style={{ position: 'absolute', right: '6px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', padding: '6px', display: 'flex', color: styles.textMain }}
+                  >
+                    {showClientPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
+                <span style={{ fontSize: '0.75rem', color: styles.sidebarWidgetText?.color }}>
+                  Senha padrão {DEFAULT_CLIENT_PASSWORD}. Você pode trocar; avise o cliente para mudar depois.
+                </span>
               </div>
               <div style={styles.modalActions}>
                 <button type="button" onClick={() => setIsClientModalOpen(false)} style={{ padding: '10px 16px', borderRadius: '8px', border: `1px solid ${styles.borderColor}`, background: 'none', color: styles.textMain, cursor: 'pointer', fontSize: '0.85rem' }}>Cancelar</button>
