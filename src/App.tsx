@@ -22,6 +22,7 @@ import { Configuracoes } from './components/admin/Configuracoes';
 import { VendaAvulsa } from './components/VendaAvulsa';
 import { Delivery } from './components/Delivery';
 import { Contabilidade } from './components/Contabilidade';
+import { isDeliverySpecialty } from './utils/specialties';
 import { useAuth } from './hooks/useAuth';
 import { roleHierarchy } from './supabaseClient';
 import { getStyles } from './styles';
@@ -42,6 +43,7 @@ function App() {
   const isManager = userRole ? roleHierarchy[userRole] >= roleHierarchy['manager'] : false;
   const isOwnerOrDev = userRole === 'developer' || userRole === 'owner';
   const isAccountant = userRole === 'accountant';
+  const isDeliveryDriver = userRole === 'collaborator' && isDeliverySpecialty(userSpecialty);
   const canSeeAccounting = isManager || isAccountant;
 
   const [highContrast, setHighContrast] = useState<boolean>(() => {
@@ -84,8 +86,13 @@ function App() {
     // O contador só pode ficar nas áreas da contabilidade e nas páginas públicas.
     const accountantAllowed = ['inicio', 'servicos', 'promocoes', 'sobre', 'contato', 'contabilidade', 'financeiro'];
 
+    // O entregador só usa o Delivery (e as páginas públicas).
+    const driverAllowed = ['inicio', 'servicos', 'promocoes', 'sobre', 'contato', 'delivery'];
+
     if (isAccountant && !accountantAllowed.includes(activeSection)) {
       setActiveSection('contabilidade');
+    } else if (isDeliveryDriver && !driverAllowed.includes(activeSection)) {
+      setActiveSection('delivery');
     } else if (activeSection === 'contabilidade' && user && !canSeeAccounting) {
       setActiveSection('inicio');
     } else if (isPrivate && !user) {
@@ -97,12 +104,17 @@ function App() {
     } else if (requiresStock && user && !isStockAllowed) {
       setActiveSection('inicio');
     }
-  }, [user, activeSection, isManager, isOwnerOrDev, isAccountant, canSeeAccounting, userRole, userSpecialty]);
+  }, [user, activeSection, isManager, isOwnerOrDev, isAccountant, isDeliveryDriver, canSeeAccounting, userRole, userSpecialty]);
 
   // Ao entrar, o contador já cai na tela dele.
   useEffect(() => {
     if (isAccountant) setActiveSection('contabilidade');
   }, [isAccountant]);
+
+  // O entregador cai direto no Delivery.
+  useEffect(() => {
+    if (isDeliveryDriver) setActiveSection('delivery');
+  }, [isDeliveryDriver]);
 
   return (
     <>

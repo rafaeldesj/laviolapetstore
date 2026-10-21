@@ -6,6 +6,7 @@ import {
   User, Printer, Store, Shield, QrCode, Lock, Terminal, FileText, Receipt, Calculator
 } from 'lucide-react';
 import type { UserRole } from '../supabaseClient';
+import { isDeliverySpecialty } from '../utils/specialties';
 import { roleHierarchy } from '../supabaseClient';
 
 interface NavItem {
@@ -48,6 +49,8 @@ export const Navigation: React.FC<NavigationProps> = ({ styles, activeSection, s
   const isStaff = userRole ? roleHierarchy[userRole] >= roleHierarchy['collaborator'] : false;
   const isClient = userRole === 'client';
   const isAccountant = userRole === 'accountant';
+  // Colaborador entregador: no menu "Sistema" só aparece Delivery.
+  const isDeliveryDriver = userRole === 'collaborator' && isDeliverySpecialty(userSpecialty);
 
   const allNavItems: NavItem[] = [
     { id: 'inicio',       label: 'Início',               icon: <Home size={16} />,          requiresLogin: false },
@@ -81,6 +84,7 @@ export const Navigation: React.FC<NavigationProps> = ({ styles, activeSection, s
   const visibleItems = allNavItems.filter(item => {
     // O contador só vê as áreas da contabilidade (e as páginas públicas do site).
     if (isAccountant) return !item.requiresLogin || !!item.accountant;
+    if (isDeliveryDriver) return !item.requiresLogin || item.id === 'delivery';
     if (item.requiresAccounting) return isLoggedIn && isManager;
     if (item.requiresClientOnly) return isLoggedIn && isClient;
     if (item.requiresStaff)      return isLoggedIn && isStaff;

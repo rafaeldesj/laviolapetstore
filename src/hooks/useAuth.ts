@@ -69,6 +69,12 @@ export const useAuth = () => {
         if (profile.role as string === 'cliente') profile.role = 'client';
         if (profile.role as string === 'contador') profile.role = 'accountant';
       }
+
+      // A especialidade (ex.: Entregador / Delivery, Estoquista) é gravada no perfil como texto.
+      const specialty = (profile as { collaborator_specialty?: string } | null)?.collaborator_specialty;
+      if (profile && specialty && !profile.collaborator_category) {
+        profile.collaborator_category = { id: '', name: specialty, description: '', is_active: true };
+      }
       
       return {
         id: userId,
