@@ -108,9 +108,14 @@ service cloud.firestore {
     }
 
     // ---- ENTREGAS (DELIVERY) ----
+    // Equipe vê todas; cliente só as próprias (o app já consulta filtrando por client_id).
+    // O cliente pode criar a entrega da própria compra, mas só a equipe altera ou apaga.
     match /deliveries/{deliveryId} {
-      allow read: if isNotAccountant();
-      allow write: if isStaff();
+      allow read: if isStaff() || (isAuth() && resource.data.client_id == request.auth.uid);
+      allow create: if isStaff()
+        || (isAuth() && request.resource.data.client_id == request.auth.uid
+            && request.resource.data.status == 'agendada');
+      allow update, delete: if isStaff();
     }
 
     // ---- LOGS DE AUDITORIA ----

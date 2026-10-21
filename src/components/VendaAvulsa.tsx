@@ -11,6 +11,8 @@ import { DeliveryMap, type MapAddress } from './DeliveryMap';
 import { PrinterStatus } from './PrinterStatus';
 import { CertAlert } from './CertAlert';
 import { CancelDialog } from './CancelDialog';
+import { addDelivery } from '../utils/deliveriesService';
+import type { DeliveryItem } from './Delivery';
 import { finalizeSale } from '../utils/salesService';
 import type { Sale } from '../utils/salesService';
 import { printSaleReceipt, getPrinterSettings, DEFAULT_COMPANY } from '../utils/printer';
@@ -535,9 +537,12 @@ export const VendaAvulsa: React.FC<VendaAvulsaProps> = ({ styles, currentUser })
           created_at: new Date().toISOString()
         };
 
-        const localDeliveries = JSON.parse(localStorage.getItem('laviola_deliveries') || '[]');
-        localDeliveries.push(newDelivery);
-        localStorage.setItem('laviola_deliveries', JSON.stringify(localDeliveries));
+        try {
+          await addDelivery(newDelivery as DeliveryItem);
+        } catch (deliveryErr) {
+          console.error('Erro ao registrar a entrega da venda:', deliveryErr);
+          alert('A venda foi salva, mas não consegui registrar a entrega. Cadastre-a em Delivery.');
+        }
       }
 
       setLastSaleSummary(sale);

@@ -5,6 +5,11 @@ import { logAction, supabase, isSupabaseConfigured, mockSupabaseDb } from '../su
 import type { Product } from '../supabaseClient';
 import type { AuthUser } from '../hooks/useAuth';
 import { formatPhoneBR } from '../utils/formatters';
+import { subscribeDeliveries, syncDeliveries, patchDelivery } from '../utils/deliveriesService';
+import { collection, doc, getDocs, setDoc } from 'firebase/firestore';
+import { createUserWithEmailAndPassword, signOut, updateProfile } from 'firebase/auth';
+import { db, secondaryAuth, isFirebaseConfigured } from '../firebaseClient';
+import { checkEmailExists, checkPhoneExists, checkUsernameExists } from '../utils/userValidation';
 
 // Senha já preenchida no cadastro de cliente; o operador pode trocar se quiser.
 const DEFAULT_CLIENT_PASSWORD = '123456';
@@ -175,172 +180,52 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
   const isDriver = role === 'collaborator';
   const isClient = role === 'client';
 
-  // Seed default data if empty in localStorage on mount
-  // Load and Seed deliveries
+  // As entregas ficam no Firestore e chegam em tempo real para todos (dono, entregador, cliente).
+  // O cliente só recebe as próprias; a equipe recebe todas.
+  const isStaffRole = isManager || isDriver;
+
   useEffect(() => {
-    const fetchDeliveries = async () => {
-      if (false && supabase) {
-        try {
-          const { data, error } = await supabase
-            .from('deliveries')
-            .select('*')
-            .order('created_at', { ascending: false });
-          if (!error && data) {
-            setDeliveries(data);
-            return;
-          }
-        } catch (err) {
-          console.warn('Supabase deliveries not configured yet, falling back to localStorage.', err);
-        }
-      }
-      
-      let storedDeliveries = localStorage.getItem('laviola_deliveries');
-      if (storedDeliveries && (storedDeliveries.includes('Marcos') || storedDeliveries.includes('colab-2'))) {
-        localStorage.removeItem('laviola_deliveries');
-        storedDeliveries = null;
-      }
-      if (!storedDeliveries) {
-        const defaultDeliveries: DeliveryItem[] = [
-          {
-            id: 'deliv-1',
-            client_id: 'colab-1', // João Silva
-            client_name: 'João Silva',
-            client_address: 'Rua Arthur Rios, 1200 - Campo Grande',
-            client_lat: -22.8995,
-            client_lng: -43.5580,
-            driver_id: '4155f554-a955-442a-af69-75288a66a4d7', 
-            driver_name: 'Jacques Vasconcellos',
-            driver_lat: -22.8995, // already arrived
-            driver_lng: -43.5580,
-            status: 'concluida',
-            items: 'Shampoo Pet Clean + Coleira Azul M',
-            scheduled_time: 'Hoje às 11:30',
-            created_at: new Date(Date.now() - 4 * 3600000).toISOString()
-          },
-          {
-            id: 'deliv-2',
-            client_id: 'colab-1',
-            client_name: 'João Silva',
-            client_address: 'Avenida Cesário de Melo, 2500 - Campo Grande',
-            client_lat: -22.9025,
-            client_lng: -43.5610,
-            driver_id: '', // Unassigned so the user can test dispatching
-            driver_name: '',
-            driver_lat: PETSHOP_COORDS.lat,
-            driver_lng: PETSHOP_COORDS.lng,
-            status: 'agendada',
-            items: 'Ração Golden Cães Adultos 15kg',
-            scheduled_time: 'A ser despachada',
-            created_at: new Date().toISOString()
-          }
-        ];
-        localStorage.setItem('laviola_deliveries', JSON.stringify(defaultDeliveries));
-        setDeliveries(defaultDeliveries);
-      } else {
-        setDeliveries(JSON.parse(storedDeliveries));
-      }
-    };
+    if (!currentUser?.id) return;
+    return subscribeDeliveries(
+      { uid: currentUser.id, staff: isStaffRole },
+      setDeliveries,
+      (err) => console.error('Erro ao carregar entregas:', err)
+    );
+  }, [currentUser?.id, isStaffRole]);
 
-    const fetchRealUsers = async () => {
-      if (false && supabase) {
-        try {
-          const { data, error } = await supabase
-            .from('profiles')
-            .select(`*, collaborator_category:collaborator_categories(id, name, description, is_active)`);
-          
-          if (!error && data) {
-            const clientList = data
-              .filter((p: any) => p.role === 'client')
-              .map((p: any) => ({ id: p.id, name: p.full_name || p.username || 'Cliente' }));
-
-            const driverList = data
-              .filter((p: any) => p.role === 'collaborator' && p.collaborator_category?.name === 'Entregador')
-              .map((p: any) => ({ id: p.id, name: p.full_name || p.username || 'Entregador' }));
-            
-            setClients(clientList);
-            setDrivers(driverList);
-            return;
-          }
-        } catch (err) {
-          console.error('Error fetching real profiles:', err);
-        }
-      }
-
-      // Fallback/Local storage mode
-      const mockUsers = JSON.parse(localStorage.getItem('laviola_mock_users') || '[]');
-      const clientList = mockUsers
-        .filter((u: any) => u.profile?.role === 'client')
-        .map((u: any) => ({ id: u.id, name: u.name }));
-      const driverList = mockUsers
-        .filter((u: any) => u.profile?.role === 'collaborator' && u.profile?.collaborator_category?.name === 'Entregador')
-        .map((u: any) => ({ id: u.id, name: u.name }));
-
-      // Fallbacks just in case
-      if (clientList.length === 0) clientList.push({ id: 'colab-1', name: 'João Silva' });
-      if (driverList.length === 0) driverList.push({ id: '4155f554-a955-442a-af69-75288a66a4d7', name: 'Jacques Vasconcellos' });
-
-      setClients(clientList);
-      setDrivers(driverList);
-    };
-
-    fetchDeliveries();
-    fetchRealUsers();
-  }, []);
-
-  // Realtime subscription + fast polling fallback for instant synchronization
-  useEffect(() => {
-    const fetchLatestDeliveries = async () => {
-      if (false && supabase) {
-        try {
-          const { data, error } = await supabase
-            .from('deliveries')
-            .select('*')
-            .order('created_at', { ascending: false });
-          if (!error && data) {
-            setDeliveries(data);
-          }
-        } catch (err) {
-          // Silent catch
-        }
-      } else {
-        const stored = localStorage.getItem('laviola_deliveries');
-        if (stored) {
-          setDeliveries(JSON.parse(stored));
-        }
-      }
-    };
-
-    // 1. Supabase Realtime Channel
-    let channel: any = null;
-    if (false && supabase) {
-      try {
-        channel = supabase
-          .channel('deliveries-realtime')
-          .on(
-            'postgres_changes',
-            { event: '*', schema: 'public', table: 'deliveries' },
-            () => {
-              fetchLatestDeliveries();
-            }
-          )
-          .subscribe();
-      } catch (err) {
-        console.warn('Realtime subscription failed:', err);
-      }
+  // Grava no servidor o que mudou na lista (a tela já mostra o resultado na hora).
+  const persistDeliveries = async (previous: DeliveryItem[], next: DeliveryItem[]) => {
+    try {
+      await syncDeliveries(previous, next);
+    } catch (err) {
+      console.error('Erro ao salvar entrega:', err);
+      alert('Não foi possível salvar a alteração da entrega. Verifique a internet e tente de novo.');
     }
+  };
 
-    // 2. Fast Polling (1 second) to guarantee instant feeling and offline fallback synchronization
-    const interval = setInterval(() => {
-      fetchLatestDeliveries();
-    }, 1000);
+  // Clientes e entregadores vêm dos cadastros reais, não de dados de teste guardados no navegador.
+  useEffect(() => {
+    if (!db || !isStaffRole) return;
+    let cancelled = false;
+    getDocs(collection(db, 'profiles'))
+      .then(snap => {
+        if (cancelled) return;
+        const normRole = (r: string) => (r === 'cliente' ? 'client' : r === 'colaborador' ? 'collaborator' : r);
+        const profiles = snap.docs
+          .map(d => ({ id: d.id, ...(d.data() as any) }))
+          .filter(p => p.is_active !== false);
+        const nameOf = (p: any, fallback: string) => p.full_name || p.name || p.username || fallback;
 
-    return () => {
-      clearInterval(interval);
-      if (channel && supabase) {
-        supabase.removeChannel(channel);
-      }
-    };
-  }, []);
+        setClients(profiles.filter(p => normRole(p.role) === 'client').map(p => ({ id: p.id, name: nameOf(p, 'Cliente') })));
+
+        // Quem está marcado como "Entregador"; se ninguém estiver, vale qualquer colaborador.
+        const collaborators = profiles.filter(p => normRole(p.role) === 'collaborator');
+        const tagged = collaborators.filter(p => String(p.collaborator_specialty || '').trim().toLowerCase() === 'entregador');
+        setDrivers((tagged.length > 0 ? tagged : collaborators).map(p => ({ id: p.id, name: nameOf(p, 'Entregador') })));
+      })
+      .catch(err => console.error('Erro ao carregar clientes e entregadores:', err));
+    return () => { cancelled = true; };
+  }, [isStaffRole]);
 
   // Sync selected delivery reference when the list updates
   useEffect(() => {
@@ -397,28 +282,10 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
       if (now - lastUpdate < 3000) return;
       lastUpdate = now;
 
-      if (false && supabase) {
-        try {
-          await supabase
-            .from('deliveries')
-            .update({ driver_lat: latitude, driver_lng: longitude })
-            .eq('id', activeDeliveryId);
-        } catch (err) {
-          console.error('Erro ao atualizar coordenadas via GPS no Supabase:', err);
-        }
-      } else {
-        const stored = localStorage.getItem('laviola_deliveries');
-        if (stored) {
-          const list = JSON.parse(stored) as DeliveryItem[];
-          const updated = list.map(item => {
-            if (item.id === activeDeliveryId) {
-              return { ...item, driver_lat: latitude, driver_lng: longitude };
-            }
-            return item;
-          });
-          localStorage.setItem('laviola_deliveries', JSON.stringify(updated));
-          setDeliveries(updated);
-        }
+      try {
+        await patchDelivery(activeDeliveryId, { driver_lat: latitude, driver_lng: longitude });
+      } catch (err) {
+        console.error('Erro ao atualizar a posição do GPS:', err);
       }
     };
 
@@ -439,69 +306,6 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
       setIsLocationApproximate(false);
     };
   }, [isDriver, currentUser?.id, deliveries.find(d => d.driver_id === currentUser?.id && d.status === 'a-caminho')?.id]);
-
-  // Movement simulator interval (only runs if there are active deliveries marked as 'a-caminho' and NOT using online database)
-  useEffect(() => {
-    if (isSupabaseConfigured) return; // Disable simulator entirely when online (using real GPS)
-
-    const interval = setInterval(async () => {
-      let list: DeliveryItem[] = [];
-      const stored = localStorage.getItem('laviola_deliveries');
-      if (stored) {
-        list = JSON.parse(stored);
-      }
-
-      if (list.length === 0) return;
-      let changed = false;
-
-      const updatedList = list.map(item => {
-        if (item.status === 'a-caminho') {
-          const distanceLat = item.client_lat - item.driver_lat;
-          const distanceLng = item.client_lng - item.driver_lng;
-          const distance = Math.sqrt(distanceLat * distanceLat + distanceLng * distanceLng);
-
-          // If distance is tiny, driver arrived
-          if (distance < 0.0001) {
-            return {
-              ...item,
-              driver_lat: item.client_lat,
-              driver_lng: item.client_lng
-            };
-          }
-
-          // Otherwise, step coordinates closer
-          const baseStep = 0.00015; // standard coordinates step
-          const stepSize = baseStep * simSpeed;
-          changed = true;
-
-          let newLat = item.driver_lat;
-          let newLng = item.driver_lng;
-
-          if (distance <= stepSize) {
-            newLat = item.client_lat;
-            newLng = item.client_lng;
-          } else {
-            newLat += (distanceLat / distance) * stepSize;
-            newLng += (distanceLng / distance) * stepSize;
-          }
-
-          return {
-            ...item,
-            driver_lat: newLat,
-            driver_lng: newLng
-          };
-        }
-        return item;
-      });
-
-      if (changed) {
-        localStorage.setItem('laviola_deliveries', JSON.stringify(updatedList));
-        setDeliveries(updatedList);
-      }
-    }, 2000);
-
-    return () => clearInterval(interval);
-  }, [simSpeed]);
 
   // Leaflet Map Rendering and Updates
   useEffect(() => {
@@ -1010,7 +814,7 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
       return d;
     });
 
-    localStorage.setItem('laviola_deliveries', JSON.stringify(updated));
+    void persistDeliveries(deliveries, updated);
     setDeliveries(updated);
 
     if (selectedDelivery?.id === deliveryId) {
@@ -1118,7 +922,7 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
     }
 
     const updated = [newDelivery, ...deliveries];
-    localStorage.setItem('laviola_deliveries', JSON.stringify(updated));
+    void persistDeliveries(deliveries, updated);
     setDeliveries(updated);
     setIsFormOpen(false);
 
@@ -1189,33 +993,34 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
           setFormClientId(newClient.id);
         }
       } else {
-        const mockUsers = JSON.parse(localStorage.getItem('laviola_mock_users') || '[]');
-        const newId = Math.random().toString(36).substring(2, 9);
-        const newProfile = {
-          id: newId,
-          email: newClientEmail.trim(),
+        if (!isFirebaseConfigured || !db || !secondaryAuth) throw new Error('Firebase não configurado.');
+        const email = newClientEmail.trim();
+        const username = newClientUsername.trim();
+        const phone = newClientPhone.trim();
+
+        if (await checkEmailExists(email)) throw new Error('Este e-mail já está cadastrado.');
+        if (await checkUsernameExists(username)) throw new Error('Este login (username) já está em uso. Tente outro.');
+        if (phone && await checkPhoneExists(phone)) throw new Error('Este celular já está cadastrado em outro usuário.');
+
+        const cred = await createUserWithEmailAndPassword(secondaryAuth, email, newClientPassword);
+        await updateProfile(cred.user, { displayName: newClientFullName.trim() });
+        await setDoc(doc(db, 'profiles', cred.user.uid), {
+          id: cred.user.uid,
+          email: cred.user.email,
           full_name: newClientFullName.trim(),
-          username: newClientUsername.trim(),
-          phone: newClientPhone.trim(),
+          username,
+          phone,
           role: 'client',
           is_active: true,
-          created_at: new Date().toISOString()
-        };
-
-        mockUsers.push({
-          id: newId,
-          email: newClientEmail.trim(),
-          name: newClientFullName.trim(),
-          username: newClientUsername.trim(),
-          phone: newClientPhone.trim(),
-          password: newClientPassword,
-          profile: newProfile
+          created_at: new Date().toISOString(),
+          collaborator_category_id: null,
         });
+        // A sessão secundária serviu só para criar a conta; não deve ficar aberta.
+        await signOut(secondaryAuth).catch(() => {});
 
-        localStorage.setItem('laviola_mock_users', JSON.stringify(mockUsers));
-        const newClient = { id: newId, name: newClientFullName.trim() };
+        const newClient = { id: cred.user.uid, name: newClientFullName.trim() };
         setClients(prev => [...prev, newClient]);
-        setFormClientId(newId);
+        setFormClientId(newClient.id);
       }
 
       await logAction(
@@ -1234,7 +1039,13 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
       setShowClientPassword(false);
       alert('Cliente criado com sucesso!');
     } catch (err: any) {
-      alert(err.message || 'Erro ao criar cliente.');
+      const friendly: Record<string, string> = {
+        'auth/email-already-in-use': 'Este e-mail já está cadastrado.',
+        'auth/invalid-email': 'O e-mail informado não é válido.',
+        'auth/weak-password': 'A senha precisa ter pelo menos 6 caracteres.',
+        'auth/network-request-failed': 'Sem conexão com a internet. Tente de novo.',
+      };
+      alert(friendly[err?.code] || err?.message || 'Erro ao criar cliente.');
     } finally {
       setIsSavingClient(false);
     }
@@ -1268,7 +1079,7 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
     }
 
     const updated = deliveries.filter(d => d.id !== id);
-    localStorage.setItem('laviola_deliveries', JSON.stringify(updated));
+    void persistDeliveries(deliveries, updated);
     setDeliveries(updated);
     if (selectedDelivery?.id === id) {
       setSelectedDelivery(null);
@@ -1328,7 +1139,7 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
       return d;
     });
 
-    localStorage.setItem('laviola_deliveries', JSON.stringify(updated));
+    void persistDeliveries(deliveries, updated);
     setDeliveries(updated);
     
     const refreshed = updated.find(d => d.id === delivery.id) || null;
@@ -1389,7 +1200,7 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
       return d;
     });
 
-    localStorage.setItem('laviola_deliveries', JSON.stringify(updated));
+    void persistDeliveries(deliveries, updated);
     setDeliveries(updated);
     
     const refreshed = updated.find(d => d.id === delivery.id) || null;
@@ -1448,7 +1259,7 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
       return d;
     });
 
-    localStorage.setItem('laviola_deliveries', JSON.stringify(updated));
+    void persistDeliveries(deliveries, updated);
     setDeliveries(updated);
     
     if (selectedDelivery?.id === delivery.id) {
@@ -1499,7 +1310,7 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
         }
         return d;
       });
-      localStorage.setItem('laviola_deliveries', JSON.stringify(updated));
+      void persistDeliveries(deliveries, updated);
       setDeliveries(updated);
     }
 
@@ -1547,7 +1358,7 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
         }
         return d;
       });
-      localStorage.setItem('laviola_deliveries', JSON.stringify(updated));
+      void persistDeliveries(deliveries, updated);
       setDeliveries(updated);
     }
 
@@ -1601,7 +1412,7 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
         }
         return d;
       });
-      localStorage.setItem('laviola_deliveries', JSON.stringify(updated));
+      void persistDeliveries(deliveries, updated);
       setDeliveries(updated);
     }
 

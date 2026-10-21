@@ -7,6 +7,7 @@ import {
 import { supabase, mockSupabaseDb, isSupabaseConfigured, logAction } from '../supabaseClient';
 import type { Appointment } from '../supabaseClient';
 import type { AuthUser } from '../hooks/useAuth';
+import { addDelivery } from '../utils/deliveriesService';
 
 declare const L: any;
 
@@ -611,34 +612,12 @@ export const Pagamentos: React.FC<PagamentosProps> = ({
           created_at: new Date().toISOString()
         };
 
-        if (isSupabaseConfigured && supabase) {
-          try {
-            const { error } = await supabase.from('deliveries').insert(newDelivery);
-            if (!error) {
-              await logAction(
-                currentUser.email,
-                currentUser.name,
-                'Compra de Produto - Delivery',
-                `Comprou "${selectedProduct.name}" com entrega para: "${deliveryAddress}".`
-              );
-              // Store locally as fallback
-              const currentDeliveries = JSON.parse(localStorage.getItem('laviola_deliveries') || '[]');
-              currentDeliveries.unshift(newDelivery);
-              localStorage.setItem('laviola_deliveries', JSON.stringify(currentDeliveries));
-              
-              setSelectedProduct(null);
-              setShowProductSuccessModal(false);
-              setActiveSection('delivery');
-              return;
-            }
-          } catch (err) {
-            console.error('Error inserting delivery to Supabase:', err);
-          }
+        try {
+          await addDelivery(newDelivery);
+        } catch (deliveryErr) {
+          console.error('Erro ao registrar a entrega:', deliveryErr);
+          alert('Sua compra foi registrada, mas não consegui criar a entrega. Fale com a loja.');
         }
-
-        const currentDeliveries = JSON.parse(localStorage.getItem('laviola_deliveries') || '[]');
-        currentDeliveries.unshift(newDelivery);
-        localStorage.setItem('laviola_deliveries', JSON.stringify(currentDeliveries));
         
         await logAction(
           currentUser.email,

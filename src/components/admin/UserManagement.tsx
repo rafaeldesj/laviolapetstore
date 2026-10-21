@@ -15,6 +15,23 @@ interface UserManagementProps {
   styles: any;
 }
 
+/** Categorias (ex.: Entregador) ainda ficam no Supabase; se ele estiver fora do ar, o cadastro não pode travar. */
+async function resolveCategoryId(name: string): Promise<string | null> {
+  try {
+    const { data: existing } = await supabase.from('collaborator_categories').select('id').eq('name', name).single();
+    if (existing) return existing.id;
+    const { data: created } = await supabase
+      .from('collaborator_categories')
+      .insert({ name, description: '', is_active: true })
+      .select('id')
+      .single();
+    return created?.id ?? null;
+  } catch (err) {
+    console.warn('Não foi possível resolver a categoria no Supabase:', err);
+    return null;
+  }
+}
+
 const roleBadgeColors: Record<UserRole, string> = {
   developer: 'hsl(280, 70%, 55%)',
   owner: 'hsl(36, 95%, 50%)',
@@ -261,26 +278,10 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
           }
         }
 
-        // Resolve or create category in Supabase
-        let categoryId: string | null = null;
-        if (specialtyName) {
-          const { data: existingCat } = await supabase
-            .from('collaborator_categories')
-            .select('id')
-            .eq('name', specialtyName)
-            .single();
-          if (existingCat) {
-            categoryId = existingCat.id;
-          } else {
-            const { data: newCat } = await supabase
-              .from('collaborator_categories')
-              .insert({ name: specialtyName, description: '', is_active: true })
-              .select('id')
-              .single();
-            if (newCat) categoryId = newCat.id;
-          }
-        }
+        const categoryId = specialtyName ? await resolveCategoryId(specialtyName) : null;
         updatedData.collaborator_category_id = categoryId;
+        // O nome fica direto no perfil: é ele que o módulo de Delivery usa para achar os entregadores.
+        updatedData.collaborator_specialty = specialtyName;
         await updateDoc(doc(db, 'profiles', user.id), updatedData);
       }
       await logAction(
@@ -344,25 +345,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
         const user = userCredential.user;
         await updateProfile(user, { displayName: newFullName.trim() });
         
-        let categoryId = null;
-        if (newRole === 'collaborator' && newSpecialty.trim()) {
-          const specialtyName = newSpecialty.trim();
-          const { data: existingCat } = await supabase
-            .from('collaborator_categories')
-            .select('id')
-            .eq('name', specialtyName)
-            .single();
-          if (existingCat) {
-            categoryId = existingCat.id;
-          } else {
-            const { data: newCat } = await supabase
-              .from('collaborator_categories')
-              .insert({ name: specialtyName, description: '', is_active: true })
-              .select('id')
-              .single();
-            if (newCat) categoryId = newCat.id;
-          }
-        }
+        const categoryId = newRole === 'collaborator' && newSpecialty.trim() ? await resolveCategoryId(newSpecialty.trim()) : null;
 
         const profileData = {
           id: user.uid,
@@ -372,6 +355,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
           phone: newPhone.trim(),
           role: newRole,
           collaborator_category_id: newRole === 'collaborator' ? categoryId : null,
+          collaborator_specialty: newRole === 'collaborator' ? newSpecialty.trim() : '',
           is_active: true,
           created_at: new Date().toISOString()
         };
