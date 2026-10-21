@@ -54,6 +54,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
   const [newUsername, setNewUsername] = useState<string>('');
   const [newPhone, setNewPhone] = useState<string>('');
   const [newPassword, setNewPassword] = useState<string>('');
+  const [showNewPassword, setShowNewPassword] = useState<boolean>(false);
   const [newRole, setNewRole] = useState<UserRole>('client');
   const [newSpecialty, setNewSpecialty] = useState<string>('');
   const [hoveredBtn, setHoveredBtn] = useState<string | null>(null);
@@ -419,6 +420,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
       setNewUsername('');
       setNewPhone('');
       setNewPassword('');
+      setShowNewPassword(false);
       setNewRole('collaborator');
       setNewSpecialty('');
       setIsCreating(false);
@@ -941,46 +943,60 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
                 />
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
-                <div style={styles.formGroup}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 170px), 1fr))', gap: '15px' }}>
+                <div style={{ ...styles.formGroup, minWidth: 0 }}>
                   <label htmlFor="new-username" style={styles.formLabel}>Apelido (Login) *</label>
                   <input
                     id="new-username"
                     type="text"
                     value={newUsername}
                     onChange={(e) => setNewUsername(e.target.value)}
-                    style={styles.formInput}
+                    style={{ ...styles.formInput, width: '100%', minWidth: 0 }}
                     placeholder="username"
                     required
                   />
                 </div>
-                <div style={styles.formGroup}>
+                <div style={{ ...styles.formGroup, minWidth: 0 }}>
                   <label htmlFor="new-phone" style={styles.formLabel}>Celular</label>
                   <input
                     id="new-phone"
                     type="tel"
+                    inputMode="numeric"
+                    maxLength={15}
                     value={newPhone}
                     onChange={(e) => setNewPhone(formatPhoneBR(e.target.value))}
-                    style={styles.formInput}
+                    style={{ ...styles.formInput, width: '100%', minWidth: 0 }}
                     placeholder="(21) 99999-9999"
                   />
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
-                <div style={styles.formGroup}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 170px), 1fr))', gap: '15px' }}>
+                <div style={{ ...styles.formGroup, minWidth: 0 }}>
                   <label htmlFor="new-password" style={styles.formLabel}>Senha *</label>
-                  <input
-                    id="new-password"
-                    type="password"
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    style={styles.formInput}
-                    placeholder="Mínimo 6 caracteres"
-                    required
-                  />
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      id="new-password"
+                      type={showNewPassword ? 'text' : 'password'}
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      style={{ ...styles.formInput, width: '100%', minWidth: 0, paddingRight: '42px' }}
+                      placeholder="Mínimo 6 caracteres"
+                      autoComplete="new-password"
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowNewPassword(v => !v)}
+                      aria-label={showNewPassword ? 'Ocultar senha' : 'Mostrar senha'}
+                      title={showNewPassword ? 'Ocultar senha' : 'Mostrar senha'}
+                      style={{ position: 'absolute', right: '6px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', padding: '6px', display: 'flex', color: styles.sidebarWidgetText?.color }}
+                    >
+                      {showNewPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
+                  </div>
                 </div>
-                <div style={styles.formGroup}>
+                <div style={{ ...styles.formGroup, minWidth: 0 }}>
                   <label htmlFor="new-role" style={styles.formLabel}>Cargo *</label>
                   <select
                     id="new-role"
@@ -992,7 +1008,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
                         setNewSpecialty('');
                       }
                     }}
-                    style={styles.formInput}
+                    style={{ ...styles.formInput, width: '100%', minWidth: 0 }}
                     required
                   >
                     {Object.entries(roleLabels).map(([role, label]) => {

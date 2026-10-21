@@ -138,11 +138,11 @@ export const DeliveryMap = ({ onAddressSelect, initialAddress, leftContent }: De
       zoomControl: false,
     });
 
-    // Dark-themed map tiles (CartoDB Dark Matter)
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-      subdomains: 'abcd',
-      maxZoom: 20,
+    // Mapa do OpenStreetMap (gratuito, sem chave). O mapa escuro da CARTO passou a exigir "API key"
+    // e devolvia imagens com o aviso "API KEY REQUIRED".
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+      maxZoom: 19,
     }).addTo(map);
 
     // Custom zoom control (top-right)
