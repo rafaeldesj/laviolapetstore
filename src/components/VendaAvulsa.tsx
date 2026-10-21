@@ -100,7 +100,7 @@ export const VendaAvulsa: React.FC<VendaAvulsaProps> = ({ styles, currentUser })
       const loopDate = new Date(d);
       loopDate.setDate(loopDate.getDate() + i);
       
-      const dateStr = loopDate.toISOString().split('T')[0];
+      const dateStr = `${loopDate.getFullYear()}-${String(loopDate.getMonth() + 1).padStart(2, '0')}-${String(loopDate.getDate()).padStart(2, '0')}`; // data local (toISOString usa UTC e erra à noite)
       
       let label = '';
       if (i === 0) label = 'Hoje';
@@ -533,6 +533,7 @@ export const VendaAvulsa: React.FC<VendaAvulsaProps> = ({ styles, currentUser })
           status: 'agendada',
           items: deliveryObs.trim() ? `${itemsString}\n[OBS: ${deliveryObs.trim()}]` : itemsString,
           scheduled_time: scheduledTime,
+          scheduled_at: !deliveryAsap && deliveryDate && deliveryTime ? new Date(`${deliveryDate}T${deliveryTime}:00`).toISOString() : null,
           support_reason: deliveryObs.trim() ? `OBS Cliente: ${deliveryObs.trim()}` : null,
           created_at: new Date().toISOString()
         };

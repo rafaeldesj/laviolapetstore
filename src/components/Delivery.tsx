@@ -23,6 +23,40 @@ interface DeliveryProps {
   currentUser: AuthUser | null;
 }
 
+/** Pedido do entregador para iniciar uma entrega antes da hora liberada. */
+export interface StartRequest {
+  status: 'pendente' | 'aprovada' | 'recusada';
+  requested_at: string;
+  requested_by_name: string;
+  decided_at?: string;
+  decided_by_name?: string;
+}
+
+/** O entregador só pode iniciar a entrega agendada a partir de tantos minutos antes do horário marcado. */
+export const EARLY_START_MINUTES = 30;
+
+export interface StartGate {
+  allowed: boolean;
+  /** Instante em que a entrega é liberada; nulo quando não há horário marcado. */
+  opensAt: Date | null;
+  /** Liberada por autorização do gerente (e não pelo relógio). */
+  authorized?: boolean;
+}
+
+export function getStartGate(
+  d: { scheduled_at?: string | null; start_request?: StartRequest | null },
+  now: number = Date.now()
+): StartGate {
+  if (!d.scheduled_at) return { allowed: true, opensAt: null };
+  const opensAt = new Date(new Date(d.scheduled_at).getTime() - EARLY_START_MINUTES * 60000);
+  if (now >= opensAt.getTime()) return { allowed: true, opensAt };
+  if (d.start_request?.status === 'aprovada') return { allowed: true, opensAt, authorized: true };
+  return { allowed: false, opensAt };
+}
+
+const fmtWhen = (date: Date) =>
+  date.toLocaleString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+
 export interface DeliveryItem {
   id: string;
   client_id: string;
@@ -41,6 +75,9 @@ export interface DeliveryItem {
   support_reason?: string | null;
   support_decision?: string | null;
   driver_returned?: boolean | null;
+  /** Horário marcado em formato exato (ISO); vazio = "o mais breve possível". */
+  scheduled_at?: string | null;
+  start_request?: StartRequest | null;
 }
 
 const PETSHOP_COORDS = { lat: -22.9122, lng: -43.5606 }; // Rua Dr. Ibraim Hannas, 406 - Campo Grande
@@ -195,6 +232,12 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
   }, [currentUser?.id, isStaffRole]);
 
   // Grava no servidor o que mudou na lista (a tela já mostra o resultado na hora).
+  const [nowTick, setNowTick] = useState<number>(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNowTick(Date.now()), 30000);
+    return () => clearInterval(timer);
+  }, []);
+
   const persistDeliveries = async (previous: DeliveryItem[], next: DeliveryItem[]) => {
     try {
       await syncDeliveries(previous, next);
@@ -626,7 +669,7 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
     for (let i = 0; i < 5; i++) {
       const loopDate = new Date(d);
       loopDate.setDate(loopDate.getDate() + i);
-      const dateStr = loopDate.toISOString().split('T')[0];
+      const dateStr = `${loopDate.getFullYear()}-${String(loopDate.getMonth() + 1).padStart(2, '0')}-${String(loopDate.getDate()).padStart(2, '0')}`; // data local (toISOString usa UTC e erra à noite)
       let label = '';
       if (i === 0) label = 'Hoje';
       else if (i === 1) label = 'Amanhã';
@@ -878,6 +921,7 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
       status: 'agendada',
       items: itemsWithObsAndPayment,
       scheduled_time: scheduledTime,
+      scheduled_at: !deliveryAsap && deliveryDate && deliveryTime ? new Date(`${deliveryDate}T${deliveryTime}:00`).toISOString() : null,
       created_at: new Date().toISOString()
     };
 
@@ -1289,6 +1333,62 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
     );
   };
 
+  // Entregador: inicia na hora se já estiver liberado; senão, pede autorização ao gerente.
+  const handleDriverStart = async (delivery: DeliveryItem) => {
+    const gate = getStartGate(delivery);
+    if (gate.allowed) {
+      handleStartDeliveryAndNavigate(delivery);
+      return;
+    }
+    if (delivery.start_request?.status === 'pendente') {
+      alert('O pedido de autorização já foi enviado. Aguarde a resposta do gerente.');
+      return;
+    }
+    const when = gate.opensAt ? fmtWhen(gate.opensAt) : '';
+    const ok = confirm(
+      `Esta entrega só é liberada ${EARLY_START_MINUTES} minutos antes do horário marcado (a partir de ${when}). ` +
+      'Quer enviar um pedido de autorização ao gerente para iniciar agora?'
+    );
+    if (!ok) return;
+
+    const request: StartRequest = {
+      status: 'pendente',
+      requested_at: new Date().toISOString(),
+      requested_by_name: currentUser?.name || 'Entregador',
+    };
+    const updated = deliveries.map(d => (d.id === delivery.id ? { ...d, start_request: request } : d));
+    void persistDeliveries(deliveries, updated);
+    setDeliveries(updated);
+
+    await logAction(
+      currentUser?.email || '',
+      currentUser?.name || 'Entregador',
+      'Pedido de Autorização de Entrega',
+      `O entregador pediu autorização para iniciar antes da hora a entrega ID: ${delivery.id} (${delivery.client_name}), marcada para ${delivery.scheduled_time}.`
+    );
+  };
+
+  // Gerente: autoriza ou recusa o pedido do entregador.
+  const handleDecideEarlyStart = async (delivery: DeliveryItem, approve: boolean) => {
+    if (!delivery.start_request) return;
+    const decision: StartRequest = {
+      ...delivery.start_request,
+      status: approve ? 'aprovada' : 'recusada',
+      decided_at: new Date().toISOString(),
+      decided_by_name: currentUser?.name || 'Gerente',
+    };
+    const updated = deliveries.map(d => (d.id === delivery.id ? { ...d, start_request: decision } : d));
+    void persistDeliveries(deliveries, updated);
+    setDeliveries(updated);
+
+    await logAction(
+      currentUser?.email || '',
+      currentUser?.name || 'Gerente',
+      approve ? 'Início Antecipado Autorizado' : 'Início Antecipado Recusado',
+      `Pedido do entregador "${delivery.driver_name}" para iniciar antes da hora a entrega ID: ${delivery.id} (${delivery.client_name}) foi ${approve ? 'autorizado' : 'recusado'}.`
+    );
+  };
+
   const handleStartDeliveryAndNavigate = (delivery: DeliveryItem) => {
     handleStartDelivery(delivery);
     window.open(`https://www.google.com/maps/dir/?api=1&destination=${delivery.client_lat},${delivery.client_lng}`, '_blank');
@@ -1486,6 +1586,7 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
 
   // Current client context deliveries
   const clientDeliveries = deliveries.filter(d => d.client_id === currentUser?.id);
+  const pendingStartRequests = deliveries.filter(d => d.status === 'agendada' && d.start_request?.status === 'pendente');
   const activeClientDelivery = clientDeliveries.find(
     d => d.status === 'a-caminho' || (d.status === 'cancelada' && !d.driver_returned)
   );
@@ -1850,17 +1951,38 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
                     )}
 
                     <div style={{ display: 'flex', gap: '8px', marginTop: '8px', borderTop: `1px solid ${styles.borderColor}`, paddingTop: '10px', flexWrap: 'wrap' }}>
-                      {d.status === 'agendada' && (
-                        <button
-                          onClick={() => handleStartDeliveryAndNavigate(d)}
-                          style={{
-                            ...styles.btnAcc(false), padding: '6px 12px', fontSize: '0.8rem',
-                            backgroundColor: 'hsl(36, 95%, 50%)', color: '#fff', border: 'none'
-                          }}
-                        >
-                          <Play size={12} style={{ marginRight: '4px' }} /> Iniciar Entrega
-                        </button>
-                      )}
+                      {d.status === 'agendada' && (() => {
+                        const gate = getStartGate(d, nowTick);
+                        const req = d.start_request;
+                        const waiting = !gate.allowed && req?.status === 'pendente';
+                        return (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-start' }}>
+                            <button
+                              onClick={() => handleDriverStart(d)}
+                              disabled={waiting}
+                              style={{
+                                ...styles.btnAcc(false), padding: '6px 12px', fontSize: '0.8rem',
+                                backgroundColor: gate.allowed ? 'hsl(36, 95%, 50%)' : 'hsl(215, 15%, 55%)',
+                                color: '#fff', border: 'none', opacity: waiting ? 0.7 : 1, cursor: waiting ? 'not-allowed' : 'pointer'
+                              }}
+                            >
+                              <Play size={12} style={{ marginRight: '4px' }} />
+                              {gate.allowed ? 'Iniciar Entrega' : waiting ? 'Aguardando autorização...' : 'Solicitar autorização para iniciar'}
+                            </button>
+                            {!gate.allowed && gate.opensAt && (
+                              <span style={{ fontSize: '0.75rem', color: styles.sidebarWidgetText?.color }}>
+                                Libera para iniciar a partir de {fmtWhen(gate.opensAt)}.
+                                {req?.status === 'recusada' && <strong style={{ color: 'hsl(0, 75%, 45%)' }}> Pedido recusado{req.decided_by_name ? ` por ${req.decided_by_name}` : ''}.</strong>}
+                              </span>
+                            )}
+                            {gate.authorized && (
+                              <span style={{ fontSize: '0.75rem', color: 'hsl(142, 60%, 32%)', fontWeight: 600 }}>
+                                Início antecipado autorizado{req?.decided_by_name ? ` por ${req.decided_by_name}` : ''}.
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })()}
                       
                       {d.status === 'a-caminho' && (
                         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
@@ -2028,6 +2150,40 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
               </div>
             </div>
           </div>
+
+          {/* Pedidos dos entregadores para iniciar antes da hora */}
+          {pendingStartRequests.length > 0 && (
+            <div role="alert" style={{
+              padding: '14px 16px', borderRadius: '10px', border: '1px solid hsl(36, 95%, 45%, 0.4)',
+              backgroundColor: 'hsl(36, 95%, 45%, 0.08)', display: 'flex', flexDirection: 'column', gap: '10px'
+            }}>
+              <strong style={{ color: 'hsl(36, 95%, 28%)', fontSize: '0.9rem' }}>
+                🔔 {pendingStartRequests.length} pedido(s) de autorização para iniciar entrega antes da hora
+              </strong>
+              {pendingStartRequests.map(d => (
+                <div key={d.id} style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ fontSize: '0.83rem', color: styles.textMain }}>
+                    <strong>{d.driver_name || d.start_request?.requested_by_name}</strong> quer iniciar a entrega de <strong>{d.client_name}</strong>
+                    {' '}marcada para <strong>{d.scheduled_time}</strong>.
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button
+                      onClick={() => handleDecideEarlyStart(d, true)}
+                      style={{ ...styles.btnAcc(false), padding: '6px 12px', fontSize: '0.8rem', backgroundColor: 'hsl(142, 60%, 40%)', color: '#fff', border: 'none' }}
+                    >
+                      Autorizar
+                    </button>
+                    <button
+                      onClick={() => handleDecideEarlyStart(d, false)}
+                      style={{ ...styles.btnAcc(false), padding: '6px 12px', fontSize: '0.8rem', backgroundColor: 'hsl(0, 75%, 50%)', color: '#fff', border: 'none' }}
+                    >
+                      Recusar
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
 
           {/* Filtering Toolbar */}
           <div style={{
