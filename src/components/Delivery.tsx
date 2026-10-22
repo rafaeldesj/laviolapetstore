@@ -2783,7 +2783,7 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
                   type="button"
                   onClick={() => setIsFormOpen(false)}
                   style={{
-                    padding: '10px 16px', borderRadius: '8px', border: `1px solid ${styles.borderColor}`,
+                    padding: '10px 20px', borderRadius: '8px', border: `1px solid ${styles.borderColor}`,
                     background: 'none', color: styles.textMain, cursor: 'pointer', fontSize: '0.85rem'
                   }}
                 >
@@ -2794,7 +2794,7 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
                   className="btn-save"
                   style={{
                     padding: '10px 20px', borderRadius: '8px', border: 'none',
-                    fontSize: '0.85rem', fontWeight: 700
+                    fontSize: '0.85rem', fontWeight: 700, marginLeft: '10px'
                   }}
                 >
                   Agendar
