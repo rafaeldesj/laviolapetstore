@@ -4,6 +4,7 @@ import { supabase, mockSupabaseDb, isSupabaseConfigured, logAction } from '../su
 import type { Product } from '../supabaseClient';
 import { useAuth } from '../hooks/useAuth';
 import { NcmImportModal } from './NcmImportModal';
+import { SkuField } from './SkuField';
 import { UNIT_OPTIONS, formatQty, isFractional, priceLabel, roundQty, unitShort } from '../utils/units';
 
 interface EstoqueProps {
@@ -715,14 +716,7 @@ export const Estoque: React.FC<EstoqueProps> = ({ styles }) => {
 
               <div style={styles.formGroup}>
                 <label htmlFor="prod-sku" style={styles.formLabel}>Código SKU / Barras</label>
-                <input
-                  id="prod-sku"
-                  type="text"
-                  value={sku}
-                  onChange={(e) => setSku(e.target.value)}
-                  style={styles.formInput}
-                  placeholder="Ex: 7891020304050"
-                />
+                <SkuField id="prod-sku" styles={styles} value={sku} onChange={setSku} placeholder="Ex: 7891020304050" />
               </div>
 
               <div style={{ display: 'flex', gap: '10px' }}>

@@ -12,6 +12,7 @@ import { PrinterStatus } from './PrinterStatus';
 import { CertAlert } from './CertAlert';
 import { CancelDialog } from './CancelDialog';
 import { QuantityDialog } from './QuantityDialog';
+import { SkuField } from './SkuField';
 import { UNIT_OPTIONS, describeItem, formatQty, isFractional, lineTotal, priceLabel, roundQty, unitShort } from '../utils/units';
 import { addDelivery } from '../utils/deliveriesService';
 import type { DeliveryItem } from './Delivery';
@@ -1332,14 +1333,7 @@ export const VendaAvulsa: React.FC<VendaAvulsaProps> = ({ styles, currentUser })
               {/* SKU Code (Barcode) */}
               <div style={styles.formGroup}>
                 <label htmlFor="reg-sku" style={styles.formLabel}>Código SKU / Barras</label>
-                <input
-                  id="reg-sku"
-                  type="text"
-                  value={regSku}
-                  onChange={(e) => setRegSku(e.target.value)}
-                  style={styles.formInput}
-                  placeholder="Código identificador do produto..."
-                />
+                <SkuField id="reg-sku" styles={styles} value={regSku} onChange={setRegSku} placeholder="Código identificador do produto..." />
               </div>
 
               {/* Name */}
