@@ -339,7 +339,7 @@ export const DeliveryMap = ({ onAddressSelect, initialAddress, leftContent }: De
   // Explica o motivo real da falha (antes aparecia sempre a mesma mensagem genérica).
   const describeGeoError = (err: GeolocationPositionError): string => {
     if (err.code === 1) {
-      return 'A localização está bloqueada para este site. Clique no ícone à esquerda do endereço (cadeado) → Permissões → Localização → Permitir, e toque no botão de localização de novo.';
+      return 'O navegador recusou a localização. Confira (1) o ícone à esquerda do endereço → Localização = Permitir e (2) no Windows: Configurações → Privacidade → Localização → ligar "Permitir que aplicativos da área de trabalho acessem sua localização". Depois recarregue a página.';
     }
     if (err.code === 3) return 'A busca da localização demorou demais. Toque no botão de localização para tentar de novo.';
     return 'Este aparelho não conseguiu descobrir a posição. Ative a localização do Windows ou do celular e tente de novo — ou busque o endereço no campo acima.';
@@ -376,7 +376,8 @@ export const DeliveryMap = ({ onAddressSelect, initialAddress, leftContent }: De
     const onFinalError = (err: GeolocationPositionError) => {
       if (!mapRef.current || mapRef.current !== map) return;
       console.warn('Geolocation error:', err.code, err.message);
-      if (manual) setLocationError(describeGeoError(err));
+      // O detalhe técnico ajuda a descobrir a causa quando a mensagem em português não basta.
+      if (manual) setLocationError(`${describeGeoError(err)} (detalhe técnico: ${err.message || 'sem detalhe'})`);
       setIsLocating(false);
     };
 
