@@ -119,12 +119,14 @@ export const Header: React.FC<HeaderProps> = ({
       </div>
 
       {/* Animacao de pets andando sobre a linha cinza */}
-      <div className="header-pet-walk-container">
-        <span className="header-pet-animated header-pet-dog">🐕</span>
-        <span className="header-pet-animated header-pet-cat">🐈</span>
-        <span className="header-pet-animated header-pet-rabbit">🐇</span>
+      <div className="header-pet-walk-container" aria-hidden="true">
+        <span className="header-pet-lane header-pet-lane-dog"><span className="header-pet-animated header-pet-dog">🐕</span></span>
+        <span className="header-pet-lane header-pet-lane-cat"><span className="header-pet-animated header-pet-cat">🐈</span></span>
+        <span className="header-pet-lane header-pet-lane-rabbit"><span className="header-pet-animated header-pet-rabbit">🐇</span></span>
       </div>
       <style>{`
+        /* Os bichinhos andam só com 'transform' (o navegador anima sem refazer o layout da página).
+           Antes animavam 'left', o que recalculava a página inteira 60 vezes por segundo. */
         .header-pet-walk-container {
           position: absolute;
           bottom: -3px;
@@ -134,85 +136,137 @@ export const Header: React.FC<HeaderProps> = ({
           overflow: hidden;
           pointer-events: none;
           z-index: 10;
+          contain: layout paint;
+        }
+        .header-pet-lane {
+          position: absolute;
+          bottom: 0;
+          left: 0;
+          width: 100%;
+          height: 28px;
+          will-change: transform;
         }
         .header-pet-animated {
           position: absolute;
           bottom: 0px;
-          left: -60px;
+          left: 0;
           font-size: 1.4rem;
           white-space: nowrap;
           line-height: 1;
+          will-change: transform;
         }
-        .header-pet-dog {
-          animation-name: header-dog-walk;
-          animation-duration: 25s;
-          animation-timing-function: linear;
-          animation-delay: 2s;
-          animation-iteration-count: infinite;
+        .header-pet-lane-dog, .header-pet-dog { animation-duration: 25s; animation-delay: 2s; }
+        .header-pet-lane-cat, .header-pet-cat { animation-duration: 28s; animation-delay: 9s; }
+        .header-pet-lane-rabbit, .header-pet-rabbit { animation-duration: 22s; animation-delay: 16s; }
+        .header-pet-lane, .header-pet-animated { animation-timing-function: linear; animation-iteration-count: infinite; }
+        .header-pet-lane-dog { animation-name: header-dog-lane; }
+        .header-pet-dog { animation-name: header-dog-wiggle; }
+        .header-pet-lane-cat { animation-name: header-cat-lane; }
+        .header-pet-cat { animation-name: header-cat-wiggle; }
+        .header-pet-lane-rabbit { animation-name: header-rabbit-lane; }
+        .header-pet-rabbit { animation-name: header-rabbit-wiggle; }
+        @media (prefers-reduced-motion: reduce) {
+          .header-pet-walk-container { display: none; }
         }
-        .header-pet-cat {
-          animation-name: header-cat-walk;
-          animation-duration: 28s;
-          animation-timing-function: linear;
-          animation-delay: 9s;
-          animation-iteration-count: infinite;
+        @keyframes header-dog-lane {
+          0% { transform: translateX(-50px); }
+          40% { transform: translateX(40%); }
+          42% { transform: translateX(40%); }
+          44% { transform: translateX(40%); }
+          46% { transform: translateX(40%); }
+          48% { transform: translateX(40%); }
+          50% { transform: translateX(40%); }
+          55% { transform: translateX(40%); }
+          100% { transform: translateX(100%); }
         }
-        .header-pet-rabbit {
-          animation-name: header-rabbit-walk;
-          animation-duration: 22s;
-          animation-timing-function: linear;
-          animation-delay: 16s;
-          animation-iteration-count: infinite;
+        @keyframes header-dog-wiggle {
+          0% { transform: scaleX(-1) translateY(0) rotate(0deg); }
+          40% { transform: scaleX(-1) translateY(0) rotate(0deg); }
+          42% { transform: scaleX(-1) translateY(2px) rotate(-10deg); }
+          44% { transform: scaleX(-1) translateY(0px) rotate(10deg); }
+          46% { transform: scaleX(-1) translateY(2px) rotate(-10deg); }
+          48% { transform: scaleX(-1) translateY(0px) rotate(10deg); }
+          50% { transform: scaleX(-1) translateY(2px) rotate(0deg); }
+          55% { transform: scaleX(-1) translateY(0) rotate(0deg); }
+          100% { transform: scaleX(-1) translateY(0) rotate(0deg); }
         }
-        @keyframes header-dog-walk {
-          0% { left: -50px; transform: scaleX(-1) translateY(0) rotate(0deg); }
-          40% { left: 40%; transform: scaleX(-1) translateY(0) rotate(0deg); }
-          42% { left: 40%; transform: scaleX(-1) translateY(2px) rotate(-10deg); }
-          44% { left: 40%; transform: scaleX(-1) translateY(0px) rotate(10deg); }
-          46% { left: 40%; transform: scaleX(-1) translateY(2px) rotate(-10deg); }
-          48% { left: 40%; transform: scaleX(-1) translateY(0px) rotate(10deg); }
-          50% { left: 40%; transform: scaleX(-1) translateY(2px) rotate(0deg); }
-          55% { left: 40%; transform: scaleX(-1) translateY(0) rotate(0deg); }
-          100% { left: 100%; transform: scaleX(-1) translateY(0) rotate(0deg); }
+        @keyframes header-cat-lane {
+          0% { transform: translateX(100%); }
+          35% { transform: translateX(55%); }
+          38% { transform: translateX(55%); }
+          41% { transform: translateX(55%); }
+          44% { transform: translateX(55%); }
+          47% { transform: translateX(55%); }
+          50% { transform: translateX(55%); }
+          53% { transform: translateX(55%); }
+          55% { transform: translateX(55%); }
+          60% { transform: translateX(55%); }
+          100% { transform: translateX(-50px); }
         }
-        @keyframes header-cat-walk {
-          0% { left: 100%; transform: scaleX(1) translateY(0) rotate(0deg); }
-          35% { left: 55%; transform: scaleX(1) translateY(0) rotate(0deg); }
-          38% { left: 55%; transform: scaleX(1) translateY(4px) rotate(90deg); }
-          41% { left: 55%; transform: scaleX(1) translateY(8px) rotate(180deg); }
-          44% { left: 55%; transform: scaleX(1) translateY(4px) rotate(270deg); }
-          47% { left: 55%; transform: scaleX(1) translateY(8px) rotate(360deg); }
-          50% { left: 55%; transform: scaleX(1) translateY(4px) rotate(450deg); }
-          53% { left: 55%; transform: scaleX(1) translateY(0px) rotate(540deg); }
-          55% { left: 55%; transform: scaleX(1) translateY(0px) rotate(720deg); }
-          60% { left: 55%; transform: scaleX(1) translateY(0) rotate(0deg); }
-          100% { left: -50px; transform: scaleX(1) translateY(0) rotate(0deg); }
+        @keyframes header-cat-wiggle {
+          0% { transform: scaleX(1) translateY(0) rotate(0deg); }
+          35% { transform: scaleX(1) translateY(0) rotate(0deg); }
+          38% { transform: scaleX(1) translateY(4px) rotate(90deg); }
+          41% { transform: scaleX(1) translateY(8px) rotate(180deg); }
+          44% { transform: scaleX(1) translateY(4px) rotate(270deg); }
+          47% { transform: scaleX(1) translateY(8px) rotate(360deg); }
+          50% { transform: scaleX(1) translateY(4px) rotate(450deg); }
+          53% { transform: scaleX(1) translateY(0px) rotate(540deg); }
+          55% { transform: scaleX(1) translateY(0px) rotate(720deg); }
+          60% { transform: scaleX(1) translateY(0) rotate(0deg); }
+          100% { transform: scaleX(1) translateY(0) rotate(0deg); }
         }
-        @keyframes header-rabbit-walk {
-          0% { left: -50px; transform: scaleX(-1) translateY(0); }
-          5% { left: 10%; transform: scaleX(-1) translateY(-6px); }
-          7% { left: 13%; transform: scaleX(-1) translateY(0); }
-          12% { left: 23%; transform: scaleX(-1) translateY(-6px); }
-          14% { left: 26%; transform: scaleX(-1) translateY(0); }
-          19% { left: 36%; transform: scaleX(-1) translateY(-6px); }
-          21% { left: 39%; transform: scaleX(-1) translateY(0); }
-          26% { left: 49%; transform: scaleX(-1) translateY(-6px); }
-          28% { left: 52%; transform: scaleX(-1) translateY(0); }
-          30% { left: 52%; transform: scaleX(-1) translateY(0) scale(1.1); }
-          35% { left: 52%; transform: scaleX(-1) translateY(0) scale(1.0); }
-          40% { left: 52%; transform: scaleX(-1) translateY(0) scale(1.1); }
-          45% { left: 52%; transform: scaleX(-1) translateY(0) scale(1.0); }
-          50% { left: 52%; transform: scaleX(-1) translateY(0); }
-          55% { left: 62%; transform: scaleX(-1) translateY(-6px); }
-          57% { left: 65%; transform: scaleX(-1) translateY(0); }
-          62% { left: 75%; transform: scaleX(-1) translateY(-6px); }
-          64% { left: 78%; transform: scaleX(-1) translateY(0); }
-          69% { left: 88%; transform: scaleX(-1) translateY(-6px); }
-          71% { left: 91%; transform: scaleX(-1) translateY(0); }
-          76% { left: 96%; transform: scaleX(-1) translateY(-6px); }
-          78% { left: 99%; transform: scaleX(-1) translateY(0); }
-          83% { left: 100%; transform: scaleX(-1) translateY(0); }
-          100% { left: 100%; transform: scaleX(-1) translateY(0); }
+        @keyframes header-rabbit-lane {
+          0% { transform: translateX(-50px); }
+          5% { transform: translateX(10%); }
+          7% { transform: translateX(13%); }
+          12% { transform: translateX(23%); }
+          14% { transform: translateX(26%); }
+          19% { transform: translateX(36%); }
+          21% { transform: translateX(39%); }
+          26% { transform: translateX(49%); }
+          28% { transform: translateX(52%); }
+          30% { transform: translateX(52%); }
+          35% { transform: translateX(52%); }
+          40% { transform: translateX(52%); }
+          45% { transform: translateX(52%); }
+          50% { transform: translateX(52%); }
+          55% { transform: translateX(62%); }
+          57% { transform: translateX(65%); }
+          62% { transform: translateX(75%); }
+          64% { transform: translateX(78%); }
+          69% { transform: translateX(88%); }
+          71% { transform: translateX(91%); }
+          76% { transform: translateX(96%); }
+          78% { transform: translateX(99%); }
+          83% { transform: translateX(100%); }
+          100% { transform: translateX(100%); }
+        }
+        @keyframes header-rabbit-wiggle {
+          0% { transform: scaleX(-1) translateY(0); }
+          5% { transform: scaleX(-1) translateY(-6px); }
+          7% { transform: scaleX(-1) translateY(0); }
+          12% { transform: scaleX(-1) translateY(-6px); }
+          14% { transform: scaleX(-1) translateY(0); }
+          19% { transform: scaleX(-1) translateY(-6px); }
+          21% { transform: scaleX(-1) translateY(0); }
+          26% { transform: scaleX(-1) translateY(-6px); }
+          28% { transform: scaleX(-1) translateY(0); }
+          30% { transform: scaleX(-1) translateY(0) scale(1.1); }
+          35% { transform: scaleX(-1) translateY(0) scale(1.0); }
+          40% { transform: scaleX(-1) translateY(0) scale(1.1); }
+          45% { transform: scaleX(-1) translateY(0) scale(1.0); }
+          50% { transform: scaleX(-1) translateY(0); }
+          55% { transform: scaleX(-1) translateY(-6px); }
+          57% { transform: scaleX(-1) translateY(0); }
+          62% { transform: scaleX(-1) translateY(-6px); }
+          64% { transform: scaleX(-1) translateY(0); }
+          69% { transform: scaleX(-1) translateY(-6px); }
+          71% { transform: scaleX(-1) translateY(0); }
+          76% { transform: scaleX(-1) translateY(-6px); }
+          78% { transform: scaleX(-1) translateY(0); }
+          83% { transform: scaleX(-1) translateY(0); }
+          100% { transform: scaleX(-1) translateY(0); }
         }
       `}</style>
     </header>

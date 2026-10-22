@@ -13,6 +13,7 @@ import { CertAlert } from './CertAlert';
 import { CancelDialog } from './CancelDialog';
 import { addDelivery } from '../utils/deliveriesService';
 import type { DeliveryItem } from './Delivery';
+import type { PaymentMethod } from '../utils/deliveryPayment';
 import { finalizeSale } from '../utils/salesService';
 import type { Sale } from '../utils/salesService';
 import { printSaleReceipt, getPrinterSettings, DEFAULT_COMPANY } from '../utils/printer';
@@ -533,6 +534,11 @@ export const VendaAvulsa: React.FC<VendaAvulsaProps> = ({ styles, currentUser })
           status: 'agendada',
           items: deliveryObs.trim() ? `${itemsString}\n[OBS: ${deliveryObs.trim()}]` : itemsString,
           scheduled_time: scheduledTime,
+          payment: {
+            status: 'pago' as const,
+            method: ({ 'Dinheiro': 'dinheiro', 'Pix': 'pix', 'Cartão de Crédito': 'credito', 'Cartão de Débito': 'debito' } as Record<string, PaymentMethod>)[paymentMethod],
+            amount: Number(subtotal.toFixed(2)),
+          },
           scheduled_at: !deliveryAsap && deliveryDate && deliveryTime ? new Date(`${deliveryDate}T${deliveryTime}:00`).toISOString() : null,
           support_reason: deliveryObs.trim() ? `OBS Cliente: ${deliveryObs.trim()}` : null,
           created_at: new Date().toISOString()

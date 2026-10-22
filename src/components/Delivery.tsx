@@ -8,6 +8,9 @@ import { formatPhoneBR } from '../utils/formatters';
 import { isDeliverySpecialty } from '../utils/specialties';
 import { notifyDriver } from '../utils/push';
 import { PushSetup } from './PushSetup';
+import { DeliveryPaymentBox } from './DeliveryPaymentBox';
+import { PAYMENT_METHODS, brl, changeToGive, parseMoney, paymentText, stripPaymentTag, validatePayment } from '../utils/deliveryPayment';
+import type { DeliveryPayment, PaymentMethod } from '../utils/deliveryPayment';
 import { subscribeDeliveries, syncDeliveries, patchDelivery } from '../utils/deliveriesService';
 import { collection, doc, getDocs, setDoc } from 'firebase/firestore';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, updateProfile } from 'firebase/auth';
@@ -80,6 +83,8 @@ export interface DeliveryItem {
   /** Horário marcado em formato exato (ISO); vazio = "o mais breve possível". */
   scheduled_at?: string | null;
   start_request?: StartRequest | null;
+  /** Como a entrega é paga (já paga ou a cobrar na porta, com forma de pagamento e troco). */
+  payment?: DeliveryPayment | null;
 }
 
 const PETSHOP_COORDS = { lat: -22.9122, lng: -43.5606 }; // Rua Dr. Ibraim Hannas, 406 - Campo Grande
@@ -178,6 +183,15 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
   const [deliveryTime, setDeliveryTime] = useState<string>('');
   const [deliveryObs, setDeliveryObs] = useState<string>('');
   const [paymentStatus, setPaymentStatus] = useState<string>('Já Pago');
+  const [payMethod, setPayMethod] = useState<PaymentMethod | ''>('');
+  const [needsChange, setNeedsChange] = useState<boolean>(false);
+  const [changeFor, setChangeFor] = useState<string>('');
+  const resetPaymentForm = () => {
+    setPaymentStatus('Já Pago');
+    setPayMethod('');
+    setNeedsChange(false);
+    setChangeFor('');
+  };
   const [deliverySlots, setDeliverySlots] = useState<{days: {value: string, label: string}[], timesByDay: Record<string, string[]>}>({days: [], timesByDay: {}});
 
   // New Client Modal states
@@ -896,6 +910,19 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
     if (!addressStreet.trim()) missing.push('a Rua/Avenida');
     if (!addressNumber.trim()) missing.push('o Número do endereço (se o local não tiver número, digite S/N)');
     if (!addressNeighborhood.trim()) missing.push('o Bairro');
+
+    // Pagamento: já pago, ou a receber na porta (forma de pagamento e, se for dinheiro, o troco)
+    const cartTotal = cart.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
+    const payment: DeliveryPayment = paymentStatus === 'Já Pago'
+      ? { status: 'pago' }
+      : {
+          status: 'receber',
+          method: payMethod || undefined,
+          amount: Number(cartTotal.toFixed(2)),
+          ...(payMethod === 'dinheiro' ? { needs_change: needsChange, ...(needsChange ? { change_for: parseMoney(changeFor) } : {}) } : {}),
+        };
+    const paymentProblem = validatePayment(payment);
+    if (paymentProblem && cart.length > 0) missing.push(paymentProblem);
     if (missing.length > 0) {
       alert(`Ainda falta preencher:\n\n• ${missing.join('\n• ')}`);
       return;
@@ -905,7 +932,7 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
     if (deliveryObs.trim()) {
       itemsWithObsAndPayment += `\n[OBS: ${deliveryObs.trim()}]`;
     }
-    itemsWithObsAndPayment += `\n[PGTO: ${paymentStatus}]`;
+    itemsWithObsAndPayment += `\n[PGTO: ${paymentText(payment)}]`;
 
     const client = clients.find(c => c.id === formClientId);
     const driver = drivers.find(d => d.id === formDriverId);
@@ -924,6 +951,7 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
       status: 'agendada',
       items: itemsWithObsAndPayment,
       scheduled_time: scheduledTime,
+      payment,
       scheduled_at: !deliveryAsap && deliveryDate && deliveryTime ? new Date(`${deliveryDate}T${deliveryTime}:00`).toISOString() : null,
       created_at: new Date().toISOString()
     };
@@ -956,7 +984,7 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
         setDeliveryDate('');
         setDeliveryTime('');
         setDeliveryObs('');
-        setPaymentStatus('Já Pago');
+        resetPaymentForm();
         setAddressLat(PETSHOP_COORDS.lat);
         setAddressLng(PETSHOP_COORDS.lng);
         await logAction(currentUser?.email || '', currentUser?.name || 'Gerente', 'Agendamento de Entrega', `Nova entrega criada.`);
@@ -988,7 +1016,7 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
     setDeliveryDate('');
     setDeliveryTime('');
     setDeliveryObs('');
-    setPaymentStatus('Já Pago');
+    resetPaymentForm();
     setAddressLat(PETSHOP_COORDS.lat);
     setAddressLng(PETSHOP_COORDS.lng);
 
@@ -1924,8 +1952,9 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
                       Endereço: {d.client_address}
                     </div>
                     <div style={{ fontSize: '0.8rem', color: styles.sidebarWidgetText?.color }}>
-                      Itens: {d.items}
+                      Itens: {d.payment ? stripPaymentTag(d.items) : d.items}
                     </div>
+                    <DeliveryPaymentBox payment={d.payment} />
 
                     {d.support_reason && (
                       <div style={{
@@ -2302,7 +2331,10 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
                               </div>
                             )}
                           </td>
-                          <td style={{ padding: '12px 6px' }}>{d.items}</td>
+                          <td style={{ padding: '12px 6px' }}>
+                            {d.payment ? stripPaymentTag(d.items) : d.items}
+                            {d.payment && <div style={{ marginTop: '4px' }}><DeliveryPaymentBox payment={d.payment} compact /></div>}
+                          </td>
                           <td style={{ padding: '12px 6px' }}>
                             {d.driver_id ? (
                               d.driver_name
@@ -2662,6 +2694,95 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
                   </button>
                 </div>
               </div>
+
+              {paymentStatus === 'A Receber na Entrega' && (() => {
+                const total = cart.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
+                const changeValue = parseMoney(changeFor);
+                const troco = Number.isFinite(changeValue) ? Math.max(0, changeValue - total) : 0;
+                return (
+                  <div style={{ border: `1px solid ${styles.borderColor}`, borderRadius: '10px', padding: '12px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: '6px' }}>
+                      <span style={{ fontSize: '0.85rem', fontWeight: 700, color: styles.textMain }}>Valor a cobrar do cliente</span>
+                      <strong style={{ fontSize: '1.15rem', color: styles.textMain }}>
+                        {cart.length > 0 ? brl(total) : <span style={{ fontSize: '0.8rem', fontWeight: 600, color: styles.sidebarWidgetText?.color }}>adicione os produtos</span>}
+                      </strong>
+                    </div>
+
+                    <div>
+                      <span style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, marginBottom: '6px', color: styles.textMain }}>Como o cliente vai pagar? *</span>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 130px), 1fr))', gap: '8px' }}>
+                        {PAYMENT_METHODS.map(m => (
+                          <button
+                            key={m.id}
+                            type="button"
+                            onClick={() => { setPayMethod(m.id); if (m.id !== 'dinheiro') { setNeedsChange(false); setChangeFor(''); } }}
+                            style={{
+                              padding: '9px 8px', borderRadius: '8px', border: '1px solid', cursor: 'pointer', fontSize: '0.82rem',
+                              borderColor: payMethod === m.id ? styles.primary : styles.borderColor,
+                              backgroundColor: payMethod === m.id ? (styles.isDark ? '#334155' : '#e2e8f0') : 'transparent',
+                              color: payMethod === m.id ? styles.primary : styles.textMain,
+                              fontWeight: payMethod === m.id ? 700 : 600,
+                            }}
+                          >
+                            {m.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {payMethod === 'dinheiro' && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        <span style={{ fontSize: '0.8rem', fontWeight: 700, color: styles.textMain }}>O cliente precisa de troco?</span>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                          {[{ v: false, label: 'Não precisa' }, { v: true, label: 'Sim, precisa de troco' }].map(o => (
+                            <button
+                              key={String(o.v)}
+                              type="button"
+                              onClick={() => { setNeedsChange(o.v); if (!o.v) setChangeFor(''); }}
+                              style={{
+                                padding: '9px 8px', borderRadius: '8px', border: '1px solid', cursor: 'pointer', fontSize: '0.82rem',
+                                borderColor: needsChange === o.v ? styles.primary : styles.borderColor,
+                                backgroundColor: needsChange === o.v ? (styles.isDark ? '#334155' : '#e2e8f0') : 'transparent',
+                                color: needsChange === o.v ? styles.primary : styles.textMain,
+                                fontWeight: needsChange === o.v ? 700 : 600,
+                              }}
+                            >
+                              {o.label}
+                            </button>
+                          ))}
+                        </div>
+                        {needsChange && (
+                          <div style={styles.formGroup}>
+                            <label htmlFor="change-for" style={styles.formLabel}>Troco para quanto? (valor da nota do cliente)</label>
+                            <input
+                              id="change-for"
+                              type="text"
+                              inputMode="decimal"
+                              placeholder="Ex.: 200"
+                              value={changeFor}
+                              onChange={(e) => setChangeFor(e.target.value)}
+                              style={{ ...styles.formInput, width: '100%', minWidth: 0 }}
+                            />
+                            {Number.isFinite(changeValue) && changeValue > 0 && (
+                              cart.length === 0 ? (
+                                <span style={{ fontSize: '0.78rem', fontWeight: 600, color: styles.sidebarWidgetText?.color }}>Adicione os produtos para calcular o troco.</span>
+                              ) : (
+                                <span style={{ fontSize: '0.78rem', fontWeight: 600, color: changeValue >= total ? 'hsl(142,60%,28%)' : 'hsl(0,75%,45%)' }}>
+                                  {changeValue >= total ? `O entregador vai levar ${brl(troco)} de troco.` : `O valor precisa ser igual ou maior que ${brl(total)}.`}
+                                </span>
+                              )
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {(payMethod === 'debito' || payMethod === 'credito') && (
+                      <span style={{ fontSize: '0.78rem', color: styles.sidebarWidgetText?.color }}>💳 O entregador será avisado para levar a maquininha.</span>
+                    )}
+                  </div>
+                );
+              })()}
 
               {/* Endereço de Entrega */}
               <div style={{ border: `1px solid ${styles.borderColor}`, borderRadius: '10px', padding: '12px', marginBottom: '16px' }}>
@@ -3052,7 +3173,8 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
                     Detalhes do Pedido
                   </div>
                   <div style={{ marginBottom: '6px' }}><span style={{ color: styles.sidebarWidgetText?.color }}>Cliente:</span> <strong>{trackingDelivery.client_name}</strong></div>
-                  <div style={{ marginBottom: '6px' }}><span style={{ color: styles.sidebarWidgetText?.color }}>Itens:</span> <strong>{trackingDelivery.items}</strong></div>
+                  <div style={{ marginBottom: '6px' }}><span style={{ color: styles.sidebarWidgetText?.color }}>Itens:</span> <strong>{trackingDelivery.payment ? stripPaymentTag(trackingDelivery.items) : trackingDelivery.items}</strong></div>
+                  {trackingDelivery.payment && <div style={{ marginBottom: '8px' }}><DeliveryPaymentBox payment={trackingDelivery.payment} /></div>}
                   <div style={{ marginBottom: '6px' }}><span style={{ color: styles.sidebarWidgetText?.color }}>Entregador:</span> <strong>{trackingDelivery.driver_name || 'Não atribuído'}</strong></div>
                   <div style={{ marginBottom: '6px' }}><span style={{ color: styles.sidebarWidgetText?.color }}>Horário:</span> <strong>{trackingDelivery.scheduled_time}</strong></div>
                 </div>
