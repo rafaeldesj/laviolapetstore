@@ -180,6 +180,8 @@ export interface MockProduct {
   quantity: number;
   min_stock: number;
   sku: string;
+  /** Unidade de venda: UN (padrão), KG ou LT. KG e LT permitem frações (venda a granel). */
+  unit?: string;
   created_at: string;
 }
 
@@ -304,6 +306,8 @@ export interface Product {
   quantity: number;
   min_stock: number;
   sku: string;
+  /** Unidade de venda: UN (padrão), KG ou LT. KG e LT permitem frações (venda a granel). */
+  unit?: string;
   created_at: string;
 }
 

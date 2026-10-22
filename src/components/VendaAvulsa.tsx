@@ -11,6 +11,8 @@ import { DeliveryMap, type MapAddress } from './DeliveryMap';
 import { PrinterStatus } from './PrinterStatus';
 import { CertAlert } from './CertAlert';
 import { CancelDialog } from './CancelDialog';
+import { QuantityDialog } from './QuantityDialog';
+import { UNIT_OPTIONS, describeItem, formatQty, isFractional, lineTotal, priceLabel, roundQty, unitShort } from '../utils/units';
 import { addDelivery } from '../utils/deliveriesService';
 import type { DeliveryItem } from './Delivery';
 import type { PaymentMethod } from '../utils/deliveryPayment';
@@ -175,6 +177,9 @@ export const VendaAvulsa: React.FC<VendaAvulsaProps> = ({ styles, currentUser })
   const [regCostPrice, setRegCostPrice] = useState<string>('');
   const [regQuantity, setRegQuantity] = useState<string>('10');
   const [regMinStock, setRegMinStock] = useState<string>('2');
+  const [regUnit, setRegUnit] = useState<string>('UN');
+  // Produto vendido por peso: pergunta quanto vai levar antes de entrar no carrinho.
+  const [qtyDialog, setQtyDialog] = useState<{ product: Product; mode: 'add' | 'edit' } | null>(null);
   const [regNcm, setRegNcm] = useState<string>('');
   const [regOrigin, setRegOrigin] = useState<string>('0'); // Nacional
 
@@ -276,8 +281,9 @@ export const VendaAvulsa: React.FC<VendaAvulsaProps> = ({ styles, currentUser })
   }, [cart]);
 
   // Compute Cart Calculations
-  const totalItems = cart.reduce((acc, item) => acc + item.quantity, 0);
-  const subtotal = cart.reduce((acc, item) => acc + (item.product.price * item.quantity), 0);
+  // Produto a granel conta como 1 item (o peso não entra na contagem de itens)
+  const totalItems = cart.reduce((acc, item) => acc + (isFractional(item.product.unit) ? 1 : item.quantity), 0);
+  const subtotal = cart.reduce((acc, item) => acc + lineTotal(item.product.price, item.quantity), 0);
   const changeDue = amountPaid && parseFloat(amountPaid) >= subtotal 
     ? parseFloat(amountPaid) - subtotal 
     : 0;
@@ -311,6 +317,12 @@ export const VendaAvulsa: React.FC<VendaAvulsaProps> = ({ styles, currentUser })
 
   // Add product to shopping cart
   const addToCart = (product: Product) => {
+    if (isFractional(product.unit)) {
+      setQtyDialog({ product, mode: 'add' });
+      setSearchQuery('');
+      setIsSearching(false);
+      return;
+    }
     setCart(prev => {
       const existing = prev.find(item => item.product.id === product.id);
       if (existing) {
@@ -325,6 +337,20 @@ export const VendaAvulsa: React.FC<VendaAvulsaProps> = ({ styles, currentUser })
     });
     setSearchQuery('');
     setIsSearching(false);
+  };
+
+  const confirmQuantity = (qty: number) => {
+    if (!qtyDialog) return;
+    const { product, mode } = qtyDialog;
+    setCart(prev => {
+      const existing = prev.find(item => item.product.id === product.id);
+      if (mode === 'edit' && existing) return prev.map(item => (item.product.id === product.id ? { ...item, quantity: qty } : item));
+      if (existing) return prev.map(item => (item.product.id === product.id ? { ...item, quantity: roundQty(item.quantity + qty) } : item));
+      return [...prev, { product, quantity: qty }];
+    });
+    setQtyDialog(null);
+    playBeep();
+    skuInputRef.current?.focus();
   };
 
   // Modify cart quantity
@@ -358,6 +384,7 @@ export const VendaAvulsa: React.FC<VendaAvulsaProps> = ({ styles, currentUser })
     setRegCostPrice('');
     setRegQuantity('10');
     setRegMinStock('2');
+    setRegUnit('UN');
     setRegCategory('Outros');
     setRegNcm('');
     setRegOrigin('0');
@@ -372,8 +399,8 @@ export const VendaAvulsa: React.FC<VendaAvulsaProps> = ({ styles, currentUser })
     }
     const priceNum = parseFloat(regPrice) || 0;
     const costPriceNum = parseFloat(regCostPrice) || 0;
-    const qtyNum = parseInt(regQuantity) || 0;
-    const minStockNum = parseInt(regMinStock) || 0;
+    const qtyNum = roundQty(Number(regQuantity.replace(',', '.')) || 0);
+    const minStockNum = roundQty(Number(regMinStock.replace(',', '.')) || 0);
     const skuCode = regSku.trim() || Math.floor(100000000000 + Math.random() * 900000000000).toString();
 
     // Base database fields (avoid sending missing columns ncm and origin to Supabase directly)
@@ -385,6 +412,7 @@ export const VendaAvulsa: React.FC<VendaAvulsaProps> = ({ styles, currentUser })
       cost_price: costPriceNum,
       quantity: qtyNum,
       min_stock: minStockNum,
+      unit: regUnit,
       sku: skuCode
     };
 
@@ -469,8 +497,9 @@ export const VendaAvulsa: React.FC<VendaAvulsaProps> = ({ styles, currentUser })
       name: item.product.name,
       sku: item.product.sku,
       price: item.product.price,
-      quantity: item.quantity,
-      subtotal: Number((item.product.price * item.quantity).toFixed(2)),
+      quantity: roundQty(item.quantity),
+      unit: item.product.unit || 'UN',
+      subtotal: lineTotal(item.product.price, item.quantity),
       ncm: (item.product as ProductWithNF).ncm || '',
       origin: (item.product as ProductWithNF).origin || '0'
     }));
@@ -502,7 +531,7 @@ export const VendaAvulsa: React.FC<VendaAvulsaProps> = ({ styles, currentUser })
         fiscal: null
       });
 
-      const itemsString = saleItems.map(i => `${i.quantity}x ${i.name}`).join(', ');
+      const itemsString = saleItems.map(i => describeItem(i.quantity, i.unit, i.name)).join(', ');
       const clientString = clientName ? ` (Cliente: ${clientName} - CPF: ${clientCPF})` : ' (Consumidor Não Identificado)';
       await logAction(
         currentUser.email || '',
@@ -756,8 +785,8 @@ export const VendaAvulsa: React.FC<VendaAvulsaProps> = ({ styles, currentUser })
                           <span style={{ fontSize: '0.7rem', color: styles.sidebarWidgetText?.color }}>SKU: {product.sku || 'Sem SKU'}</span>
                         </div>
                         <div style={{ textAlign: 'right' }}>
-                          <strong style={{ color: styles.primary, fontSize: '0.85rem' }}>R$ {product.price.toFixed(2)}</strong>
-                          <div style={{ fontSize: '0.7rem', color: product.quantity === 0 ? 'red' : styles.sidebarWidgetText?.color }}>Estoque: {product.quantity}</div>
+                          <strong style={{ color: styles.primary, fontSize: '0.85rem' }}>{priceLabel(product.price, product.unit)}</strong>
+                          <div style={{ fontSize: '0.7rem', color: product.quantity === 0 ? 'red' : styles.sidebarWidgetText?.color }}>Estoque: {formatQty(product.quantity, product.unit)}</div>
                         </div>
                       </button>
                     ))
@@ -818,8 +847,18 @@ export const VendaAvulsa: React.FC<VendaAvulsaProps> = ({ styles, currentUser })
                             <div style={{ fontWeight: 600 }}>{item.product.name}</div>
                             <span style={{ fontSize: '0.68rem', color: styles.sidebarWidgetText?.color }}>SKU: {item.product.sku}</span>
                           </td>
-                          <td style={{ padding: '10px 4px', fontWeight: 600 }}>R$ {item.product.price.toFixed(2)}</td>
+                          <td style={{ padding: '10px 4px', fontWeight: 600 }}>{priceLabel(item.product.price, item.product.unit)}</td>
                           <td style={{ padding: '10px 4px', textAlign: 'center' }}>
+                            {isFractional(item.product.unit) ? (
+                              <button
+                                type="button"
+                                onClick={() => setQtyDialog({ product: item.product, mode: 'edit' })}
+                                title="Alterar a quantidade"
+                                style={{ border: `1px solid ${styles.borderColor}`, background: 'none', cursor: 'pointer', borderRadius: '8px', padding: '4px 8px', fontWeight: 700, fontSize: '0.82rem', color: styles.textMain }}
+                              >
+                                {formatQty(item.quantity, item.product.unit)} ✎
+                              </button>
+                            ) : (
                             <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', backgroundColor: styles.isDark ? '#26293b' : '#eaecef', borderRadius: '6px', padding: '2px 6px' }}>
                               <button 
                                 onClick={() => updateQuantity(item.product.id, -1)}
@@ -835,9 +874,10 @@ export const VendaAvulsa: React.FC<VendaAvulsaProps> = ({ styles, currentUser })
                                 <Plus size={12} />
                               </button>
                             </div>
+                          )}
                           </td>
                           <td style={{ padding: '10px 4px', textAlign: 'right', fontWeight: 700, color: styles.primary }}>
-                            R$ {(item.product.price * item.quantity).toFixed(2)}
+                            R$ {lineTotal(item.product.price, item.quantity).toFixed(2)}
                           </td>
                           <td style={{ padding: '10px 4px', textAlign: 'center' }}>
                             <button
@@ -1254,6 +1294,18 @@ export const VendaAvulsa: React.FC<VendaAvulsaProps> = ({ styles, currentUser })
         </div>
       )}
 
+      {qtyDialog && (
+        <QuantityDialog
+          styles={styles}
+          product={qtyDialog.product}
+          mode={qtyDialog.mode}
+          alreadyInCart={cart.find(i => i.product.id === qtyDialog.product.id)?.quantity || 0}
+          initialQty={cart.find(i => i.product.id === qtyDialog.product.id)?.quantity}
+          onConfirm={confirmQuantity}
+          onClose={() => { setQtyDialog(null); skuInputRef.current?.focus(); }}
+        />
+      )}
+
       {/* MODAL: CADASTRO EXPRESSO DE PRODUTO */}
       {isRegisterOpen && (
         <div style={styles.modalOverlay}>
@@ -1333,6 +1385,21 @@ export const VendaAvulsa: React.FC<VendaAvulsaProps> = ({ styles, currentUser })
                 </div>
               </div>
 
+              {/* Unidade de venda */}
+              <div style={styles.formGroup}>
+                <label htmlFor="reg-unit" style={styles.formLabel}>Unidade de venda</label>
+                <select id="reg-unit" value={regUnit} onChange={(e) => setRegUnit(e.target.value)} style={styles.formInput}>
+                  {UNIT_OPTIONS.map(u => (
+                    <option key={u.id} value={u.id}>{u.label}</option>
+                  ))}
+                </select>
+                {isFractional(regUnit) && (
+                  <span style={{ fontSize: '0.72rem', color: styles.sidebarWidgetText?.color }}>
+                    Venda a granel: preço e estoque são por {unitShort(regUnit)}.
+                  </span>
+                )}
+              </div>
+
               {/* Price & Cost Price */}
               <div style={{ display: 'flex', gap: '12px' }}>
                 <div style={{ ...styles.formGroup, flex: '1 1 50%' }}>
@@ -1369,6 +1436,7 @@ export const VendaAvulsa: React.FC<VendaAvulsaProps> = ({ styles, currentUser })
                   <input
                     id="reg-qty"
                     type="number"
+                    step="any"
                     value={regQuantity}
                     onChange={(e) => setRegQuantity(e.target.value)}
                     style={styles.formInput}
@@ -1379,6 +1447,7 @@ export const VendaAvulsa: React.FC<VendaAvulsaProps> = ({ styles, currentUser })
                   <input
                     id="reg-min"
                     type="number"
+                    step="any"
                     value={regMinStock}
                     onChange={(e) => setRegMinStock(e.target.value)}
                     style={styles.formInput}
@@ -1496,7 +1565,7 @@ export const VendaAvulsa: React.FC<VendaAvulsaProps> = ({ styles, currentUser })
               <div style={{ borderBottom: '1px dashed #ccc', margin: '8px 0' }}></div>
               {lastSaleSummary.items.map((item: any) => (
                 <div key={item.sku} style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span>{item.quantity}x {item.name.substring(0, 24)}</span>
+                  <span>{describeItem(item.quantity, item.unit, item.name.substring(0, 24))}</span>
                   <span>R$ {item.subtotal.toFixed(2)}</span>
                 </div>
               ))}

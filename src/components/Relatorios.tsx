@@ -66,7 +66,7 @@ export const Relatorios: React.FC<RelatoriosProps> = ({ styles }) => {
         if (data) loadedProducts = data;
       }
       totalStockItems = loadedProducts.reduce((acc, p) => acc + (p.quantity || 0), 0);
-      setStockTotal(totalStockItems);
+      setStockTotal(Math.round(totalStockItems * 1000) / 1000);
 
       // 4. Calculate Revenue & Payment/Category Stats from Sales
       const pdvSales: any[] = (await fetchSales().catch((): any[] => [])).filter(sale => !sale.voided);

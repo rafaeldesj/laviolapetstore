@@ -1,6 +1,7 @@
 import { collection, doc, getDocs, runTransaction, setDoc, updateDoc } from 'firebase/firestore';
 import { auth, db } from '../firebaseClient';
 import type { ReceiptFiscal, ReceiptItem } from './printer';
+import { roundQty } from './units';
 
 export interface SaleItem extends ReceiptItem {
   product_id: string;
@@ -49,7 +50,7 @@ export async function finalizeSale(sale: Omit<Sale, 'id' | 'number'>): Promise<S
 
   // Soma quantidades por produto (o mesmo produto pode aparecer em mais de uma linha).
   const qtyByProduct = new Map<string, number>();
-  sale.items.forEach(i => qtyByProduct.set(i.product_id, (qtyByProduct.get(i.product_id) || 0) + i.quantity));
+  sale.items.forEach(i => qtyByProduct.set(i.product_id, roundQty((qtyByProduct.get(i.product_id) || 0) + i.quantity)));
 
   await runTransaction(firestore, async (tx) => {
     const refs = [...qtyByProduct.keys()].map(id => doc(firestore, 'products', id));
@@ -63,7 +64,7 @@ export async function finalizeSale(sale: Omit<Sale, 'id' | 'number'>): Promise<S
       if (current < wanted) {
         throw new Error(`Estoque insuficiente de "${snap.data().name}": disponível ${current}, na venda ${wanted}.`);
       }
-      tx.update(refs[idx], { quantity: current - wanted });
+      tx.update(refs[idx], { quantity: roundQty(current - wanted) });
     });
 
     tx.set(saleRef, saved);
@@ -85,13 +86,13 @@ export async function voidSale(sale: Sale, reason: string): Promise<Sale> {
     if (current.voided) return { ...sale, ...current };
 
     const qtyByProduct = new Map<string, number>();
-    current.items.forEach(i => qtyByProduct.set(i.product_id, (qtyByProduct.get(i.product_id) || 0) + i.quantity));
+    current.items.forEach(i => qtyByProduct.set(i.product_id, roundQty((qtyByProduct.get(i.product_id) || 0) + i.quantity)));
     const refs = [...qtyByProduct.keys()].map(id => doc(firestore, 'products', id));
     const snaps = await Promise.all(refs.map(r => tx.get(r)));
 
     snaps.forEach((snap, idx) => {
       // Produto apagado do estoque depois da venda: não há o que devolver.
-      if (snap.exists()) tx.update(refs[idx], { quantity: (Number(snap.data().quantity) || 0) + (qtyByProduct.get(refs[idx].id) || 0) });
+      if (snap.exists()) tx.update(refs[idx], { quantity: roundQty((Number(snap.data().quantity) || 0) + (qtyByProduct.get(refs[idx].id) || 0)) });
     });
 
     const patch = {

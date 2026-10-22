@@ -4,6 +4,7 @@ import { supabase, mockSupabaseDb, isSupabaseConfigured, logAction } from '../su
 import type { Product } from '../supabaseClient';
 import { useAuth } from '../hooks/useAuth';
 import { NcmImportModal } from './NcmImportModal';
+import { UNIT_OPTIONS, formatQty, isFractional, priceLabel, roundQty, unitShort } from '../utils/units';
 
 interface EstoqueProps {
   styles: any;
@@ -33,8 +34,11 @@ export const Estoque: React.FC<EstoqueProps> = ({ styles }) => {
   const [brand, setBrand] = useState<string>('');
   const [price, setPrice] = useState<number>(0);
   const [costPrice, setCostPrice] = useState<number>(0);
-  const [quantity, setQuantity] = useState<number>(0);
-  const [minStock, setMinStock] = useState<number>(0);
+  // Texto (não número) para aceitar "0,350" enquanto se digita.
+  const [quantity, setQuantity] = useState<string>('0');
+  const [minStock, setMinStock] = useState<string>('0');
+  const [unit, setUnit] = useState<string>('UN');
+  const toNum = (v: string): number => { const n = Number(String(v).replace(',', '.')); return Number.isFinite(n) ? n : 0; };
   const [sku, setSku] = useState<string>('');
   const [isNcmImportOpen, setIsNcmImportOpen] = useState<boolean>(false);
   const [ncm, setNcm] = useState<string>('');
@@ -81,8 +85,9 @@ export const Estoque: React.FC<EstoqueProps> = ({ styles }) => {
     setBrand('');
     setPrice(0);
     setCostPrice(0);
-    setQuantity(0);
-    setMinStock(0);
+    setQuantity('0');
+    setMinStock('0');
+    setUnit('UN');
     setSku('');
     setNcm('');
     setOrigin('0');
@@ -96,8 +101,9 @@ export const Estoque: React.FC<EstoqueProps> = ({ styles }) => {
     setBrand(product.brand || '');
     setPrice(product.price);
     setCostPrice(product.cost_price);
-    setQuantity(product.quantity);
-    setMinStock(product.min_stock);
+    setQuantity(String(product.quantity).replace('.', ','));
+    setMinStock(String(product.min_stock).replace('.', ','));
+    setUnit(product.unit || 'UN');
     setSku(product.sku || '');
     setNcm((product as Product & { ncm?: string }).ncm || '');
     setOrigin((product as Product & { origin?: string }).origin || '0');
@@ -119,8 +125,9 @@ export const Estoque: React.FC<EstoqueProps> = ({ styles }) => {
       brand: brand.trim(),
       price: Number(price) || 0,
       cost_price: Number(costPrice) || 0,
-      quantity: Number(quantity) || 0,
-      min_stock: Number(minStock) || 0,
+      quantity: roundQty(toNum(quantity)),
+      min_stock: roundQty(toNum(minStock)),
+      unit,
       sku: sku.trim(),
       ncm: ncm.replace(/\D/g, ''),
       origin
@@ -513,11 +520,11 @@ export const Estoque: React.FC<EstoqueProps> = ({ styles }) => {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', margin: '8px 0' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
                     <span style={{ color: styles.sidebarWidgetText?.color }}>Preço Venda:</span>
-                    <strong style={{ color: styles.textMain }}>R$ {product.price.toFixed(2)}</strong>
+                    <strong style={{ color: styles.textMain }}>{priceLabel(product.price, product.unit)}</strong>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
                     <span style={{ color: styles.sidebarWidgetText?.color }}>Preço Custo:</span>
-                    <span style={{ color: styles.textMuted || styles.sidebarWidgetText?.color }}>R$ {product.cost_price.toFixed(2)}</span>
+                    <span style={{ color: styles.textMuted || styles.sidebarWidgetText?.color }}>{priceLabel(product.cost_price, product.unit)}</span>
                   </div>
                   
                   <hr style={{ border: 'none', borderTop: `1px solid ${styles.borderColor}`, margin: '4px 0' }} />
@@ -528,7 +535,7 @@ export const Estoque: React.FC<EstoqueProps> = ({ styles }) => {
                       fontSize: '1.15rem',
                       color: isOut ? 'hsl(0, 75%, 55%)' : (isLow ? 'hsl(36, 95%, 50%)' : styles.primary)
                     }}>
-                      {product.quantity}
+                      {formatQty(product.quantity, product.unit)}
                     </strong>
                   </div>
 
@@ -620,9 +627,28 @@ export const Estoque: React.FC<EstoqueProps> = ({ styles }) => {
                 </div>
               </div>
 
+              <div style={styles.formGroup}>
+                <label htmlFor="prod-unit" style={styles.formLabel}>Unidade de venda *</label>
+                <select
+                  id="prod-unit"
+                  value={unit}
+                  onChange={(e) => setUnit(e.target.value)}
+                  style={styles.formInput}
+                >
+                  {UNIT_OPTIONS.map(u => (
+                    <option key={u.id} value={u.id}>{u.label}</option>
+                  ))}
+                </select>
+                <span style={{ fontSize: '0.75rem', color: styles.sidebarWidgetText?.color }}>
+                  {isFractional(unit)
+                    ? `Venda a granel: o caixa pergunta quanto o cliente leva (ex.: 0,350 ${unitShort(unit)}) e o estoque baixa em frações. Preços e estoque abaixo são por ${unitShort(unit)}.`
+                    : 'Vendido por unidade inteira (ex.: 1 pacote). Para vender por peso, escolha KG.'}
+                </span>
+              </div>
+
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
                 <div style={styles.formGroup}>
-                  <label htmlFor="prod-cost" style={styles.formLabel}>Preço Custo (R$) *</label>
+                  <label htmlFor="prod-cost" style={styles.formLabel}>Preço Custo (R$){isFractional(unit) ? ` por ${unitShort(unit)}` : ''} *</label>
                   <input
                     id="prod-cost"
                     type="number"
@@ -636,7 +662,7 @@ export const Estoque: React.FC<EstoqueProps> = ({ styles }) => {
                   />
                 </div>
                 <div style={styles.formGroup}>
-                  <label htmlFor="prod-price" style={styles.formLabel}>Preço Venda (R$) *</label>
+                  <label htmlFor="prod-price" style={styles.formLabel}>Preço Venda (R$){isFractional(unit) ? ` por ${unitShort(unit)}` : ''} *</label>
                   <input
                     id="prod-price"
                     type="number"
@@ -651,27 +677,36 @@ export const Estoque: React.FC<EstoqueProps> = ({ styles }) => {
                 </div>
               </div>
 
+              {price > 0 && costPrice > 0 && (
+                <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', fontSize: '0.8rem', fontWeight: 600, color: styles.sidebarWidgetText?.color, marginTop: '-6px' }}>
+                  <span>Markup: <strong style={{ color: styles.textMain }}>{(((price - costPrice) / costPrice) * 100).toFixed(2).replace('.', ',')}%</strong></span>
+                  <span>Margem: <strong style={{ color: styles.textMain }}>{(((price - costPrice) / price) * 100).toFixed(2).replace('.', ',')}%</strong></span>
+                </div>
+              )}
+
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
                 <div style={styles.formGroup}>
-                  <label htmlFor="prod-qty" style={styles.formLabel}>Qtd em Estoque *</label>
+                  <label htmlFor="prod-qty" style={styles.formLabel}>Qtd em Estoque ({unitShort(unit)}) *</label>
                   <input
                     id="prod-qty"
-                    type="number"
-                    min="0"
+                    type="text"
+                    inputMode="decimal"
+                    pattern="[0-9]*[.,]?[0-9]*"
                     value={quantity}
-                    onChange={(e) => setQuantity(parseInt(e.target.value) || 0)}
+                    onChange={(e) => setQuantity(isFractional(unit) ? e.target.value : e.target.value.replace(/[^0-9]/g, ''))}
                     style={styles.formInput}
                     required
                   />
                 </div>
                 <div style={styles.formGroup}>
-                  <label htmlFor="prod-min" style={styles.formLabel}>Estoque Mínimo (Alerta) *</label>
+                  <label htmlFor="prod-min" style={styles.formLabel}>Estoque Mínimo ({unitShort(unit)}) *</label>
                   <input
                     id="prod-min"
-                    type="number"
-                    min="0"
+                    type="text"
+                    inputMode="decimal"
+                    pattern="[0-9]*[.,]?[0-9]*"
                     value={minStock}
-                    onChange={(e) => setMinStock(parseInt(e.target.value) || 0)}
+                    onChange={(e) => setMinStock(isFractional(unit) ? e.target.value : e.target.value.replace(/[^0-9]/g, ''))}
                     style={styles.formInput}
                     required
                   />

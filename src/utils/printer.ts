@@ -1,5 +1,7 @@
 // Impressão térmica (ESC/POS) do PDV: Bluetooth, USB-Serial (COM), USB direto (WebUSB) ou spooler do navegador.
 
+import { formatQty, isFractional, unitShort } from './units';
+
 export interface PrinterSettings {
   method: 'browser' | 'bluetooth' | 'serial' | 'usb';
   paperSize: '58mm' | '80mm';
@@ -20,6 +22,8 @@ export interface ReceiptCompany {
 export interface ReceiptItem {
   name: string;
   sku?: string;
+  /** Unidade de venda (UN, KG, LT); fracionados mostram "0,350 kg". */
+  unit?: string;
   quantity: number;
   price: number;
   subtotal: number;
@@ -476,11 +480,11 @@ function buildReceipt(sale: ReceiptSale, company: ReceiptCompany, settings: Prin
   b.bold(true).row('ITEM', 'TOTAL').bold(false);
   sale.items.forEach((it, i) => {
     b.wrap(`${String(i + 1).padStart(2, '0')} ${it.name}`);
-    b.row(`   ${it.quantity} x ${brl(it.price)}`, brl(it.subtotal));
+    b.row(`   ${formatQty(it.quantity, it.unit)} x ${brl(it.price)}${isFractional(it.unit) ? `/${unitShort(it.unit)}` : ''}`, brl(it.subtotal));
   });
   b.divider();
 
-  const qty = sale.items.reduce((a, it) => a + it.quantity, 0);
+  const qty = sale.items.reduce((a, it) => a + (isFractional(it.unit) ? 1 : it.quantity), 0);
   b.row('Qtd. itens', String(qty));
   b.bold(true).big(true).row('TOTAL', brl(sale.subtotal), 2).big(false).bold(false);
   b.row('Pagamento', sale.payment_method);

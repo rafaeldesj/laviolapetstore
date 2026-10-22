@@ -8,6 +8,7 @@ import type { FiscalSettings } from '../utils/fiscal';
 import { DEFAULT_COMPANY, printSaleReceipt } from '../utils/printer';
 import { buildMonthlyPackage, buildTotalSheet, downloadBlob, monthTotal } from '../utils/accountingExport';
 import { CancelDialog } from './CancelDialog';
+import { describeItem } from '../utils/units';
 import { CertAlert } from './CertAlert';
 
 interface NotasFiscaisProps {
@@ -304,7 +305,7 @@ export const NotasFiscais: React.FC<NotasFiscaisProps> = ({ styles, mode = 'full
                   <span style={{ marginLeft: 'auto', fontWeight: 700, fontSize: '0.82rem', color: st.color }}>{st.label}</span>
                 </div>
                 <div style={{ fontSize: '0.78rem', marginTop: '4px', color: styles.sidebarWidgetText?.color }}>
-                  {sale.items.map(i => `${i.quantity}x ${i.name}`).join(', ')}
+                  {sale.items.map(i => describeItem(i.quantity, i.unit, i.name)).join(', ')}
                 </div>
 
                 {isProblem && (

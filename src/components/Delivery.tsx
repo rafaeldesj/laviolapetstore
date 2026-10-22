@@ -7,6 +7,8 @@ import type { AuthUser } from '../hooks/useAuth';
 import { formatPhoneBR } from '../utils/formatters';
 import { isDeliverySpecialty } from '../utils/specialties';
 import { notifyDriver } from '../utils/push';
+import { QuantityDialog } from './QuantityDialog';
+import { describeItem, formatQty, isFractional, lineTotal, roundQty } from '../utils/units';
 import { PushSetup } from './PushSetup';
 import { DeliveryPaymentBox } from './DeliveryPaymentBox';
 import { PAYMENT_METHODS, brl, changeToGive, parseMoney, paymentText, stripPaymentTag, usesCardMachine, validatePayment } from '../utils/deliveryPayment';
@@ -758,7 +760,28 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
         (p.sku && p.sku.includes(productSearchQuery))
       );
 
+  // Produto vendido por peso: pergunta quanto vai levar antes de entrar na lista de itens.
+  const [qtyDialog, setQtyDialog] = useState<{ product: Product; mode: 'add' | 'edit' } | null>(null);
+
+  const confirmQuantity = (qty: number) => {
+    if (!qtyDialog) return;
+    const { product, mode } = qtyDialog;
+    setCart(prev => {
+      const existing = prev.find(item => item.product.id === product.id);
+      if (mode === 'edit' && existing) return prev.map(item => (item.product.id === product.id ? { ...item, quantity: qty } : item));
+      if (existing) return prev.map(item => (item.product.id === product.id ? { ...item, quantity: roundQty(item.quantity + qty) } : item));
+      return [...prev, { product, quantity: qty }];
+    });
+    setQtyDialog(null);
+  };
+
   const addToCart = (product: Product) => {
+    if (isFractional(product.unit)) {
+      setQtyDialog({ product, mode: 'add' });
+      setProductSearchQuery('');
+      setIsProductSearching(false);
+      return;
+    }
     setCart(prev => {
       const existing = prev.find(item => item.product.id === product.id);
       if (existing) {
@@ -900,7 +923,7 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
       scheduledTime = `${selectedDayLabel} às ${deliveryTime}`;
     }
 
-    const generatedItemsStr = cart.map(item => `${item.quantity}x ${item.product.name}`).join(' + ');
+    const generatedItemsStr = cart.map(item => describeItem(item.quantity, item.product.unit, item.product.name)).join(' + ');
 
     // Diz exatamente o que falta, em vez de uma mensagem genérica.
     const missing: string[] = [];
@@ -912,7 +935,7 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
     if (!addressNeighborhood.trim()) missing.push('o Bairro');
 
     // Pagamento: já pago, ou a receber na porta (forma de pagamento e, se for dinheiro, o troco)
-    const cartTotal = cart.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
+    const cartTotal = cart.reduce((sum, item) => sum + lineTotal(item.product.price, item.quantity), 0);
     const payment: DeliveryPayment = paymentStatus === 'Já Pago'
       ? { status: 'pago' }
       : {
@@ -2634,6 +2657,16 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
                           <tr key={item.product.id} style={{ borderBottom: `1px solid ${styles.borderColor}`, color: styles.textMain }}>
                             <td style={{ padding: '6px' }}>{item.product.name}</td>
                             <td style={{ padding: '6px', textAlign: 'center' }}>
+                              {isFractional(item.product.unit) ? (
+                                <button
+                                  type="button"
+                                  onClick={() => setQtyDialog({ product: item.product, mode: 'edit' })}
+                                  title="Alterar a quantidade"
+                                  style={{ border: `1px solid ${styles.borderColor}`, background: 'none', cursor: 'pointer', borderRadius: '8px', padding: '3px 8px', fontWeight: 700, fontSize: '0.8rem', color: styles.textMain }}
+                                >
+                                  {formatQty(item.quantity, item.product.unit)} ✎
+                                </button>
+                              ) : (
                               <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                                 <button type="button" onClick={() => updateQuantity(item.product.id, -1)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: styles.textMain }}>
                                   <Minus size={14} />
@@ -2643,6 +2676,7 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
                                   <Plus size={14} />
                                 </button>
                               </div>
+                            )}
                             </td>
                             <td style={{ padding: '6px', textAlign: 'center' }}>
                               <button type="button" onClick={() => removeFromCart(item.product.id)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'hsl(0,75%,55%)' }}>
@@ -2696,7 +2730,7 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
               </div>
 
               {paymentStatus === 'A Receber na Entrega' && (() => {
-                const total = cart.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
+                const total = cart.reduce((sum, item) => sum + lineTotal(item.product.price, item.quantity), 0);
                 const changeValue = parseMoney(changeFor);
                 const troco = Number.isFinite(changeValue) ? Math.max(0, changeValue - total) : 0;
                 return (
@@ -3286,6 +3320,18 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
       {/* ======================================= */}
       {/* MODAL: CRIAR NOVO CLIENTE               */}
       {/* ======================================= */}
+      {qtyDialog && (
+        <QuantityDialog
+          styles={styles}
+          product={qtyDialog.product}
+          mode={qtyDialog.mode}
+          alreadyInCart={cart.find(i => i.product.id === qtyDialog.product.id)?.quantity || 0}
+          initialQty={cart.find(i => i.product.id === qtyDialog.product.id)?.quantity}
+          onConfirm={confirmQuantity}
+          onClose={() => setQtyDialog(null)}
+        />
+      )}
+
       {isClientModalOpen && (
         <div style={{ ...styles.modalOverlay, zIndex: 9999 }}>
           <div style={{ ...styles.modalContent, maxWidth: '500px', overflowX: 'hidden' }} role="dialog" aria-modal="true" aria-labelledby="create-client-title">
