@@ -336,39 +336,63 @@ export const DeliveryMap = ({ onAddressSelect, initialAddress, leftContent }: De
     };
   };
 
-  const getUserLocation = (map: L.Map) => {
+  // Explica o motivo real da falha (antes aparecia sempre a mesma mensagem genérica).
+  const describeGeoError = (err: GeolocationPositionError): string => {
+    if (err.code === 1) {
+      return 'A localização está bloqueada para este site. Clique no ícone à esquerda do endereço (cadeado) → Permissões → Localização → Permitir, e toque no botão de localização de novo.';
+    }
+    if (err.code === 3) return 'A busca da localização demorou demais. Toque no botão de localização para tentar de novo.';
+    return 'Este aparelho não conseguiu descobrir a posição. Ative a localização do Windows ou do celular e tente de novo — ou busque o endereço no campo acima.';
+  };
+
+  // `manual` = a pessoa tocou no botão de localização. Na tentativa automática ao abrir o mapa, falhar em silêncio
+  // (o operador pode estar num computador sem GPS e só quer buscar o endereço do cliente).
+  const getUserLocation = (map: L.Map, manual = false) => {
     setIsLocating(true);
     setLocationError(null);
 
     if (!navigator.geolocation) {
-      setLocationError('Geolocalização não suportada pelo navegador.');
+      if (manual) setLocationError('Geolocalização não suportada pelo navegador.');
       setIsLocating(false);
       return;
     }
 
+    const onSuccess = async (pos: GeolocationPosition) => {
+      if (!mapRef.current || mapRef.current !== map) return;
+      const { latitude, longitude } = pos.coords;
+
+      // Add blue "you are here" dot
+      if (userMarkerRef.current) userMarkerRef.current.remove();
+      const userDot = L.marker([latitude, longitude], { icon: userLocationIcon })
+        .addTo(map)
+        .bindTooltip('Você está aqui', { permanent: false, direction: 'top' });
+      userMarkerRef.current = userDot;
+
+      // Geocodifica a localização do usuário para carregar os detalhes do endereço
+      await reverseGeocode(latitude, longitude, map);
+      setIsLocating(false);
+    };
+
+    const onFinalError = (err: GeolocationPositionError) => {
+      if (!mapRef.current || mapRef.current !== map) return;
+      console.warn('Geolocation error:', err.code, err.message);
+      if (manual) setLocationError(describeGeoError(err));
+      setIsLocating(false);
+    };
+
+    // 1ª tentativa: GPS (preciso). Computadores não têm GPS e costumam estourar o tempo, então,
+    // se não foi bloqueio, tenta de novo pela rede/Wi-Fi (menos preciso, mas funciona).
     navigator.geolocation.getCurrentPosition(
-      async (pos) => {
-        if (!mapRef.current || mapRef.current !== map) return;
-        const { latitude, longitude } = pos.coords;
-
-        // Add blue "you are here" dot
-        if (userMarkerRef.current) userMarkerRef.current.remove();
-        const userDot = L.marker([latitude, longitude], { icon: userLocationIcon })
-          .addTo(map)
-          .bindTooltip('Você está aqui', { permanent: false, direction: 'top' });
-        userMarkerRef.current = userDot;
-
-        // Geocodifica a localização do usuário para carregar os detalhes do endereço
-        await reverseGeocode(latitude, longitude, map);
-        setIsLocating(false);
-      },
+      onSuccess,
       (err) => {
-        if (!mapRef.current || mapRef.current !== map) return;
-        console.warn('Geolocation error:', err.message);
-        setLocationError('Não foi possível obter sua localização exata.');
-        setIsLocating(false);
+        if (err.code === 1) return onFinalError(err);
+        navigator.geolocation.getCurrentPosition(
+          onSuccess,
+          onFinalError,
+          { timeout: 10000, maximumAge: 60000, enableHighAccuracy: false }
+        );
       },
-      { timeout: 10000, maximumAge: 0, enableHighAccuracy: true }
+      { timeout: 8000, maximumAge: 0, enableHighAccuracy: true }
     );
   };
 
@@ -607,7 +631,7 @@ export const DeliveryMap = ({ onAddressSelect, initialAddress, leftContent }: De
   };
 
   const handleLocateMe = () => {
-    if (mapRef.current) getUserLocation(mapRef.current);
+    if (mapRef.current) getUserLocation(mapRef.current, true);
   };
 
   const handleNumberChange = (val: string) => {
