@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Package, AlertTriangle, PlusCircle, Search, Filter, Trash2, Edit, Save, AlertCircle, ShoppingBag } from 'lucide-react';
+import { Package, AlertTriangle, PlusCircle, Search, Filter, Trash2, Edit, Save, AlertCircle, ShoppingBag, LayoutGrid, List, Rows3, ChevronUp, ChevronDown, ChevronRight } from 'lucide-react';
 import { supabase, mockSupabaseDb, isSupabaseConfigured, logAction } from '../supabaseClient';
 import type { Product } from '../supabaseClient';
 import { useAuth } from '../hooks/useAuth';
@@ -19,6 +19,41 @@ const categories = [
   'Brinquedos',
   'Outros'
 ];
+
+type ViewMode = 'cards' | 'lista' | 'categorias';
+type SortKey = 'name' | 'category' | 'cost' | 'price' | 'margin' | 'stock';
+
+const SORT_OPTIONS: { key: SortKey; dir: 'asc' | 'desc'; label: string }[] = [
+  { key: 'name', dir: 'asc', label: 'Nome (A → Z)' },
+  { key: 'name', dir: 'desc', label: 'Nome (Z → A)' },
+  { key: 'stock', dir: 'asc', label: 'Menor estoque primeiro' },
+  { key: 'stock', dir: 'desc', label: 'Maior estoque primeiro' },
+  { key: 'price', dir: 'asc', label: 'Menor preço de venda' },
+  { key: 'price', dir: 'desc', label: 'Maior preço de venda' },
+  { key: 'cost', dir: 'asc', label: 'Menor custo' },
+  { key: 'cost', dir: 'desc', label: 'Maior custo' },
+  { key: 'margin', dir: 'asc', label: 'Menor margem' },
+  { key: 'margin', dir: 'desc', label: 'Maior margem' },
+  { key: 'category', dir: 'asc', label: 'Categoria (A → Z)' },
+];
+
+const PAGE_SIZES = [20, 50, 100, 0]; // 0 = todos
+
+const marginOf = (p: Product): number => (p.price > 0 ? ((p.price - p.cost_price) / p.price) * 100 : 0);
+
+const readPref = <T,>(key: string, fallback: T, valid: (v: any) => boolean): T => {
+  try {
+    const raw = localStorage.getItem(key);
+    if (raw !== null) {
+      const v = JSON.parse(raw);
+      if (valid(v)) return v as T;
+    }
+  } catch { /* sem armazenamento: usa o padrão */ }
+  return fallback;
+};
+const savePref = (key: string, value: unknown) => {
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* ignora */ }
+};
 
 export const Estoque: React.FC<EstoqueProps> = ({ styles }) => {
   const { user: currentUser } = useAuth();
@@ -49,6 +84,19 @@ export const Estoque: React.FC<EstoqueProps> = ({ styles }) => {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all'); // 'all' | 'normal' | 'low' | 'out'
+
+  // Forma de ver a lista (fica salva neste computador)
+  const [viewMode, setViewMode] = useState<ViewMode>(() => readPref<ViewMode>('estoque:view', 'lista', v => ['cards', 'lista', 'categorias'].includes(v)));
+  const [sortKey, setSortKey] = useState<SortKey>(() => readPref<SortKey>('estoque:sortKey', 'name', v => SORT_OPTIONS.some(o => o.key === v)));
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>(() => readPref<'asc' | 'desc'>('estoque:sortDir', 'asc', v => v === 'asc' || v === 'desc'));
+  const [pageSize, setPageSize] = useState<number>(() => readPref<number>('estoque:pageSize', 50, v => PAGE_SIZES.includes(v)));
+  const [page, setPage] = useState<number>(1);
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+
+  useEffect(() => { savePref('estoque:view', viewMode); }, [viewMode]);
+  useEffect(() => { savePref('estoque:sortKey', sortKey); savePref('estoque:sortDir', sortDir); }, [sortKey, sortDir]);
+  useEffect(() => { savePref('estoque:pageSize', pageSize); }, [pageSize]);
+  useEffect(() => { setPage(1); }, [searchQuery, filterCategory, filterStatus, sortKey, sortDir, pageSize]);
 
   const [hoveredBtn, setHoveredBtn] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState<boolean>(false);
@@ -227,6 +275,156 @@ export const Estoque: React.FC<EstoqueProps> = ({ styles }) => {
     }
     return true;
   });
+
+  const sortedProducts = [...filteredProducts].sort((a, b) => {
+    let r = 0;
+    switch (sortKey) {
+      case 'name': r = a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' }); break;
+      case 'category': r = (a.category || '').localeCompare(b.category || '', 'pt-BR') || a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' }); break;
+      case 'cost': r = a.cost_price - b.cost_price; break;
+      case 'price': r = a.price - b.price; break;
+      case 'margin': r = marginOf(a) - marginOf(b); break;
+      case 'stock': r = a.quantity - b.quantity; break;
+    }
+    return sortDir === 'asc' ? r : -r;
+  });
+
+  const totalPages = pageSize === 0 ? 1 : Math.max(1, Math.ceil(sortedProducts.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const pagedProducts = pageSize === 0 ? sortedProducts : sortedProducts.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
+  const statusOf = (p: Product) => {
+    if (p.quantity === 0) return { color: 'hsl(0, 75%, 55%)', bg: 'rgba(255, 99, 132, 0.08)', border: 'rgba(255, 99, 132, 0.25)', label: 'Sem Estoque' };
+    if (p.quantity <= p.min_stock) return { color: 'hsl(36, 95%, 50%)', bg: 'rgba(255, 165, 0, 0.08)', border: 'rgba(255, 165, 0, 0.25)', label: 'Estoque Baixo' };
+    return { color: 'hsl(142, 60%, 40%)', bg: 'rgba(75, 192, 192, 0.08)', border: 'rgba(75, 192, 192, 0.25)', label: 'Normal' };
+  };
+
+  const clickSort = (key: SortKey) => {
+    if (sortKey === key) setSortDir(d => (d === 'asc' ? 'desc' : 'asc'));
+    else { setSortKey(key); setSortDir(key === 'name' || key === 'category' ? 'asc' : 'desc'); }
+  };
+
+  const renderRow = (product: Product) => {
+    const st = statusOf(product);
+    const margin = marginOf(product);
+    return (
+      <tr key={product.id} style={{ borderTop: `1px solid ${styles.borderColor}`, opacity: product.quantity === 0 ? 0.8 : 1 }}>
+        <td style={{ padding: '8px 10px', minWidth: 0 }}>
+          <div style={{ fontWeight: 700, color: styles.textMain, overflowWrap: 'anywhere' }}>{product.name}</div>
+          <div style={{ fontSize: '0.72rem', color: styles.sidebarWidgetText?.color, overflowWrap: 'anywhere' }}>
+            {[product.category, product.brand, product.sku && `Cód: ${product.sku}`].filter(Boolean).join(' · ')}
+          </div>
+        </td>
+        <td style={{ padding: '8px 6px', textAlign: 'right', whiteSpace: 'nowrap', color: styles.sidebarWidgetText?.color }}>{priceLabel(product.cost_price, product.unit)}</td>
+        <td style={{ padding: '8px 6px', textAlign: 'right', whiteSpace: 'nowrap', fontWeight: 700, color: styles.textMain }}>{priceLabel(product.price, product.unit)}</td>
+        <td style={{ padding: '8px 6px', textAlign: 'right', whiteSpace: 'nowrap', color: margin < 0 ? 'hsl(0, 75%, 50%)' : styles.textMain }}>{margin.toFixed(1).replace('.', ',')}%</td>
+        <td style={{ padding: '8px 6px', textAlign: 'right', whiteSpace: 'nowrap', fontWeight: 800, color: st.color }}>{formatQty(product.quantity, product.unit)}</td>
+        <td style={{ padding: '8px 6px', textAlign: 'center' }}>
+          <span style={{ fontSize: '0.66rem', fontWeight: 700, padding: '2px 8px', borderRadius: '20px', backgroundColor: st.bg, color: st.color, border: `1px solid ${st.border}`, whiteSpace: 'nowrap' }}>{st.label}</span>
+        </td>
+        <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+          <button onClick={() => handleOpenEditModal(product)} className="btn-action-icon" style={{ backgroundColor: styles.isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.06)', color: styles.textMain, marginRight: '6px' }} title="Editar Produto" aria-label={`Editar produto ${product.name}`}>
+            <Edit size={14} />
+          </button>
+          <button onClick={() => handleDeleteProduct(product)} className="btn-action-icon btn-action-danger" title="Remover Produto" aria-label={`Remover produto ${product.name}`}>
+            <Trash2 size={14} />
+          </button>
+        </td>
+      </tr>
+    );
+  };
+
+  const renderTable = () => {
+    const head = (key: SortKey | null, label: string, align: 'left' | 'right' | 'center') => (
+      <th
+        scope="col"
+        style={{ padding: '8px 6px', textAlign: align, fontSize: '0.72rem', fontWeight: 700, color: styles.sidebarWidgetText?.color, whiteSpace: 'nowrap', cursor: key ? 'pointer' : 'default', userSelect: 'none' }}
+        onClick={key ? () => clickSort(key) : undefined}
+        aria-sort={key && sortKey === key ? (sortDir === 'asc' ? 'ascending' : 'descending') : undefined}
+      >
+        {label}
+        {key && sortKey === key && (sortDir === 'asc' ? <ChevronUp size={12} style={{ verticalAlign: 'middle' }} /> : <ChevronDown size={12} style={{ verticalAlign: 'middle' }} />)}
+      </th>
+    );
+    const header = (
+      <thead>
+        <tr style={{ backgroundColor: styles.isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)' }}>
+          {head('name', 'Produto', 'left')}
+          {head('cost', 'Custo', 'right')}
+          {head('price', 'Venda', 'right')}
+          {head('margin', 'Margem', 'right')}
+          {head('stock', 'Estoque', 'right')}
+          {head(null, 'Status', 'center')}
+          {head(null, '', 'right')}
+        </tr>
+      </thead>
+    );
+    const box: React.CSSProperties = { border: `1px solid ${styles.borderColor}`, borderRadius: '10px', overflow: 'hidden', marginTop: '20px' };
+    const tableStyle: React.CSSProperties = { width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem', tableLayout: 'auto' };
+
+    if (viewMode === 'categorias') {
+      const groups: Record<string, Product[]> = {};
+      pagedProducts.forEach(p => { (groups[p.category || 'Outros'] ||= []).push(p); });
+      const names = Object.keys(groups).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginTop: '20px' }}>
+          {names.map(cat => {
+            const items = groups[cat];
+            const isCollapsed = !!collapsed[cat];
+            const alerts = items.filter(p => p.quantity <= p.min_stock).length;
+            return (
+              <div key={cat} style={{ ...box, marginTop: 0 }}>
+                <button
+                  type="button"
+                  onClick={() => setCollapsed(c => ({ ...c, [cat]: !c[cat] }))}
+                  aria-expanded={!isCollapsed}
+                  style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 12px', background: styles.isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)', border: 'none', cursor: 'pointer', color: styles.textMain, fontWeight: 700, fontSize: '0.9rem', textAlign: 'left' }}
+                >
+                  {isCollapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
+                  {cat}
+                  <span style={{ fontWeight: 600, fontSize: '0.75rem', color: styles.sidebarWidgetText?.color }}>
+                    {items.length} {items.length === 1 ? 'produto' : 'produtos'}
+                  </span>
+                  {alerts > 0 && <span style={{ marginLeft: 'auto', fontSize: '0.72rem', fontWeight: 700, color: 'hsl(36, 95%, 42%)' }}>⚠ {alerts} com estoque baixo/zerado</span>}
+                </button>
+                {!isCollapsed && (
+                  <table style={tableStyle}>
+                    {header}
+                    <tbody>{items.map(renderRow)}</tbody>
+                  </table>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      );
+    }
+
+    return (
+      <div style={box}>
+        <table style={tableStyle}>
+          {header}
+          <tbody>{pagedProducts.map(renderRow)}</tbody>
+        </table>
+      </div>
+    );
+  };
+
+  const modeBtn = (mode: ViewMode, label: string, icon: React.ReactNode) => (
+    <button
+      type="button"
+      onClick={() => setViewMode(mode)}
+      aria-pressed={viewMode === mode}
+      title={label}
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '7px 10px', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer', border: 'none',
+        backgroundColor: viewMode === mode ? styles.primary : 'transparent',
+        color: viewMode === mode ? '#fff' : styles.textMain,
+      }}
+    >
+      {icon} {label}
+    </button>
+  );
 
   const missingNcm = products.filter(p => ((p as Product & { ncm?: string }).ncm || '').replace(/\D/g, '').length !== 8).length;
 
@@ -454,6 +652,25 @@ export const Estoque: React.FC<EstoqueProps> = ({ styles }) => {
           <option value="low">Estoque Baixo</option>
           <option value="out">Fora de Estoque</option>
         </select>
+
+        {/* Ordenação */}
+        <select
+          aria-label="Ordenar por"
+          value={`${sortKey}:${sortDir}`}
+          onChange={(e) => { const [k, d] = e.target.value.split(':'); setSortKey(k as SortKey); setSortDir(d as 'asc' | 'desc'); }}
+          style={{ ...styles.formInput, padding: '8px 10px', fontSize: '0.85rem', flex: '1 1 180px' }}
+        >
+          {SORT_OPTIONS.map(o => (
+            <option key={`${o.key}:${o.dir}`} value={`${o.key}:${o.dir}`}>{o.label}</option>
+          ))}
+        </select>
+
+        {/* Forma de visualização */}
+        <div role="group" aria-label="Forma de visualização" style={{ display: 'inline-flex', border: `1px solid ${styles.borderColor}`, borderRadius: '8px', overflow: 'hidden', flex: '0 0 auto' }}>
+          {modeBtn('lista', 'Lista', <List size={14} />)}
+          {modeBtn('categorias', 'Por categoria', <Rows3 size={14} />)}
+          {modeBtn('cards', 'Cards', <LayoutGrid size={14} />)}
+        </div>
       </div>
 
       {/* Loading state / Empty State */}
@@ -472,6 +689,8 @@ export const Estoque: React.FC<EstoqueProps> = ({ styles }) => {
             Nenhum produto correspondente encontrado no estoque.
           </p>
         </div>
+      ) : viewMode !== 'cards' ? (
+        renderTable()
       ) : (
         /* Products Grid */
         <div style={{
@@ -480,7 +699,7 @@ export const Estoque: React.FC<EstoqueProps> = ({ styles }) => {
           gap: '20px',
           marginTop: '20px',
         }}>
-          {filteredProducts.map((product) => {
+          {pagedProducts.map((product) => {
             const isOut = product.quantity === 0;
             const isLow = product.quantity > 0 && product.quantity <= product.min_stock;
             
@@ -572,6 +791,31 @@ export const Estoque: React.FC<EstoqueProps> = ({ styles }) => {
               </article>
             );
           })}
+        </div>
+      )}
+
+      {/* Contagem e paginação */}
+      {sortedProducts.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '10px', marginTop: '14px', fontSize: '0.8rem', color: styles.sidebarWidgetText?.color }}>
+          <span>
+            {pageSize === 0
+              ? `Mostrando todos os ${sortedProducts.length} produtos`
+              : `Mostrando ${(currentPage - 1) * pageSize + 1}–${Math.min(currentPage * pageSize, sortedProducts.length)} de ${sortedProducts.length} produtos`}
+            {sortedProducts.length !== products.length && ` (filtrados de ${products.length})`}
+          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            <label htmlFor="page-size" style={{ fontWeight: 600 }}>Por página:</label>
+            <select id="page-size" value={pageSize} onChange={(e) => setPageSize(Number(e.target.value))} style={{ ...styles.formInput, width: 'auto', padding: '5px 8px', fontSize: '0.8rem' }}>
+              {PAGE_SIZES.map(n => <option key={n} value={n}>{n === 0 ? 'Todos' : n}</option>)}
+            </select>
+            {totalPages > 1 && (
+              <>
+                <button type="button" disabled={currentPage <= 1} onClick={() => setPage(currentPage - 1)} style={{ ...styles.btnAcc(false), padding: '5px 10px', opacity: currentPage <= 1 ? 0.5 : 1 }}>‹ Anterior</button>
+                <span style={{ fontWeight: 700, color: styles.textMain }}>{currentPage} / {totalPages}</span>
+                <button type="button" disabled={currentPage >= totalPages} onClick={() => setPage(currentPage + 1)} style={{ ...styles.btnAcc(false), padding: '5px 10px', opacity: currentPage >= totalPages ? 0.5 : 1 }}>Próxima ›</button>
+              </>
+            )}
+          </div>
         </div>
       )}
 
