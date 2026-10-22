@@ -63,7 +63,7 @@ export const QuantityDialog: React.FC<QuantityDialogProps> = ({ styles, product,
           </div>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: '8px' }}>
           <button type="button" style={chip(by === 'peso')} onClick={() => { setBy('peso'); setText(''); }}>Pelo peso ({short})</button>
           <button type="button" style={chip(by === 'valor')} onClick={() => { setBy('valor'); setText(''); }}>Por valor (R$)</button>
         </div>

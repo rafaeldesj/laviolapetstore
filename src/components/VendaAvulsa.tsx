@@ -1009,7 +1009,7 @@ export const VendaAvulsa: React.FC<VendaAvulsaProps> = ({ styles, currentUser })
               {/* Delivery or Store Selection */}
               <div style={{ marginBottom: '16px' }}>
                 <label style={{ ...styles.formLabel, display: 'block', marginBottom: '8px' }}>Tipo de Venda *</label>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: '8px' }}>
                   <button
                     type="button"
                     onClick={() => setDeliveryType('store')}
@@ -1078,7 +1078,7 @@ export const VendaAvulsa: React.FC<VendaAvulsaProps> = ({ styles, currentUser })
                             style={{ ...styles.formInput, width: '100%', fontSize: '0.8rem', padding: '6px 8px', marginBottom: 0 }}
                           />
                         </div>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginTop: '10px' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: '10px', marginTop: '10px' }}>
                           <input
                             type="text"
                             placeholder="Bairro *"
@@ -1198,7 +1198,7 @@ export const VendaAvulsa: React.FC<VendaAvulsaProps> = ({ styles, currentUser })
               {/* Payment Method Select */}
               <div style={styles.formGroup}>
                 <label style={styles.formLabel}>Forma de Pagamento</label>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginTop: '6px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: '8px', marginTop: '6px' }}>
                   {[
                     { id: 'Dinheiro', icon: <DollarSign size={15} />, label: 'Dinheiro' },
                     { id: 'Pix', icon: <Hash size={15} />, label: 'PIX' },

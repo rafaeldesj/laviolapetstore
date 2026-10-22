@@ -1345,7 +1345,7 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
                   </select>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: '15px' }}>
                   <div style={styles.formGroup}>
                     <label htmlFor="book-date" style={styles.formLabel}>Data *</label>
                     <input

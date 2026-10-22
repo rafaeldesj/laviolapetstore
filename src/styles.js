@@ -490,7 +490,8 @@ export const getStyles = (highContrast, fontSize, isDesktop, windowWidth) => {
     formGroup: {
       display: 'flex',
       flexDirection: 'column',
-      gap: '6px'
+      gap: '6px',
+      minWidth: 0
     },
     formLabel: {
       fontSize: '0.9rem',
@@ -499,6 +500,8 @@ export const getStyles = (highContrast, fontSize, isDesktop, windowWidth) => {
     },
     formInput: {
       padding: '10px 14px',
+      width: '100%',
+      minWidth: 0,
       borderRadius: '8px',
       border: `1px solid ${borderColor}`,
       backgroundColor: background,

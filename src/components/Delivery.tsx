@@ -2699,7 +2699,7 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
               {/* Pagamento */}
               <div style={styles.formGroup}>
                 <label style={styles.formLabel}>Status do Pagamento *</label>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: '8px' }}>
                   <button
                     type="button"
                     onClick={() => setPaymentStatus('Já Pago')}
@@ -2767,7 +2767,7 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
                     {payMethod === 'dinheiro' && (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                         <span style={{ fontSize: '0.8rem', fontWeight: 700, color: styles.textMain }}>O cliente precisa de troco?</span>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: '8px' }}>
                           {[{ v: false, label: 'Não precisa' }, { v: true, label: 'Sim, precisa de troco' }].map(o => (
                             <button
                               key={String(o.v)}
@@ -2846,7 +2846,7 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
                           style={{ ...styles.formInput, width: '100%', fontSize: '0.8rem', padding: '6px 8px', marginBottom: 0 }}
                         />
                       </div>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginTop: '10px' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: '10px', marginTop: '10px' }}>
                         <input
                           type="text"
                           placeholder="Bairro *"

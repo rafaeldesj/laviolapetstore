@@ -690,7 +690,7 @@ export const Pagamentos: React.FC<PagamentosProps> = ({
           {/* Delivery Method Selection */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             <label style={{ fontSize: '0.9rem', fontWeight: 600, color: styles.textMain }}>Método de Entrega</label>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', flexWrap: 'wrap' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: '16px', flexWrap: 'wrap' }}>
               {/* Option Retirada */}
               <div 
                 onClick={() => setDeliveryMethod('retirada')}

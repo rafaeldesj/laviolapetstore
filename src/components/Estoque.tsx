@@ -600,7 +600,7 @@ export const Estoque: React.FC<EstoqueProps> = ({ styles }) => {
                 />
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: '15px' }}>
                 <div style={styles.formGroup}>
                   <label htmlFor="prod-cat" style={styles.formLabel}>Categoria *</label>
                   <select
@@ -647,7 +647,7 @@ export const Estoque: React.FC<EstoqueProps> = ({ styles }) => {
                 </span>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: '15px' }}>
                 <div style={styles.formGroup}>
                   <label htmlFor="prod-cost" style={styles.formLabel}>Preço Custo (R$){isFractional(unit) ? ` por ${unitShort(unit)}` : ''} *</label>
                   <input
@@ -685,7 +685,7 @@ export const Estoque: React.FC<EstoqueProps> = ({ styles }) => {
                 </div>
               )}
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: '15px' }}>
                 <div style={styles.formGroup}>
                   <label htmlFor="prod-qty" style={styles.formLabel}>Qtd em Estoque ({unitShort(unit)}) *</label>
                   <input

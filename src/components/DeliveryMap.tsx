@@ -681,7 +681,7 @@ export const DeliveryMap = ({ onAddressSelect, initialAddress, leftContent }: De
   };
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', width: '100%' }}>
+    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: '16px', width: '100%' }}>
       {/* Left Column: Search, Buttons and Manual Inputs */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
         {/* Search bar */}
