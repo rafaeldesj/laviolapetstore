@@ -9,7 +9,7 @@ import { isDeliverySpecialty } from '../utils/specialties';
 import { notifyDriver } from '../utils/push';
 import { PushSetup } from './PushSetup';
 import { DeliveryPaymentBox } from './DeliveryPaymentBox';
-import { PAYMENT_METHODS, brl, changeToGive, parseMoney, paymentText, stripPaymentTag, validatePayment } from '../utils/deliveryPayment';
+import { PAYMENT_METHODS, brl, changeToGive, parseMoney, paymentText, stripPaymentTag, usesCardMachine, validatePayment } from '../utils/deliveryPayment';
 import type { DeliveryPayment, PaymentMethod } from '../utils/deliveryPayment';
 import { subscribeDeliveries, syncDeliveries, patchDelivery } from '../utils/deliveriesService';
 import { collection, doc, getDocs, setDoc } from 'firebase/firestore';
@@ -2777,8 +2777,10 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
                       </div>
                     )}
 
-                    {(payMethod === 'debito' || payMethod === 'credito') && (
-                      <span style={{ fontSize: '0.78rem', color: styles.sidebarWidgetText?.color }}>💳 O entregador será avisado para levar a maquininha.</span>
+                    {usesCardMachine(payMethod || undefined) && (
+                      <span style={{ fontSize: '0.78rem', color: styles.sidebarWidgetText?.color }}>
+                        💳 O entregador será avisado para levar a maquininha{payMethod === 'pix' ? ' (por enquanto o Pix também é recebido nela)' : ''}.
+                      </span>
                     )}
                   </div>
                 );

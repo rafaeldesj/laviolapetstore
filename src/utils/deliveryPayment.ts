@@ -26,6 +26,9 @@ export const PAYMENT_METHOD_LABEL: Record<PaymentMethod, string> = {
   pix: 'Pix',
 };
 
+/** Formas recebidas na maquininha de cartão (por enquanto o Pix também), então o entregador precisa levá-la. */
+export const usesCardMachine = (method?: PaymentMethod): boolean => method === 'debito' || method === 'credito' || method === 'pix';
+
 export const brl = (n: number): string => `R$ ${(n || 0).toFixed(2).replace('.', ',')}`;
 
 /** Parse de "200", "200,50" ou "R$ 1.200,00". */
@@ -50,6 +53,7 @@ export function paymentText(p: DeliveryPayment): string {
   if (p.method === 'dinheiro') {
     text += p.needs_change ? `, troco para ${brl(p.change_for || 0)} (levar ${brl(changeToGive(p))} de troco)` : ', sem troco';
   }
+  if (usesCardMachine(p.method)) text += ' (levar a maquininha)';
   return text;
 }
 

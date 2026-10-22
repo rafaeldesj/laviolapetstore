@@ -1,5 +1,5 @@
 import React from 'react';
-import { PAYMENT_METHOD_LABEL, brl, changeToGive } from '../utils/deliveryPayment';
+import { PAYMENT_METHOD_LABEL, brl, changeToGive, usesCardMachine } from '../utils/deliveryPayment';
 import type { DeliveryPayment } from '../utils/deliveryPayment';
 
 interface DeliveryPaymentBoxProps {
@@ -35,6 +35,7 @@ export const DeliveryPaymentBox: React.FC<DeliveryPaymentBoxProps> = ({ payment,
       }}>
         💰 Cobrar {brl(payment.amount || 0)}{method ? ` · ${PAYMENT_METHOD_LABEL[method]}` : ''}
         {method === 'dinheiro' && (payment.needs_change ? ` · troco p/ ${brl(payment.change_for || 0)}` : ' · sem troco')}
+        {usesCardMachine(method) && ' · 💳 maquininha'}
       </div>
     );
   }
@@ -58,11 +59,10 @@ export const DeliveryPaymentBox: React.FC<DeliveryPaymentBoxProps> = ({ payment,
         <div style={{ fontSize: '0.85rem', fontWeight: 700 }}>Não precisa de troco (valor certo).</div>
       ))}
 
-      {(method === 'debito' || method === 'credito') && (
-        <div style={{ fontSize: '0.85rem', fontWeight: 700 }}>💳 Levar a maquininha de cartão.</div>
-      )}
-      {method === 'pix' && (
-        <div style={{ fontSize: '0.85rem', fontWeight: 700 }}>Confirme o Pix no seu celular antes de entregar o pedido.</div>
+      {usesCardMachine(method) && (
+        <div style={{ fontSize: '0.92rem', fontWeight: 800, color: 'hsl(0,70%,32%)' }}>
+          💳 LEVAR A MAQUININHA{method === 'pix' ? ' (o Pix é recebido nela)' : ''}
+        </div>
       )}
     </div>
   );
