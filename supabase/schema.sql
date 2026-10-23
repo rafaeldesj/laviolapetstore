@@ -122,3 +122,6 @@ end $$;
 revoke all on function public.adjust_stock(jsonb, boolean, boolean) from public, anon, authenticated;
 revoke all on function public.set_ncm_batch(jsonb) from public, anon, authenticated;
 revoke all on function public.shift_series(text, bigint) from public, anon, authenticated;
+
+-- Defesa extra: o acesso publico (chave anon/authenticated) nao pode nem tentar ler estas tabelas.
+revoke all on public.products, public.appointments from anon, authenticated;
