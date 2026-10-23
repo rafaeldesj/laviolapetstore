@@ -105,9 +105,11 @@ interface DeliveryMapProps {
   onAddressSelect: (address: MapAddress) => void;
   initialAddress?: MapAddress;
   leftContent?: React.ReactNode;
+  /** Coloca no mapa um endereço já conhecido (com coordenadas salvas). Cada novo `nonce` dispara de novo. */
+  jumpTo?: { nonce: number; address: MapAddress } | null;
 }
 
-export const DeliveryMap = ({ onAddressSelect, initialAddress, leftContent }: DeliveryMapProps) => {
+export const DeliveryMap = ({ onAddressSelect, initialAddress, leftContent, jumpTo }: DeliveryMapProps) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const markerRef = useRef<L.Marker | null>(null);
@@ -177,6 +179,8 @@ export const DeliveryMap = ({ onAddressSelect, initialAddress, leftContent }: De
     };
   }, []);
 
+  const placeMarkerRef = useRef<(lat: number, lng: number, address: MapAddress) => void>(() => {});
+
   const placeMarker = useCallback((lat: number, lng: number, address: MapAddress) => {
     const map = mapRef.current;
     if (!map) return;
@@ -200,6 +204,18 @@ export const DeliveryMap = ({ onAddressSelect, initialAddress, leftContent }: De
     markerRef.current = marker;
     map.flyTo([lat, lng], 17, { animate: true, duration: 1.2 });
   }, []);
+  placeMarkerRef.current = placeMarker;
+
+  // Endereço escolhido da lista de "já usados": marca no mapa sem precisar buscar de novo
+  useEffect(() => {
+    if (!jumpTo || jumpTo.address.lat === undefined || jumpTo.address.lng === undefined) return;
+    const a = jumpTo.address;
+    setSelectedAddress(a);
+    setSearchQuery(a.number ? `${a.street}, ${a.number}` : a.street);
+    setComplement(a.complement || '');
+    setIsCorrect(null);
+    placeMarkerRef.current(a.lat as number, a.lng as number, a);
+  }, [jumpTo?.nonce]);
 
   const reverseGeocode = async (lat: number, lng: number, map: L.Map) => {
     try {

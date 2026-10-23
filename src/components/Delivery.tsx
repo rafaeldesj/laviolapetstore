@@ -88,6 +88,44 @@ export interface DeliveryItem {
   start_request?: StartRequest | null;
   /** Como a entrega é paga (já paga ou a cobrar na porta, com forma de pagamento e troco). */
   payment?: DeliveryPayment | null;
+  /** Endereço separado em partes, para o operador reaproveitar nos próximos pedidos do cliente. */
+  address_parts?: { street: string; number: string; neighborhood: string; reference: string };
+}
+
+interface PastAddress {
+  key: string;
+  street: string;
+  number: string;
+  neighborhood: string;
+  reference: string;
+  lat: number;
+  lng: number;
+}
+
+const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim();
+
+/** Endereços que o cliente já pediu (mais recente primeiro, sem repetir, só os que têm coordenada salva). */
+function pastAddressesOf(deliveries: DeliveryItem[], clientId: string, limit = 5): PastAddress[] {
+  if (!clientId) return [];
+  const seen = new Set<string>();
+  const out: PastAddress[] = [];
+  const mine = deliveries.filter(d => d.client_id === clientId).sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+  for (const d of mine) {
+    const atShop = Math.abs(d.client_lat - PETSHOP_COORDS.lat) < 1e-6 && Math.abs(d.client_lng - PETSHOP_COORDS.lng) < 1e-6;
+    if (!Number.isFinite(d.client_lat) || !Number.isFinite(d.client_lng) || atShop) continue;
+    let parts = d.address_parts;
+    if (!parts) {
+      const m = /^(.*), (.*) - (.*)$/.exec(d.client_address || '');
+      if (!m) continue;
+      parts = { street: m[1], number: m[2], neighborhood: m[3], reference: '' };
+    }
+    const key = `${norm(parts.street)}|${norm(parts.number)}|${norm(parts.neighborhood)}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ key, ...parts, lat: d.client_lat, lng: d.client_lng });
+    if (out.length >= limit) break;
+  }
+  return out;
 }
 
 const PETSHOP_COORDS = { lat: -22.9122, lng: -43.5606 }; // Rua Dr. Ibraim Hannas, 406 - Campo Grande
@@ -745,6 +783,23 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
     fetchProducts();
   }, []);
 
+  // Endereços já usados pelo cliente escolhido: o operador só clica, sem digitar de novo
+  const [mapJump, setMapJump] = useState<{ nonce: number; address: MapAddress } | null>(null);
+  const pastAddresses = pastAddressesOf(deliveries, formClientId);
+
+  const usePastAddress = (a: PastAddress) => {
+    setAddressStreet(a.street);
+    setAddressNumber(a.number);
+    setAddressNeighborhood(a.neighborhood);
+    setAddressReference(a.reference);
+    setAddressLat(a.lat);
+    setAddressLng(a.lng);
+    setMapJump(prev => ({
+      nonce: (prev?.nonce || 0) + 1,
+      address: { street: a.street, number: a.number, neighborhood: a.neighborhood, city: 'Rio de Janeiro', zipCode: '', complement: a.reference, lat: a.lat, lng: a.lng },
+    }));
+  };
+
   const handleMapAddressSelect = (addr: MapAddress) => {
     setAddressStreet(addr.street);
     setAddressNumber(addr.number || '');
@@ -972,6 +1027,7 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
       scheduled_time: scheduledTime,
       payment,
       scheduled_at: !deliveryAsap && deliveryDate && deliveryTime ? new Date(`${deliveryDate}T${deliveryTime}:00`).toISOString() : null,
+      address_parts: { street: addressStreet.trim(), number: addressNumber.trim(), neighborhood: addressNeighborhood.trim(), reference: addressReference.trim() },
       created_at: new Date().toISOString()
     };
 
@@ -2842,8 +2898,39 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
                   Endereço de Entrega *
                 </span>
                 
-                <DeliveryMap 
-                  onAddressSelect={handleMapAddressSelect} 
+                {pastAddresses.length > 0 && (
+                  <div style={{ marginBottom: '10px' }}>
+                    <span style={{ display: 'block', fontSize: '0.74rem', fontWeight: 700, color: styles.textMain, marginBottom: '6px' }}>
+                      📍 Endereços que este cliente já pediu (clique para usar)
+                    </span>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      {pastAddresses.map(a => {
+                        const active = norm(addressStreet) === norm(a.street) && norm(addressNumber) === norm(a.number) && norm(addressNeighborhood) === norm(a.neighborhood);
+                        return (
+                          <button
+                            key={a.key}
+                            type="button"
+                            onClick={() => usePastAddress(a)}
+                            aria-pressed={active}
+                            style={{
+                              width: '100%', textAlign: 'left', padding: '8px 10px', borderRadius: '8px', cursor: 'pointer', border: '1px solid',
+                              borderColor: active ? styles.primary : styles.borderColor,
+                              backgroundColor: active ? (styles.isDark ? '#334155' : '#e2e8f0') : 'transparent',
+                              color: styles.textMain,
+                            }}
+                          >
+                            <div style={{ fontSize: '0.82rem', fontWeight: 700 }}>{a.street}, {a.number} - {a.neighborhood}</div>
+                            {a.reference && <div style={{ fontSize: '0.72rem', color: styles.sidebarWidgetText?.color }}>Ref.: {a.reference}</div>}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                <DeliveryMap
+                  onAddressSelect={handleMapAddressSelect}
+                  jumpTo={mapJump}
                   leftContent={
                     <>
                       <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '10px', marginTop: '4px' }}>
