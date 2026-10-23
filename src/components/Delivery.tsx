@@ -9,7 +9,7 @@ import { isDeliverySpecialty } from '../utils/specialties';
 import { notifyDriver } from '../utils/push';
 import { QuantityDialog } from './QuantityDialog';
 import { searchProducts } from '../utils/productSearch';
-import { describeItem, formatQty, isFractional, lineTotal, roundQty } from '../utils/units';
+import { describeItem, formatQty, isFractional, lineTotal, priceLabel, roundQty } from '../utils/units';
 import { PushSetup } from './PushSetup';
 import { DeliveryPaymentBox } from './DeliveryPaymentBox';
 import { PAYMENT_METHODS, brl, changeToGive, parseMoney, paymentText, stripPaymentTag, usesCardMachine, validatePayment } from '../utils/deliveryPayment';
@@ -754,7 +754,7 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
     setAddressLng(addr.lng);
   };
 
-  const { items: filteredSearch } = searchProducts(products, productSearchQuery);
+  const { items: filteredSearch, total: searchTotal } = searchProducts(products, productSearchQuery);
 
   // Produto vendido por peso: pergunta quanto vai levar antes de entrar na lista de itens.
   const [qtyDialog, setQtyDialog] = useState<{ product: Product; mode: 'add' | 'edit' } | null>(null);
@@ -2602,38 +2602,6 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
                         style={{ ...styles.formInput, width: '100%', paddingLeft: '34px', marginBottom: 0 }}
                       />
                     </div>
-                    {isProductSearching && (
-                      <div style={{
-                        position: 'absolute', top: '100%', left: 0, right: 0,
-                        backgroundColor: styles.isDark ? '#26293b' : '#fff',
-                        border: `1px solid ${styles.borderColor}`,
-                        borderRadius: '0 0 10px 10px', zIndex: 100,
-                        maxHeight: '200px', overflowY: 'auto',
-                        boxShadow: styles.shadowLg, marginTop: '2px'
-                      }}>
-                        {filteredSearch.length === 0 ? (
-                          <div style={{ padding: '10px', fontSize: '0.8rem', color: styles.sidebarWidgetText?.color }}>Nenhum produto.</div>
-                        ) : (
-                          filteredSearch.map(product => (
-                            <button
-                              key={product.id}
-                              type="button"
-                              onClick={() => addToCart(product)}
-                              style={{
-                                width: '100%', padding: '8px 10px', border: 'none',
-                                borderBottom: `1px solid ${styles.borderColor}`,
-                                backgroundColor: 'transparent', color: styles.textMain,
-                                textAlign: 'left', cursor: 'pointer', display: 'flex',
-                                justifyContent: 'space-between', alignItems: 'center'
-                              }}
-                            >
-                              <div style={{ fontSize: '0.8rem', fontWeight: 600 }}>{product.name}</div>
-                              <strong style={{ color: styles.primary, fontSize: '0.8rem' }}>R$ {product.price.toFixed(2)}</strong>
-                            </button>
-                          ))
-                        )}
-                      </div>
-                    )}
                   </div>
                 </div>
 
@@ -2688,6 +2656,58 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
                   <div style={{ padding: '20px', textAlign: 'center', fontSize: '0.8rem', color: styles.sidebarWidgetText?.color, backgroundColor: styles.isDark ? '#1e293b' : '#f8fafc', borderRadius: '8px' }}>
                     <ShoppingCart size={24} style={{ opacity: 0.5, margin: '0 auto 8px' }} />
                     Carrinho vazio. Busque ou escaneie um produto.
+                  </div>
+                )}
+
+                {/* Produtos encontrados: abre abaixo da lista, usando toda a largura */}
+                {isProductSearching && (
+                  <div role="region" aria-label="Produtos encontrados" style={{
+                    backgroundColor: styles.isDark ? '#26293b' : '#fff',
+                    border: `1px solid ${styles.borderColor}`,
+                    borderRadius: '10px', overflow: 'hidden', marginTop: '12px', width: '100%',
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', fontSize: '0.75rem', fontWeight: 700, color: styles.sidebarWidgetText?.color, borderBottom: `1px solid ${styles.borderColor}` }}>
+                      <span>{searchTotal} {searchTotal === 1 ? 'produto encontrado' : 'produtos encontrados'}</span>
+                      <button type="button" onClick={() => { setProductSearchQuery(''); setIsProductSearching(false); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: styles.primary, fontWeight: 700, fontSize: '0.75rem' }}>Fechar ✕</button>
+                    </div>
+                    <div style={{ maxHeight: 'min(50vh, 420px)', overflowY: 'auto' }}>
+                      {filteredSearch.length === 0 ? (
+                        <div style={{ padding: '12px', fontSize: '0.8rem', textAlign: 'center', color: styles.sidebarWidgetText?.color }}>Nenhum produto correspondente.</div>
+                      ) : (
+                        <>
+                          {filteredSearch.map(product => (
+                            <button
+                              key={product.id}
+                              type="button"
+                              onClick={() => addToCart(product)}
+                              style={{
+                                width: '100%', padding: '9px 12px', border: 'none',
+                                borderBottom: `1px solid ${styles.borderColor}`,
+                                backgroundColor: 'transparent', color: styles.textMain,
+                                textAlign: 'left', cursor: 'pointer', display: 'flex',
+                                justifyContent: 'space-between', alignItems: 'center', gap: '10px'
+                              }}
+                              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = styles.isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.03)'}
+                              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                            >
+                              <div style={{ minWidth: 0 }}>
+                                <div style={{ fontSize: '0.82rem', fontWeight: 600 }}>{product.name}</div>
+                                <span style={{ fontSize: '0.7rem', color: styles.sidebarWidgetText?.color }}>SKU: {product.sku || 'Sem SKU'}</span>
+                              </div>
+                              <div style={{ textAlign: 'right', flexShrink: 0, whiteSpace: 'nowrap' }}>
+                                <strong style={{ color: styles.primary, fontSize: '0.82rem' }}>{priceLabel(product.price, product.unit)}</strong>
+                                <div style={{ fontSize: '0.7rem', color: product.quantity === 0 ? 'red' : styles.sidebarWidgetText?.color }}>Estoque: {formatQty(product.quantity, product.unit)}</div>
+                              </div>
+                            </button>
+                          ))}
+                          {searchTotal > filteredSearch.length && (
+                            <div style={{ padding: '8px 12px', fontSize: '0.74rem', textAlign: 'center', color: styles.sidebarWidgetText?.color }}>
+                              Mostrando {filteredSearch.length} de {searchTotal}. Digite mais para afinar a busca.
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
