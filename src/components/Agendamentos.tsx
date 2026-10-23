@@ -63,6 +63,8 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
   const [isImporting, setIsImporting] = useState<boolean>(false);
   const [profilesList, setProfilesList] = useState<any[]>([]);
   const [importEvents, setImportEvents] = useState<any[]>([]);
+  const [importNote, setImportNote] = useState<string | null>(null);
+  const [isDraggingFile, setIsDraggingFile] = useState<boolean>(false);
   const [importLoading, setImportLoading] = useState<boolean>(false);
   const [importSuccessMsg, setImportSuccessMsg] = useState<string | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
@@ -341,114 +343,146 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
     });
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    
+  // Aceita vários arquivos .ics de uma vez, ou o .zip que o Google Agenda baixa (com um .ics por agenda).
+  const importFiles = async (files: File[]) => {
     setImportLoading(true);
     setImportError(null);
     setImportSuccessMsg(null);
-
-    const reader = new FileReader();
-    reader.onload = async (event) => {
-      try {
-        const text = event.target?.result as string;
-        const parsedEvents = parseICS(text);
-        
-        if (parsedEvents.length === 0) {
-          throw new Error('Nenhum evento válido encontrado no arquivo.');
+    setImportNote(null);
+    try {
+      const texts: { name: string; text: string }[] = [];
+      for (const file of files) {
+        const lower = file.name.toLowerCase();
+        if (lower.endsWith('.zip')) {
+          const JSZip = (await import('jszip')).default;
+          const zip = await JSZip.loadAsync(file);
+          for (const entry of Object.values(zip.files)) {
+            if (entry.dir || !entry.name.toLowerCase().endsWith('.ics')) continue;
+            texts.push({ name: entry.name, text: await entry.async('string') });
+          }
+        } else if (lower.endsWith('.ics')) {
+          texts.push({ name: file.name, text: await file.text() });
         }
-
-        const processed = parsedEvents.map(evt => {
-          const titleLower = evt.title.toLowerCase();
-          const descLower = evt.description.toLowerCase();
-          
-          let serviceType = 'Outro';
-          if (titleLower.includes('banho') || titleLower.includes('tosa') || descLower.includes('banho') || descLower.includes('tosa')) {
-            serviceType = 'Banho & Tosa';
-          } else if (titleLower.includes('consulta') || titleLower.includes('vet') || descLower.includes('consulta') || descLower.includes('vet')) {
-            serviceType = 'Consulta Veterinária';
-          } else if (titleLower.includes('vacina') || descLower.includes('vacina')) {
-            serviceType = 'Vacinação';
-          } else if (titleLower.includes('hotel') || titleLower.includes('creche') || descLower.includes('hotel') || descLower.includes('creche')) {
-            serviceType = 'Hotelzinho / Creche';
-          }
-
-          let matchedPet: any = null;
-          let detectedPetName = '';
-          const words = evt.title.replace(/[^\w\s\u00C0-\u00FF]/gi, ' ').split(/\s+/).filter((w: string) => w.length >= 2);
-          
-          for (const word of words) {
-            const wordLower = word.toLowerCase();
-            const found = allPets.find(p => p.name.toLowerCase() === wordLower);
-            if (found) {
-              matchedPet = found;
-              detectedPetName = found.name;
-              break;
-            }
-          }
-
-          if (!matchedPet) {
-            const cleanWords = words.filter((w: string) => {
-              const wl = w.toLowerCase();
-              return !['banho', 'tosa', 'consulta', 'vacina', 'hotel', 'creche', 'outro', 'servico', 'serviço', 'pet', 'cão', 'gato', 'veterinario', 'veterinária', 'de', 'do', 'da', 'para', 'com', 'e', 'a'].includes(wl);
-            });
-            if (cleanWords.length > 0) {
-              detectedPetName = cleanWords[0];
-            } else {
-              detectedPetName = 'Pet Importado';
-            }
-          }
-
-          const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z0-9.-]+/g;
-          const emails = evt.description.match(emailRegex);
-          let matchedOwnerId = '';
-          let matchedOwnerName = '';
-
-          if (matchedPet) {
-            matchedOwnerId = matchedPet.owner_id;
-            matchedOwnerName = matchedPet.tutor_name || 'Tutor Cadastrado';
-          } else if (emails && emails.length > 0) {
-            const email = emails[0].toLowerCase();
-            const foundProfile = profilesList.find((p: any) => p.email?.toLowerCase() === email);
-            if (foundProfile) {
-              matchedOwnerId = foundProfile.id;
-              matchedOwnerName = foundProfile.full_name || foundProfile.email;
-            }
-          }
-
-          const scheduledAtStr = evt.date.toISOString();
-          const isDuplicate = appointments.some(a => 
-            a.pet_name.toLowerCase() === detectedPetName.toLowerCase() && 
-            Math.abs(new Date(a.scheduled_at).getTime() - evt.date.getTime()) < 30 * 60 * 1000 && 
-            a.service_type === serviceType
-          );
-
-          return {
-            title: evt.title,
-            description: evt.description,
-            scheduled_at: scheduledAtStr,
-            service_type: serviceType,
-            matchedPet,
-            detectedPetName,
-            matchedOwnerId,
-            matchedOwnerName,
-            isDuplicate
-          };
-        });
-
-        setImportEvents(processed);
-      } catch (err: any) {
-        setImportError(err.message || 'Erro ao ler ou processar arquivo.');
-      } finally {
-        setImportLoading(false);
       }
-    };
-    reader.onerror = () => {
-      setImportError('Erro na leitura do arquivo.');
+      if (texts.length === 0) throw new Error('Escolha arquivos .ics (ou o .zip que o Google Agenda baixou).');
+
+      // A agenda de aniversários dos contatos não é serviço de pet: fica de fora.
+      const useful = texts.filter(f => !/(^|[\\/])birthdays/i.test(f.name));
+      const ignored = texts.length - useful.length;
+
+      const seen = new Set<string>();
+      const parsedEvents: { title: string; description: string; date: Date }[] = [];
+      for (const f of useful) {
+        for (const ev of parseICS(f.text)) {
+          const key = `${ev.title}|${ev.date.getTime()}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          parsedEvents.push(ev);
+        }
+      }
+
+      if (parsedEvents.length === 0) {
+        throw new Error('Nenhum evento válido encontrado nos arquivos.');
+      }
+
+    const processed = parsedEvents.map(evt => {
+      const titleLower = evt.title.toLowerCase();
+      const descLower = evt.description.toLowerCase();
+      
+      let serviceType = 'Outro';
+      if (titleLower.includes('banho') || titleLower.includes('tosa') || descLower.includes('banho') || descLower.includes('tosa')) {
+        serviceType = 'Banho & Tosa';
+      } else if (titleLower.includes('consulta') || titleLower.includes('vet') || descLower.includes('consulta') || descLower.includes('vet')) {
+        serviceType = 'Consulta Veterinária';
+      } else if (titleLower.includes('vacina') || descLower.includes('vacina')) {
+        serviceType = 'Vacinação';
+      } else if (titleLower.includes('hotel') || titleLower.includes('creche') || descLower.includes('hotel') || descLower.includes('creche')) {
+        serviceType = 'Hotelzinho / Creche';
+      }
+
+      let matchedPet: any = null;
+      let detectedPetName = '';
+      const words = evt.title.replace(/[^\w\s\u00C0-\u00FF]/gi, ' ').split(/\s+/).filter((w: string) => w.length >= 2);
+      
+      for (const word of words) {
+        const wordLower = word.toLowerCase();
+        const found = allPets.find(p => p.name.toLowerCase() === wordLower);
+        if (found) {
+          matchedPet = found;
+          detectedPetName = found.name;
+          break;
+        }
+      }
+
+      if (!matchedPet) {
+        const cleanWords = words.filter((w: string) => {
+          const wl = w.toLowerCase();
+          return !['banho', 'tosa', 'consulta', 'vacina', 'hotel', 'creche', 'outro', 'servico', 'serviço', 'pet', 'cão', 'gato', 'veterinario', 'veterinária', 'de', 'do', 'da', 'para', 'com', 'e', 'a'].includes(wl);
+        });
+        if (cleanWords.length > 0) {
+          detectedPetName = cleanWords[0];
+        } else {
+          detectedPetName = 'Pet Importado';
+        }
+      }
+
+      const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z0-9.-]+/g;
+      const emails = evt.description.match(emailRegex);
+      let matchedOwnerId = '';
+      let matchedOwnerName = '';
+
+      if (matchedPet) {
+        matchedOwnerId = matchedPet.owner_id;
+        matchedOwnerName = matchedPet.tutor_name || 'Tutor Cadastrado';
+      } else if (emails && emails.length > 0) {
+        const email = emails[0].toLowerCase();
+        const foundProfile = profilesList.find((p: any) => p.email?.toLowerCase() === email);
+        if (foundProfile) {
+          matchedOwnerId = foundProfile.id;
+          matchedOwnerName = foundProfile.full_name || foundProfile.email;
+        }
+      }
+
+      const scheduledAtStr = evt.date.toISOString();
+      const isDuplicate = appointments.some(a => 
+        a.pet_name.toLowerCase() === detectedPetName.toLowerCase() && 
+        Math.abs(new Date(a.scheduled_at).getTime() - evt.date.getTime()) < 30 * 60 * 1000 && 
+        a.service_type === serviceType
+      );
+
+      return {
+        title: evt.title,
+        description: evt.description,
+        scheduled_at: scheduledAtStr,
+        service_type: serviceType,
+        matchedPet,
+        detectedPetName,
+        matchedOwnerId,
+        matchedOwnerName,
+        isDuplicate
+      };
+    });
+
+      setImportEvents(processed);
+      setImportNote(`${useful.length} agenda(s) lida(s)${ignored ? `; ${ignored} de aniversários ignorada(s)` : ''}.`);
+    } catch (err: any) {
+      setImportError(err.message || 'Erro ao ler ou processar os arquivos.');
+    } finally {
       setImportLoading(false);
-    };
-    reader.readAsText(file);
+    }
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    e.target.value = '';
+    if (files.length > 0) void importFiles(files);
+  };
+
+  const handleDropFiles = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDraggingFile(false);
+    const files = Array.from(e.dataTransfer.files || []);
+    if (files.length > 0) void importFiles(files);
   };
 
   const handleConfirmImport = async () => {
@@ -1534,26 +1568,32 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
                         <li>No canto superior direito, clique em <strong>Configurações</strong> (engrenagem).</li>
                         <li>No menu à esquerda, clique em <strong>Importar e exportar</strong>.</li>
                         <li>Na seção Exportar, clique no botão <strong>Exportar</strong>.</li>
-                        <li>Um arquivo <code>.zip</code> será baixado. Extraia-o para obter o arquivo <code>.ics</code> do seu calendário.</li>
+                        <li>Um arquivo <code>.zip</code> será baixado. Pode escolher o <code>.zip</code> direto, ou extrair e selecionar <strong>todos</strong> os arquivos <code>.ics</code> de uma vez (Ctrl + A).</li>
                       </ol>
                     </div>
                   </div>
 
-                  <div style={{
-                    border: `2px dashed ${styles.borderColor}`,
+                  <div
+                    onDragEnter={(e) => { e.preventDefault(); setIsDraggingFile(true); }}
+                    onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; setIsDraggingFile(true); }}
+                    onDragLeave={() => setIsDraggingFile(false)}
+                    onDrop={handleDropFiles}
+                    style={{
+                    border: `2px dashed ${isDraggingFile ? styles.primary : styles.borderColor}`,
                     borderRadius: '12px',
                     padding: '30px 20px',
                     textAlign: 'center',
-                    backgroundColor: styles.background,
+                    backgroundColor: isDraggingFile ? `${styles.primary}12` : styles.background,
                     cursor: 'pointer',
                     position: 'relative'
                   }}>
                     <Upload size={36} style={{ color: styles.primary, margin: '0 auto 10px', display: 'block' }} />
-                    <span style={{ fontWeight: 600, color: styles.textMain, display: 'block', marginBottom: '5px' }}>Arrastar arquivo .ics aqui ou clicar para selecionar</span>
-                    <span style={{ fontSize: '0.8rem', color: styles.textMuted }}>Apenas arquivos do Google Agenda no formato .ics</span>
+                    <span style={{ fontWeight: 600, color: styles.textMain, display: 'block', marginBottom: '5px' }}>Arraste os arquivos aqui ou clique para selecionar (vários de uma vez)</span>
+                    <span style={{ fontSize: '0.8rem', color: styles.textMuted }}>Arquivos .ics do Google Agenda, ou o .zip que ele baixou</span>
                     <input
                       type="file"
-                      accept=".ics"
+                      accept=".ics,.zip"
+                      multiple
                       onChange={handleFileUpload}
                       style={{
                         position: 'absolute',
@@ -1603,7 +1643,7 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
                     <div>
                       <h3 style={{ fontSize: '1.1rem', fontWeight: 700, margin: 0, color: styles.primary }}>Pré-visualização dos Dados</h3>
                       <span style={{ fontSize: '0.85rem', color: styles.textMuted }}>
-                        {importEvents.length} eventos encontrados ({importEvents.filter(e => e.isDuplicate).length} duplicados serão ignorados).
+                        {importEvents.length} eventos encontrados ({importEvents.filter(e => e.isDuplicate).length} duplicados serão ignorados).{importNote ? ` ${importNote}` : ''}
                       </span>
                     </div>
                     <div style={{ display: 'flex', gap: '8px' }}>
@@ -1619,7 +1659,7 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
                         onClick={() => setImportEvents([])}
                         style={{ ...styles.btnAcc(false), padding: '8px 16px', fontSize: '0.85rem' }}
                       >
-                        Trocar Arquivo
+                        Trocar Arquivos
                       </button>
                     </div>
                   </div>
