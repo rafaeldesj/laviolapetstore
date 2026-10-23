@@ -4,6 +4,7 @@ import { supabase, mockSupabaseDb, isSupabaseConfigured, roleHierarchy, logActio
 import type { Appointment } from '../supabaseClient';
 import type { AuthUser } from '../hooks/useAuth';
 import { buildIcs, downloadIcs } from '../utils/icsExport';
+import { parseIcs } from '../utils/icsParse';
 
 interface AgendamentosProps {
   currentUser: AuthUser;
@@ -316,71 +317,6 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
   };
 
   // Google Calendar Import Logic
-  const parseICS = (text: string) => {
-    const unfolded = text.replace(/\r?\n[ \t]/g, '');
-    const lines = unfolded.split(/\r?\n/);
-    const events: any[] = [];
-    let currentEvent: any = null;
-    let inEvent = false;
-
-    for (const line of lines) {
-      if (line.startsWith('BEGIN:VEVENT')) {
-        currentEvent = {};
-        inEvent = true;
-        continue;
-      }
-      if (line.startsWith('END:VEVENT')) {
-        if (currentEvent) {
-          events.push(currentEvent);
-        }
-        currentEvent = null;
-        inEvent = false;
-        continue;
-      }
-      if (inEvent && currentEvent) {
-        const colonIndex = line.indexOf(':');
-        if (colonIndex !== -1) {
-          const keyPart = line.substring(0, colonIndex);
-          const value = line.substring(colonIndex + 1);
-          const key = keyPart.split(';')[0].trim().toUpperCase();
-          currentEvent[key] = value.trim();
-        }
-      }
-    }
-
-    return events.map(evt => {
-      const summary = evt.SUMMARY || 'Sem Título';
-      const description = evt.DESCRIPTION || '';
-      const dtstart = evt.DTSTART || '';
-      let dateObj: Date | null = null;
-      if (dtstart) {
-        const match = dtstart.match(/^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2})Z?)?/);
-        if (match) {
-          const [, year, month, day, hour, min, sec] = match;
-          const y = parseInt(year, 10);
-          const m = parseInt(month, 10) - 1;
-          const d = parseInt(day, 10);
-          const hr = hour ? parseInt(hour, 10) : 0;
-          const mn = min ? parseInt(min, 10) : 0;
-          const sc = sec ? parseInt(sec, 10) : 0;
-          if (dtstart.endsWith('Z')) {
-            dateObj = new Date(Date.UTC(y, m, d, hr, mn, sc));
-          } else {
-            dateObj = new Date(y, m, d, hr, mn, sc);
-          }
-        }
-      }
-      if (!dateObj || isNaN(dateObj.getTime())) {
-        dateObj = new Date();
-      }
-      return {
-        title: summary,
-        description: description,
-        date: dateObj,
-      };
-    });
-  };
-
   // Aceita vários arquivos .ics de uma vez, ou o .zip que o Google Agenda baixa (com um .ics por agenda).
   const importFiles = async (files: File[]) => {
     setImportLoading(true);
@@ -410,8 +346,13 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
 
       const seen = new Set<string>();
       const parsedEvents: { title: string; description: string; date: Date }[] = [];
+      let fromRecurrence = 0;
+      let unsupported = 0;
       for (const f of useful) {
-        for (const ev of parseICS(f.text)) {
+        const parsed = parseIcs(f.text);
+        fromRecurrence += parsed.expandedFromRecurrence;
+        unsupported += parsed.unsupportedRecurrences;
+        for (const ev of parsed.events) {
           const key = `${ev.title}|${ev.date.getTime()}`;
           if (seen.has(key)) continue;
           seen.add(key);
@@ -502,7 +443,7 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
     });
 
       setImportEvents(processed);
-      setImportNote(`${useful.length} agenda(s) lida(s)${ignored ? `; ${ignored} de aniversários ignorada(s)` : ''}.`);
+      setImportNote(`${useful.length} agenda(s) lida(s)${ignored ? `; ${ignored} de aniversários ignorada(s)` : ''}. ${fromRecurrence} atendimentos vieram de eventos que se repetem toda semana.${unsupported ? ` Atenção: ${unsupported} evento(s) repetido(s) com regra não suportada entraram só na primeira data.` : ''}`);
     } catch (err: any) {
       setImportError(err.message || 'Erro ao ler ou processar os arquivos.');
     } finally {
@@ -531,7 +472,10 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
 
     try {
       const nonDuplicates = importEvents.filter(e => !e.isDuplicate);
-      
+      // Pets novos criados nesta importação (por nome): o mesmo pet em vários dias não pode virar vários cadastros
+      const createdPets = new Map<string, { id: string; ownerId: string }>();
+      const prepared: any[] = [];
+
       for (const evt of nonDuplicates) {
         let petId = '';
         let ownerId = evt.matchedOwnerId || currentUser.id;
@@ -539,16 +483,11 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
         if (evt.matchedPet) {
           petId = evt.matchedPet.id;
         } else {
-          if (false && supabase) {
-            const { data, error } = await supabase.from('pets').insert({
-              name: evt.detectedPetName,
-              species: 'Outro',
-              breed: 'Importado Google',
-              age: 0,
-              owner_id: ownerId
-            }).select('id').single();
-            if (error) throw error;
-            if (data) petId = data.id;
+          const key = evt.detectedPetName.toLowerCase();
+          const known = createdPets.get(key);
+          if (known) {
+            petId = known.id;
+            ownerId = known.ownerId;
           } else {
             const { data } = await mockSupabaseDb.addPet({
               name: evt.detectedPetName,
@@ -556,21 +495,23 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
               breed: 'Importado Google',
               age: 0
             }, ownerId);
-            if (data) petId = data.id;
+            if (!data) throw new Error(`Não consegui cadastrar o pet "${evt.detectedPetName}".`);
+            petId = data.id;
+            createdPets.set(key, { id: petId, ownerId });
+            petsCreatedCount++;
+            allPets.push({
+              id: petId,
+              name: evt.detectedPetName,
+              species: 'Outro',
+              breed: 'Importado Google',
+              age: 0,
+              owner_id: ownerId,
+              tutor_name: evt.matchedOwnerName || currentUser.name || 'Tutor'
+            });
           }
-          petsCreatedCount++;
-          allPets.push({
-            id: petId,
-            name: evt.detectedPetName,
-            species: 'Outro',
-            breed: 'Importado Google',
-            age: 0,
-            owner_id: ownerId,
-            tutor_name: evt.matchedOwnerName || currentUser.name || 'Tutor'
-          });
         }
 
-        const appointmentData = {
+        prepared.push({
           pet_id: petId,
           pet_name: evt.detectedPetName,
           owner_id: ownerId,
@@ -578,15 +519,20 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
           scheduled_at: evt.scheduled_at,
           status: 'Agendado' as const,
           notes: (evt.description || '').trim() || 'Importado do Google Agenda'
-        };
+        });
+      }
 
-        if (false && supabase) {
-          const { error } = await supabase.from('appointments').insert(appointmentData);
-          if (error) throw error;
-        } else {
-          await mockSupabaseDb.addAppointment(appointmentData);
-        }
-        appointmentsImportedCount++;
+      // Grava em lotes de 25 ao mesmo tempo (milhares de agendamentos, um por vez, levariam muito tempo)
+      const failures: string[] = [];
+      for (let i = 0; i < prepared.length; i += 25) {
+        const results = await Promise.all(prepared.slice(i, i + 25).map(d => mockSupabaseDb.addAppointment(d)));
+        results.forEach((r, idx) => {
+          if (r.error) failures.push(`${prepared[i + idx].pet_name} (${prepared[i + idx].scheduled_at})`);
+          else appointmentsImportedCount++;
+        });
+      }
+      if (failures.length > 0) {
+        throw new Error(`${appointmentsImportedCount} agendamentos foram salvos, mas ${failures.length} falharam (ex.: ${failures.slice(0, 3).join(', ')}). Importe de novo: os já salvos serão ignorados como duplicados.`);
       }
 
       await logAction(
