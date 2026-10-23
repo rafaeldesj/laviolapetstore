@@ -60,7 +60,8 @@ async function sb(env, path, init = {}) {
     ...init,
     headers: {
       apikey: env.SUPABASE_SERVICE_ROLE,
-      Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE}`,
+      // Chave nova (sb_secret_...) vai só no apikey; a antiga (service_role, um JWT) também no Authorization.
+      ...(env.SUPABASE_SERVICE_ROLE.startsWith('eyJ') ? { Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE}` } : {}),
       'Content-Type': 'application/json',
       Prefer: 'return=representation',
       ...(init.headers || {}),
