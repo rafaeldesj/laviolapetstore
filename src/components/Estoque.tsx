@@ -5,6 +5,7 @@ import type { Product } from '../supabaseClient';
 import { useAuth } from '../hooks/useAuth';
 import { NcmImportModal } from './NcmImportModal';
 import { SkuField } from './SkuField';
+import { matchesQuery, searchTokens } from '../utils/productSearch';
 import { UNIT_OPTIONS, formatQty, isFractional, priceLabel, roundQty, unitShort } from '../utils/units';
 
 interface EstoqueProps {
@@ -257,6 +258,8 @@ export const Estoque: React.FC<EstoqueProps> = ({ styles }) => {
   const outOfStockCount = products.filter(p => p.quantity === 0).length;
   const lowStockCount = products.filter(p => p.quantity > 0 && p.quantity <= p.min_stock).length;
 
+  const searchTok = searchTokens(searchQuery);
+
   // Filtered List
   const filteredProducts = products.filter(p => {
     if (filterCategory !== 'all' && p.category !== filterCategory) return false;
@@ -265,15 +268,7 @@ export const Estoque: React.FC<EstoqueProps> = ({ styles }) => {
     if (filterStatus === 'low' && (p.quantity === 0 || p.quantity > p.min_stock)) return false;
     if (filterStatus === 'normal' && p.quantity <= p.min_stock) return false;
 
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      return (
-        p.name.toLowerCase().includes(q) ||
-        (p.brand?.toLowerCase().includes(q) ?? false) ||
-        (p.sku?.toLowerCase().includes(q) ?? false)
-      );
-    }
-    return true;
+    return matchesQuery(p, searchTok);
   });
 
   const sortedProducts = [...filteredProducts].sort((a, b) => {

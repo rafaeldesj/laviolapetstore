@@ -8,6 +8,7 @@ import { formatPhoneBR } from '../utils/formatters';
 import { isDeliverySpecialty } from '../utils/specialties';
 import { notifyDriver } from '../utils/push';
 import { QuantityDialog } from './QuantityDialog';
+import { searchProducts } from '../utils/productSearch';
 import { describeItem, formatQty, isFractional, lineTotal, roundQty } from '../utils/units';
 import { PushSetup } from './PushSetup';
 import { DeliveryPaymentBox } from './DeliveryPaymentBox';
@@ -753,12 +754,7 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
     setAddressLng(addr.lng);
   };
 
-  const filteredSearch = productSearchQuery.trim() === '' 
-    ? [] 
-    : products.filter(p => 
-        p.name.toLowerCase().includes(productSearchQuery.toLowerCase()) || 
-        (p.sku && p.sku.includes(productSearchQuery))
-      );
+  const { items: filteredSearch } = searchProducts(products, productSearchQuery);
 
   // Produto vendido por peso: pergunta quanto vai levar antes de entrar na lista de itens.
   const [qtyDialog, setQtyDialog] = useState<{ product: Product; mode: 'add' | 'edit' } | null>(null);

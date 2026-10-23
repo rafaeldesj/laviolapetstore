@@ -12,6 +12,7 @@ import { PrinterStatus } from './PrinterStatus';
 import { CertAlert } from './CertAlert';
 import { CancelDialog } from './CancelDialog';
 import { QuantityDialog } from './QuantityDialog';
+import { searchProducts } from '../utils/productSearch';
 import { SkuField } from './SkuField';
 import { UNIT_OPTIONS, describeItem, formatQty, isFractional, lineTotal, priceLabel, roundQty, unitShort } from '../utils/units';
 import { addDelivery } from '../utils/deliveriesService';
@@ -290,12 +291,8 @@ export const VendaAvulsa: React.FC<VendaAvulsaProps> = ({ styles, currentUser })
     : 0;
 
   // Search manual product result list
-  const filteredSearch = searchQuery.trim() === '' 
-    ? [] 
-    : products.filter(p => 
-        p.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-        (p.sku && p.sku.includes(searchQuery))
-      );
+  // Busca por pedaços de palavras: "quat gat" acha "QUATREE ... GATOS ..."
+  const { items: filteredSearch, total: searchTotal } = searchProducts(products, searchQuery);
 
   // Barcode / SKU Submission
   const handleBarcodeSubmit = (e: React.FormEvent) => {
@@ -766,7 +763,8 @@ export const VendaAvulsa: React.FC<VendaAvulsaProps> = ({ styles, currentUser })
                       </button>
                     </div>
                   ) : (
-                    filteredSearch.map(product => (
+                    <>
+                    {filteredSearch.map(product => (
                       <button
                         key={product.id}
                         onClick={() => addToCart(product)}
@@ -785,12 +783,18 @@ export const VendaAvulsa: React.FC<VendaAvulsaProps> = ({ styles, currentUser })
                           <div style={{ fontWeight: 600, fontSize: '0.85rem' }}>{product.name}</div>
                           <span style={{ fontSize: '0.7rem', color: styles.sidebarWidgetText?.color }}>SKU: {product.sku || 'Sem SKU'}</span>
                         </div>
-                        <div style={{ textAlign: 'right' }}>
+                        <div style={{ textAlign: 'right', flexShrink: 0, whiteSpace: 'nowrap', marginLeft: '10px' }}>
                           <strong style={{ color: styles.primary, fontSize: '0.85rem' }}>{priceLabel(product.price, product.unit)}</strong>
                           <div style={{ fontSize: '0.7rem', color: product.quantity === 0 ? 'red' : styles.sidebarWidgetText?.color }}>Estoque: {formatQty(product.quantity, product.unit)}</div>
                         </div>
                       </button>
-                    ))
+                    ))}
+                    {searchTotal > filteredSearch.length && (
+                      <div style={{ padding: '8px 12px', fontSize: '0.74rem', textAlign: 'center', color: styles.sidebarWidgetText?.color }}>
+                        Mostrando {filteredSearch.length} de {searchTotal}. Digite mais para afinar a busca.
+                      </div>
+                    )}
+                    </>
                   )}
                 </div>
               )}
