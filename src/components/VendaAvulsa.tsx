@@ -680,67 +680,6 @@ export const VendaAvulsa: React.FC<VendaAvulsaProps> = ({ styles, currentUser })
         {/* Left column: Inputs & Cart list */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
           
-          {/* Barcode / Search Block */}
-          <div style={{
-            display: 'flex', flexWrap: 'wrap', gap: '10px',
-            padding: '16px', backgroundColor: styles.cardBackground || '#fff',
-            borderRadius: '12px', border: `1px solid ${styles.borderColor}`,
-            boxShadow: styles.shadow
-          }}>
-            {/* Barcode scanner reader input (Simulated) */}
-            <form onSubmit={handleBarcodeSubmit} style={{ flex: '1 1 240px', position: 'relative' }}>
-              <label htmlFor="barcode-reader" style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, marginBottom: '6px', color: styles.textMain }}>
-                <Barcode size={14} style={{ display: 'inline', marginRight: '4px', verticalAlign: 'text-bottom' }} />
-                Leitor Código de Barras (SKU) [F2]
-              </label>
-              <div style={{ position: 'relative' }}>
-                <input
-                  id="barcode-reader"
-                  ref={skuInputRef}
-                  type="text"
-                  placeholder="Escaneie ou digite o código de barras..."
-                  value={skuInput}
-                  onChange={(e) => setSkuInput(e.target.value)}
-                  style={{ 
-                    ...styles.formInput, 
-                    width: '100%', 
-                    paddingLeft: '36px',
-                    borderColor: skuInput ? styles.primary : styles.borderColor,
-                    fontWeight: 600,
-                    letterSpacing: '1px'
-                  }}
-                />
-                <Barcode size={16} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: styles.primary }} />
-              </div>
-              <p style={{ fontSize: '0.68rem', color: styles.sidebarWidgetText?.color, marginTop: '4px' }}>
-                Pressione <strong>Enter</strong> para simular a leitura do código de barras.
-              </p>
-            </form>
-
-            {/* Manual Product Search */}
-            <div style={{ flex: '1 1 240px', position: 'relative' }}>
-              <label htmlFor="search-product" style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, marginBottom: '6px', color: styles.textMain }}>
-                <Search size={14} style={{ display: 'inline', marginRight: '4px', verticalAlign: 'text-bottom' }} />
-                Busca Manual por Nome
-              </label>
-              <div style={{ position: 'relative' }}>
-                <input
-                  id="search-product"
-                  type="text"
-                  placeholder="Digite o nome do produto..."
-                  value={searchQuery}
-                  onChange={(e) => {
-                    setSearchQuery(e.target.value);
-                    setIsSearching(e.target.value.trim() !== '');
-                  }}
-                  style={{ ...styles.formInput, width: '100%', paddingLeft: '34px' }}
-                />
-                <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: styles.sidebarWidgetText?.color }} />
-              </div>
-
-            </div>
-          </div>
-
           {/* Cart Table Container */}
           <div style={{
             backgroundColor: styles.cardBackground || '#fff',
@@ -870,6 +809,67 @@ export const VendaAvulsa: React.FC<VendaAvulsaProps> = ({ styles, currentUser })
               </div>
             )}
 
+          </div>
+
+          {/* Barcode / Search Block */}
+          <div style={{
+            display: 'flex', flexWrap: 'wrap', gap: '10px',
+            padding: '16px', backgroundColor: styles.cardBackground || '#fff',
+            borderRadius: '12px', border: `1px solid ${styles.borderColor}`,
+            boxShadow: styles.shadow
+          }}>
+            {/* Barcode scanner reader input (Simulated) */}
+            <form onSubmit={handleBarcodeSubmit} style={{ flex: '1 1 240px', position: 'relative' }}>
+              <label htmlFor="barcode-reader" style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, marginBottom: '6px', color: styles.textMain }}>
+                <Barcode size={14} style={{ display: 'inline', marginRight: '4px', verticalAlign: 'text-bottom' }} />
+                Leitor Código de Barras (SKU) [F2]
+              </label>
+              <div style={{ position: 'relative' }}>
+                <input
+                  id="barcode-reader"
+                  ref={skuInputRef}
+                  type="text"
+                  placeholder="Escaneie ou digite o código de barras..."
+                  value={skuInput}
+                  onChange={(e) => setSkuInput(e.target.value)}
+                  style={{ 
+                    ...styles.formInput, 
+                    width: '100%', 
+                    paddingLeft: '36px',
+                    borderColor: skuInput ? styles.primary : styles.borderColor,
+                    fontWeight: 600,
+                    letterSpacing: '1px'
+                  }}
+                />
+                <Barcode size={16} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: styles.primary }} />
+              </div>
+              <p style={{ fontSize: '0.68rem', color: styles.sidebarWidgetText?.color, marginTop: '4px' }}>
+                Pressione <strong>Enter</strong> para simular a leitura do código de barras.
+              </p>
+            </form>
+
+            {/* Manual Product Search */}
+            <div style={{ flex: '1 1 240px', position: 'relative' }}>
+              <label htmlFor="search-product" style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, marginBottom: '6px', color: styles.textMain }}>
+                <Search size={14} style={{ display: 'inline', marginRight: '4px', verticalAlign: 'text-bottom' }} />
+                Busca Manual por Nome
+              </label>
+              <div style={{ position: 'relative' }}>
+                <input
+                  id="search-product"
+                  type="text"
+                  placeholder="Digite o nome do produto..."
+                  value={searchQuery}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
+                    setIsSearching(e.target.value.trim() !== '');
+                  }}
+                  style={{ ...styles.formInput, width: '100%', paddingLeft: '34px' }}
+                />
+                <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: styles.sidebarWidgetText?.color }} />
+              </div>
+
+            </div>
           </div>
         </div>
 
