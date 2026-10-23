@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { CalendarDays, Clock, PlusCircle, Trash2, Check, Play, X, User, PawPrint, Save, Upload, ChevronLeft, ChevronRight, AlertCircle, Info } from 'lucide-react';
+import { CalendarDays, Clock, PlusCircle, Trash2, Check, Play, X, User, PawPrint, Save, Upload, Download, ChevronLeft, ChevronRight, AlertCircle, Info } from 'lucide-react';
 import { supabase, mockSupabaseDb, isSupabaseConfigured, roleHierarchy, logAction } from '../supabaseClient';
 import type { Appointment } from '../supabaseClient';
 import type { AuthUser } from '../hooks/useAuth';
+import { buildIcs, downloadIcs } from '../utils/icsExport';
 
 interface AgendamentosProps {
   currentUser: AuthUser;
@@ -61,6 +62,9 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
   
   // Google Import states
   const [isImporting, setIsImporting] = useState<boolean>(false);
+  const [isExporting, setIsExporting] = useState<boolean>(false);
+  const [exportScope, setExportScope] = useState<'futuro' | 'mes' | 'tudo'>('futuro');
+  const [exportCancelled, setExportCancelled] = useState<boolean>(false);
   const [profilesList, setProfilesList] = useState<any[]>([]);
   const [importEvents, setImportEvents] = useState<any[]>([]);
   const [importNote, setImportNote] = useState<string | null>(null);
@@ -275,6 +279,40 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
     setScheduledDate(`${yyyy}-${mm}-${dd}`);
     setScheduledTime(hourStr);
     setIsAdding(true);
+  };
+
+  // Exportar: gera o mesmo tipo de arquivo (.ics) que o Google Agenda aceita importar
+  const exportableAppointments = (): Appointment[] => {
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    return appointments
+      .filter(a => {
+        if (!exportCancelled && a.status === 'Cancelado') return false;
+        const d = new Date(a.scheduled_at);
+        if (exportScope === 'futuro') return d >= dayStart;
+        if (exportScope === 'mes') return d >= monthStart && d < monthEnd;
+        return true;
+      })
+      .sort((a, b) => a.scheduled_at.localeCompare(b.scheduled_at));
+  };
+
+  const handleExport = () => {
+    const list = exportableAppointments();
+    const content = buildIcs(list.map(a => ({
+      id: a.id,
+      pet_name: a.pet_name,
+      service_type: a.service_type,
+      scheduled_at: a.scheduled_at,
+      status: a.status,
+      notes: a.notes,
+      tutor_name: allPets.find(p => p.id === a.pet_id)?.tutor_name,
+    })), 'Banho e Tosa / Clubinho - La Viola');
+    const today = new Date();
+    const stamp = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    downloadIcs(content, `agenda-laviola-${stamp}.ics`);
+    setIsExporting(false);
   };
 
   // Google Calendar Import Logic
@@ -768,6 +806,16 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
         </div>
 
         <div style={{ display: 'flex', gap: '10px' }}>
+          {isStaffMode && (
+            <button
+              onClick={() => setIsExporting(true)}
+              style={{ ...styles.btnAcc(hoveredBtn === 'export-app'), borderColor: styles.secondary, color: styles.secondary }}
+              onMouseEnter={() => setHoveredBtn('export-app')}
+              onMouseLeave={() => setHoveredBtn(null)}
+            >
+              <Download size={16} /> Exportar Google Agenda
+            </button>
+          )}
           {isStaffMode && (
             <button
               onClick={() => setIsImporting(true)}
@@ -1546,6 +1594,49 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
           </div>
         </div>
       )}
+
+      {/* Google Calendar Export Modal */}
+      {isExporting && (() => {
+        const count = exportableAppointments().length;
+        const opt = (value: 'futuro' | 'mes' | 'tudo', label: string) => (
+          <label key={value} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.9rem', color: styles.textMain, cursor: 'pointer' }}>
+            <input type="radio" name="export-scope" checked={exportScope === value} onChange={() => setExportScope(value)} /> {label}
+          </label>
+        );
+        return (
+          <div style={styles.modalOverlay}>
+            <div style={{ ...styles.modalContent, maxWidth: '520px' }} role="dialog" aria-modal="true" aria-labelledby="export-modal-title">
+              <div style={styles.modalHeader}>
+                <h2 id="export-modal-title" style={styles.modalTitle}>Exportar para o Google Agenda</h2>
+                <button onClick={() => setIsExporting(false)} style={styles.modalCloseBtn(false)} aria-label="Fechar">✕</button>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <span style={{ fontSize: '0.85rem', color: styles.sidebarWidgetText?.color }}>O que você quer levar para o Google Agenda?</span>
+                {opt('futuro', 'De hoje em diante')}
+                {opt('mes', 'Só o mês atual')}
+                {opt('tudo', 'Tudo (inclui o histórico)')}
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem', color: styles.textMain, cursor: 'pointer' }}>
+                  <input type="checkbox" checked={exportCancelled} onChange={(e) => setExportCancelled(e.target.checked)} /> Incluir agendamentos cancelados
+                </label>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', padding: '12px', backgroundColor: 'rgba(54, 162, 235, 0.05)', borderRadius: '8px', borderLeft: `4px solid ${styles.primary}`, fontSize: '0.82rem', color: styles.sidebarWidgetText?.color }}>
+                  <Info size={16} style={{ color: styles.primary, marginTop: '2px', flexShrink: 0 }} />
+                  <div>
+                    Será baixado um arquivo <code>.ics</code>. No Google Agenda: <strong>Configurações → Importar e exportar → Importar</strong>, escolha o arquivo e a agenda de destino.
+                    Importar o mesmo arquivo de novo atualiza os eventos, sem duplicar.
+                  </div>
+                </div>
+                <strong style={{ color: styles.textMain, fontSize: '0.9rem' }}>{count} {count === 1 ? 'agendamento será exportado' : 'agendamentos serão exportados'}</strong>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                  <button type="button" onClick={() => setIsExporting(false)} style={{ ...styles.btnAcc(false), padding: '10px 16px' }}>Cancelar</button>
+                  <button type="button" onClick={handleExport} disabled={count === 0} className="btn-save" style={{ ...styles.formSubmitBtn(false), margin: 0, width: 'auto', padding: '10px 20px', opacity: count === 0 ? 0.5 : 1 }}>
+                    <Download size={16} style={{ verticalAlign: 'middle', marginRight: '6px' }} /> Baixar arquivo
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Google Calendar Import Modal */}
       {isImporting && (
