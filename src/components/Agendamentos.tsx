@@ -705,7 +705,7 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
         <div>
           <h2 id="agendamentos-heading" style={styles.sectionTitle}>
             <CalendarDays size={20} style={{ display: 'inline', marginRight: '8px', verticalAlign: 'middle', color: styles.primary }} />
-            Agendamentos
+            Banho e Tosa / Clubinho
             <div style={styles.sectionTitleBar}></div>
           </h2>
           <p style={{ fontSize: '0.85rem', color: styles.sidebarWidgetText?.color, marginTop: '5px' }}>
