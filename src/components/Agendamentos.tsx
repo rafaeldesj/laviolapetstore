@@ -3,8 +3,8 @@ import { CalendarDays, Clock, PlusCircle, Trash2, Check, Play, X, User, PawPrint
 import { supabase, mockSupabaseDb, isSupabaseConfigured, roleHierarchy, logAction } from '../supabaseClient';
 import type { Appointment } from '../supabaseClient';
 import type { AuthUser } from '../hooks/useAuth';
-import { buildIcs, downloadIcs } from '../utils/icsExport';
-import { parseIcs } from '../utils/icsParse';
+import { listAppointments, createAppointment, updateAppointmentApi, deleteAppointmentApi } from '../utils/agendaService';
+import type { AgendaScope } from '../utils/agendaService';
 
 interface AgendamentosProps {
   currentUser: AuthUser;
@@ -61,18 +61,15 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
   const [currentDate, setCurrentDate] = useState<Date>(new Date());
   const [selectedCalendarApp, setSelectedCalendarApp] = useState<Appointment | null>(null);
   
-  // Google Import states
-  const [isImporting, setIsImporting] = useState<boolean>(false);
-  const [isExporting, setIsExporting] = useState<boolean>(false);
-  const [exportScope, setExportScope] = useState<'futuro' | 'mes' | 'tudo'>('futuro');
-  const [exportCancelled, setExportCancelled] = useState<boolean>(false);
   const [profilesList, setProfilesList] = useState<any[]>([]);
-  const [importEvents, setImportEvents] = useState<any[]>([]);
-  const [importNote, setImportNote] = useState<string | null>(null);
-  const [isDraggingFile, setIsDraggingFile] = useState<boolean>(false);
-  const [importLoading, setImportLoading] = useState<boolean>(false);
-  const [importSuccessMsg, setImportSuccessMsg] = useState<string | null>(null);
-  const [importError, setImportError] = useState<string | null>(null);
+  // Edição / escolha de "só este dia ou a série toda" / pet sem cadastro / repetição semanal
+  const [editingApp, setEditingApp] = useState<Appointment | null>(null);
+  const [editScope, setEditScope] = useState<AgendaScope>('this');
+  const [scopeAsk, setScopeAsk] = useState<{ id: string } | null>(null);
+  const [manualPet, setManualPet] = useState<string>('');
+  const [manualTutor, setManualTutor] = useState<string>('');
+  const [repeatWeekly, setRepeatWeekly] = useState<boolean>(false);
+  const [repeatCount, setRepeatCount] = useState<string>('4');
 
   useEffect(() => {
     if (isStaffMode) {
@@ -83,43 +80,53 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
   }, [isStaffMode]);
 
   useEffect(() => {
-    fetchAppointments();
     fetchPets();
   }, [currentUser.id, isStaffMode]);
 
-  const fetchAppointments = async () => {
-    setIsLoading(true);
+  // A agenda é lida só do período que está na tela (semana, dia ou a lista escolhida)
+  const DAY_MS = 86400000;
+  const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const rangeForView = (): [Date, Date] => {
+    const today = startOfDay(new Date());
+    if (viewMode === 'week') {
+      const days = getWeekDays(currentDate);
+      return [startOfDay(days[0]), new Date(startOfDay(days[days.length - 1]).getTime() + DAY_MS)];
+    }
+    if (viewMode === 'day') {
+      const d = startOfDay(currentDate);
+      return [d, new Date(d.getTime() + DAY_MS)];
+    }
+    if (filterPeriod === 'hoje') return [today, new Date(today.getTime() + DAY_MS)];
+    if (filterPeriod === 'proximos') return [today, new Date(today.getTime() + 120 * DAY_MS)];
+    if (filterPeriod === 'passados') return [new Date(today.getTime() - 365 * DAY_MS), today];
+    return [new Date(today.getTime() - 365 * DAY_MS), new Date(today.getTime() + 365 * DAY_MS)];
+  };
+
+  const fetchAppointments = async (silent = false) => {
+    if (!silent) setIsLoading(true);
     setErrorMsg(null);
     try {
-      if (false && supabase) {
-        let query = supabase.from('appointments').select('*, pets(*)');
-        if (!isStaffMode) {
-          query = query.eq('owner_id', currentUser.id);
-        }
-        const { data, error } = await query.order('scheduled_at', { ascending: true });
-        if (error) throw error;
-        const mapped = (data || []).map((item: any) => ({
-          id: item.id,
-          pet_id: item.pet_id,
-          pet_name: item.pets?.name || item.pet_name || 'Desconhecido',
-          owner_id: item.owner_id,
-          service_type: item.service_type,
-          scheduled_at: item.scheduled_at,
-          status: item.status,
-          notes: item.notes || '',
-          created_at: item.created_at,
-        }));
-        setAppointments(mapped);
-      } else {
-        const { data } = await mockSupabaseDb.getAppointments(currentUser.id, isStaffMode);
-        setAppointments(data || []);
-      }
+      const [from, to] = rangeForView();
+      setAppointments(await listAppointments(from, to));
     } catch (err: any) {
       setErrorMsg(err.message || 'Erro ao carregar agendamentos.');
     } finally {
       setIsLoading(false);
     }
   };
+
+  const periodKey = `${viewMode}|${filterPeriod}|${viewMode === 'list' ? '' : startOfDay(currentDate).getTime()}`;
+  useEffect(() => {
+    fetchAppointments();
+  }, [currentUser.id, isStaffMode, periodKey]);
+
+  // Se outra pessoa mexer na agenda, a tela se atualiza sozinha (a cada 60 segundos, com a tela aberta)
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (document.visibilityState === 'visible') fetchAppointments(true);
+    }, 60000);
+    return () => clearInterval(timer);
+  }, [currentUser.id, isStaffMode, periodKey]);
 
   const fetchPets = async () => {
     try {
@@ -282,334 +289,98 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
     setIsAdding(true);
   };
 
-  // Exportar: gera o mesmo tipo de arquivo (.ics) que o Google Agenda aceita importar
-  const exportableAppointments = (): Appointment[] => {
-    const now = new Date();
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-    const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    return appointments
-      .filter(a => {
-        if (!exportCancelled && a.status === 'Cancelado') return false;
-        const d = new Date(a.scheduled_at);
-        if (exportScope === 'futuro') return d >= dayStart;
-        if (exportScope === 'mes') return d >= monthStart && d < monthEnd;
-        return true;
-      })
-      .sort((a, b) => a.scheduled_at.localeCompare(b.scheduled_at));
+  const closeBooking = () => {
+    setIsAdding(false);
+    setEditingApp(null);
+    setSelectedPetId('');
+    setManualPet('');
+    setManualTutor('');
+    setRepeatWeekly(false);
+    setRepeatCount('4');
+    setNotes('');
+    setScheduledDate('');
+    setScheduledTime('');
   };
 
-  const handleExport = () => {
-    const list = exportableAppointments();
-    const content = buildIcs(list.map(a => ({
-      id: a.id,
-      pet_name: a.pet_name,
-      service_type: a.service_type,
-      scheduled_at: a.scheduled_at,
-      status: a.status,
-      notes: a.notes,
-      tutor_name: allPets.find(p => p.id === a.pet_id)?.tutor_name,
-    })), 'Banho e Tosa / Clubinho - La Viola');
-    const today = new Date();
-    const stamp = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-    downloadIcs(content, `agenda-laviola-${stamp}.ics`);
-    setIsExporting(false);
-  };
-
-  // Google Calendar Import Logic
-  // Aceita vários arquivos .ics de uma vez, ou o .zip que o Google Agenda baixa (com um .ics por agenda).
-  const importFiles = async (files: File[]) => {
-    setImportLoading(true);
-    setImportError(null);
-    setImportSuccessMsg(null);
-    setImportNote(null);
-    try {
-      const texts: { name: string; text: string }[] = [];
-      for (const file of files) {
-        const lower = file.name.toLowerCase();
-        if (lower.endsWith('.zip')) {
-          const JSZip = (await import('jszip')).default;
-          const zip = await JSZip.loadAsync(file);
-          for (const entry of Object.values(zip.files)) {
-            if (entry.dir || !entry.name.toLowerCase().endsWith('.ics')) continue;
-            texts.push({ name: entry.name, text: await entry.async('string') });
-          }
-        } else if (lower.endsWith('.ics')) {
-          texts.push({ name: file.name, text: await file.text() });
-        }
-      }
-      if (texts.length === 0) throw new Error('Escolha arquivos .ics (ou o .zip que o Google Agenda baixou).');
-
-      // A agenda de aniversários dos contatos não é serviço de pet: fica de fora.
-      const useful = texts.filter(f => !/(^|[\\/])birthdays/i.test(f.name));
-      const ignored = texts.length - useful.length;
-
-      const seen = new Set<string>();
-      const parsedEvents: { title: string; description: string; date: Date }[] = [];
-      let fromRecurrence = 0;
-      let unsupported = 0;
-      for (const f of useful) {
-        const parsed = parseIcs(f.text);
-        fromRecurrence += parsed.expandedFromRecurrence;
-        unsupported += parsed.unsupportedRecurrences;
-        for (const ev of parsed.events) {
-          const key = `${ev.title}|${ev.date.getTime()}`;
-          if (seen.has(key)) continue;
-          seen.add(key);
-          parsedEvents.push(ev);
-        }
-      }
-
-      if (parsedEvents.length === 0) {
-        throw new Error('Nenhum evento válido encontrado nos arquivos.');
-      }
-
-    const processed = parsedEvents.map(evt => {
-      const titleLower = evt.title.toLowerCase();
-      const descLower = evt.description.toLowerCase();
-      
-      let serviceType = 'Outro';
-      if (titleLower.includes('banho') || titleLower.includes('tosa') || descLower.includes('banho') || descLower.includes('tosa')) {
-        serviceType = 'Banho & Tosa';
-      } else if (titleLower.includes('consulta') || titleLower.includes('vet') || descLower.includes('consulta') || descLower.includes('vet')) {
-        serviceType = 'Consulta Veterinária';
-      } else if (titleLower.includes('vacina') || descLower.includes('vacina')) {
-        serviceType = 'Vacinação';
-      } else if (titleLower.includes('hotel') || titleLower.includes('creche') || descLower.includes('hotel') || descLower.includes('creche')) {
-        serviceType = 'Hotelzinho / Creche';
-      }
-
-      let matchedPet: any = null;
-      let detectedPetName = '';
-      const words = evt.title.replace(/[^\w\s\u00C0-\u00FF]/gi, ' ').split(/\s+/).filter((w: string) => w.length >= 2);
-      
-      for (const word of words) {
-        const wordLower = word.toLowerCase();
-        const found = allPets.find(p => p.name.toLowerCase() === wordLower);
-        if (found) {
-          matchedPet = found;
-          detectedPetName = found.name;
-          break;
-        }
-      }
-
-      if (!matchedPet) {
-        const cleanWords = words.filter((w: string) => {
-          const wl = w.toLowerCase();
-          return !['banho', 'tosa', 'consulta', 'vacina', 'hotel', 'creche', 'outro', 'servico', 'serviço', 'pet', 'cão', 'gato', 'veterinario', 'veterinária', 'de', 'do', 'da', 'para', 'com', 'e', 'a'].includes(wl);
-        });
-        if (cleanWords.length > 0) {
-          detectedPetName = cleanWords[0];
-        } else {
-          detectedPetName = 'Pet Importado';
-        }
-      }
-
-      const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z0-9.-]+/g;
-      const emails = evt.description.match(emailRegex);
-      let matchedOwnerId = '';
-      let matchedOwnerName = '';
-
-      if (matchedPet) {
-        matchedOwnerId = matchedPet.owner_id;
-        matchedOwnerName = matchedPet.tutor_name || 'Tutor Cadastrado';
-      } else if (emails && emails.length > 0) {
-        const email = emails[0].toLowerCase();
-        const foundProfile = profilesList.find((p: any) => p.email?.toLowerCase() === email);
-        if (foundProfile) {
-          matchedOwnerId = foundProfile.id;
-          matchedOwnerName = foundProfile.full_name || foundProfile.email;
-        }
-      }
-
-      const scheduledAtStr = evt.date.toISOString();
-      const isDuplicate = appointments.some(a => 
-        a.pet_name.toLowerCase() === detectedPetName.toLowerCase() && 
-        Math.abs(new Date(a.scheduled_at).getTime() - evt.date.getTime()) < 30 * 60 * 1000 && 
-        a.service_type === serviceType
-      );
-
-      return {
-        title: evt.title,
-        description: evt.description,
-        scheduled_at: scheduledAtStr,
-        service_type: serviceType,
-        matchedPet,
-        detectedPetName,
-        matchedOwnerId,
-        matchedOwnerName,
-        isDuplicate
-      };
-    });
-
-      setImportEvents(processed);
-      setImportNote(`${useful.length} agenda(s) lida(s)${ignored ? `; ${ignored} de aniversários ignorada(s)` : ''}. ${fromRecurrence} atendimentos vieram de eventos que se repetem toda semana.${unsupported ? ` Atenção: ${unsupported} evento(s) repetido(s) com regra não suportada entraram só na primeira data.` : ''}`);
-    } catch (err: any) {
-      setImportError(err.message || 'Erro ao ler ou processar os arquivos.');
-    } finally {
-      setImportLoading(false);
-    }
-  };
-
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-    e.target.value = '';
-    if (files.length > 0) void importFiles(files);
-  };
-
-  const handleDropFiles = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    setIsDraggingFile(false);
-    const files = Array.from(e.dataTransfer.files || []);
-    if (files.length > 0) void importFiles(files);
-  };
-
-  const handleConfirmImport = async () => {
-    setImportLoading(true);
-    setImportError(null);
-    let petsCreatedCount = 0;
-    let appointmentsImportedCount = 0;
-
-    try {
-      const nonDuplicates = importEvents.filter(e => !e.isDuplicate);
-      // Pets novos criados nesta importação (por nome): o mesmo pet em vários dias não pode virar vários cadastros
-      const createdPets = new Map<string, { id: string; ownerId: string }>();
-      const prepared: any[] = [];
-
-      for (const evt of nonDuplicates) {
-        let petId = '';
-        let ownerId = evt.matchedOwnerId || currentUser.id;
-
-        if (evt.matchedPet) {
-          petId = evt.matchedPet.id;
-        } else {
-          const key = evt.detectedPetName.toLowerCase();
-          const known = createdPets.get(key);
-          if (known) {
-            petId = known.id;
-            ownerId = known.ownerId;
-          } else {
-            const { data } = await mockSupabaseDb.addPet({
-              name: evt.detectedPetName,
-              species: 'Outro',
-              breed: 'Importado Google',
-              age: 0
-            }, ownerId);
-            if (!data) throw new Error(`Não consegui cadastrar o pet "${evt.detectedPetName}".`);
-            petId = data.id;
-            createdPets.set(key, { id: petId, ownerId });
-            petsCreatedCount++;
-            allPets.push({
-              id: petId,
-              name: evt.detectedPetName,
-              species: 'Outro',
-              breed: 'Importado Google',
-              age: 0,
-              owner_id: ownerId,
-              tutor_name: evt.matchedOwnerName || currentUser.name || 'Tutor'
-            });
-          }
-        }
-
-        prepared.push({
-          pet_id: petId,
-          pet_name: evt.detectedPetName,
-          owner_id: ownerId,
-          service_type: evt.service_type,
-          scheduled_at: evt.scheduled_at,
-          status: 'Agendado' as const,
-          notes: (evt.description || '').trim() || 'Importado do Google Agenda'
-        });
-      }
-
-      // Grava em lotes de 25 ao mesmo tempo (milhares de agendamentos, um por vez, levariam muito tempo)
-      const failures: string[] = [];
-      for (let i = 0; i < prepared.length; i += 25) {
-        const results = await Promise.all(prepared.slice(i, i + 25).map(d => mockSupabaseDb.addAppointment(d)));
-        results.forEach((r, idx) => {
-          if (r.error) failures.push(`${prepared[i + idx].pet_name} (${prepared[i + idx].scheduled_at})`);
-          else appointmentsImportedCount++;
-        });
-      }
-      if (failures.length > 0) {
-        throw new Error(`${appointmentsImportedCount} agendamentos foram salvos, mas ${failures.length} falharam (ex.: ${failures.slice(0, 3).join(', ')}). Importe de novo: os já salvos serão ignorados como duplicados.`);
-      }
-
-      await logAction(
-        currentUser.email || '',
-        currentUser.name || 'Tutor',
-        'Importação Google Agenda',
-        `Importou ${appointmentsImportedCount} agendamentos do Google Agenda. ${petsCreatedCount} novos pets foram cadastrados.`
-      );
-
-      setImportSuccessMsg(`Importação concluída! ${appointmentsImportedCount} agendamentos importados. ${petsCreatedCount} novos pets cadastrados.`);
-      setImportEvents([]);
-      fetchAppointments();
-      fetchPets();
-    } catch (err: any) {
-      setImportError(err.message || 'Erro ao salvar agendamentos importados.');
-    } finally {
-      setImportLoading(false);
-    }
+  const pad2 = (n: number) => String(n).padStart(2, '0');
+  const openEdit = (app: Appointment) => {
+    const d = new Date(app.scheduled_at);
+    setEditingApp(app);
+    setEditScope('this');
+    setServiceType(app.service_type);
+    setScheduledDate(`${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`);
+    setScheduledTime(`${pad2(d.getHours())}:${pad2(d.getMinutes())}`);
+    setNotes(app.notes || '');
+    setSelectedCalendarApp(null);
+    setIsAdding(true);
   };
 
   const handleSchedule = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedPetId || !scheduledDate || !scheduledTime || !serviceType) {
+    const manual = selectedPetId === '__manual';
+    if ((!editingApp && !selectedPetId) || (manual && !manualPet.trim()) || !scheduledDate || !scheduledTime || !serviceType) {
       setErrorMsg('Preencha todos os campos obrigatórios.');
       return;
     }
     setIsLoading(true);
     setErrorMsg(null);
-
-    let petName = '';
-    let ownerId = currentUser.id;
-
-    if (isStaffMode) {
-      const selectedPet = allPets.find(p => p.id === selectedPetId);
-      if (selectedPet) {
-        petName = selectedPet.name;
-        ownerId = selectedPet.owner_id;
-      }
-    } else {
-      const selectedPet = pets.find(p => p.id === selectedPetId);
-      if (selectedPet) {
-        petName = selectedPet.name;
-      }
-    }
-
-    const scheduledAt = new Date(`${scheduledDate}T${scheduledTime}`).toISOString();
-    const newAppointmentData = {
-      pet_id: selectedPetId,
-      pet_name: petName || 'Pet',
-      owner_id: ownerId,
-      service_type: serviceType,
-      scheduled_at: scheduledAt,
-      status: 'Agendado' as const,
-      notes: notes.trim(),
-    };
+    const startISO = new Date(`${scheduledDate}T${scheduledTime}`).toISOString();
 
     try {
-      if (false && supabase) {
-        const { error } = await supabase.from('appointments').insert(newAppointmentData);
-        if (error) throw error;
+      if (editingApp) {
+        await updateAppointmentApi(editingApp.id, { startISO, serviceType, notes: notes.trim() }, editingApp.recurringEventId ? editScope : 'this');
+        await logAction(
+          currentUser.email || '',
+          currentUser.name || 'Usuário',
+          'Edição de Agendamento',
+          `Agendamento de "${serviceType}" do pet "${editingApp.pet_name}" alterado para ${scheduledDate} às ${scheduledTime}${editingApp.recurringEventId && editScope === 'series' ? ' (série inteira)' : ''}.`
+        );
       } else {
-        await mockSupabaseDb.addAppointment(newAppointmentData);
+        let petName = '';
+        let petId = '';
+        let tutorName = '';
+        let ownerId = '';
+        if (manual) {
+          petName = manualPet.trim();
+          tutorName = manualTutor.trim();
+        } else if (isStaffMode) {
+          const p = allPets.find(x => x.id === selectedPetId);
+          if (p) {
+            petName = p.name;
+            petId = p.id;
+            ownerId = p.owner_id;
+            tutorName = p.tutor_name && p.tutor_name !== 'Desconhecido' ? p.tutor_name : '';
+          }
+        } else {
+          const p = pets.find(x => x.id === selectedPetId);
+          if (p) {
+            petName = p.name;
+            petId = p.id;
+          }
+          tutorName = currentUser.name || '';
+        }
+        const total = repeatWeekly ? Math.min(104, Math.max(2, parseInt(repeatCount, 10) || 2)) : 1;
+        await createAppointment({
+          petId,
+          petName: petName || 'Pet',
+          tutorName,
+          ownerId: isStaffMode ? ownerId : undefined,
+          serviceType,
+          startISO,
+          notes: notes.trim(),
+          repeatCount: total,
+        });
+        await logAction(
+          currentUser.email || '',
+          currentUser.name || 'Tutor',
+          'Novo Agendamento',
+          `Agendamento de "${serviceType}" para o pet "${petName || 'Pet'}" em ${scheduledDate} às ${scheduledTime}${total > 1 ? `, repetindo toda semana (${total} vezes)` : ''}.`
+        );
       }
-      await logAction(
-        currentUser.email || '',
-        currentUser.name || 'Tutor',
-        'Novo Agendamento',
-        `Agendamento de "${serviceType}" para o pet "${petName || 'Pet'}" em ${scheduledDate} às ${scheduledTime}.`
-      );
-      setSelectedPetId('');
-      setScheduledDate('');
-      setScheduledTime('');
-      setNotes('');
-      setIsAdding(false);
-      fetchAppointments();
+      closeBooking();
+      await fetchAppointments(true);
     } catch (err: any) {
-      setErrorMsg(err.message || 'Erro ao realizar agendamento.');
+      setErrorMsg(err.message || 'Erro ao salvar o agendamento.');
     } finally {
       setIsLoading(false);
     }
@@ -622,24 +393,17 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
     const petName = appToUpdate ? appToUpdate.pet_name : 'Pet';
     const service = appToUpdate ? appToUpdate.service_type : 'Serviço';
     try {
-      if (false && supabase) {
-        const { error } = await supabase
-          .from('appointments')
-          .update({ status: newStatus })
-          .eq('id', appointmentId);
-        if (error) throw error;
-      } else {
-        await mockSupabaseDb.updateAppointment(appointmentId, { status: newStatus });
-      }
+      await updateAppointmentApi(appointmentId, { status: newStatus }, 'this');
       await logAction(
         currentUser.email || '',
         currentUser.name || 'Usuário',
         'Atualização de Agendamento',
         `O status do agendamento de "${service}" para o pet "${petName}" foi alterado para "${newStatus}".`
       );
-      fetchAppointments();
+      await fetchAppointments(true);
     } catch (err: any) {
       setErrorMsg(err.message || 'Erro ao atualizar status.');
+    } finally {
       setIsLoading(false);
     }
   };
@@ -649,31 +413,36 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
     await handleUpdateStatus(appointmentId, 'Cancelado');
   };
 
-  const handleDelete = async (appointmentId: string) => {
-    if (!confirm('Deseja remover definitivamente este agendamento do histórico?')) return;
+  const runDelete = async (appointmentId: string, scope: AgendaScope) => {
     setIsLoading(true);
     setErrorMsg(null);
     const appToDelete = appointments.find(a => a.id === appointmentId);
     const petName = appToDelete ? appToDelete.pet_name : 'Pet';
     const service = appToDelete ? appToDelete.service_type : 'Serviço';
     try {
-      if (false && supabase) {
-        const { error } = await supabase.from('appointments').delete().eq('id', appointmentId);
-        if (error) throw error;
-      } else {
-        await mockSupabaseDb.deleteAppointment(appointmentId);
-      }
+      await deleteAppointmentApi(appointmentId, scope);
       await logAction(
         currentUser.email || '',
         currentUser.name || 'Usuário',
         'Exclusão de Agendamento',
-        `O agendamento de "${service}" para o pet "${petName}" (ID: ${appointmentId}) foi removido permanentemente.`
+        `O agendamento de "${service}" para o pet "${petName}" foi removido${scope === 'series' ? ' (série inteira)' : ''}.`
       );
-      fetchAppointments();
+      await fetchAppointments(true);
     } catch (err: any) {
       setErrorMsg(err.message || 'Erro ao remover agendamento.');
+    } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleDelete = async (appointmentId: string) => {
+    const app = appointments.find(a => a.id === appointmentId);
+    if (app?.recurringEventId) {
+      setScopeAsk({ id: appointmentId }); // agendamento que se repete: pergunta se é só este dia ou todos
+      return;
+    }
+    if (!confirm('Deseja remover definitivamente este agendamento?')) return;
+    await runDelete(appointmentId, 'this');
   };
 
   const getTodayDateString = () => {
@@ -752,26 +521,6 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
         </div>
 
         <div style={{ display: 'flex', gap: '10px' }}>
-          {isStaffMode && (
-            <button
-              onClick={() => setIsExporting(true)}
-              style={{ ...styles.btnAcc(hoveredBtn === 'export-app'), borderColor: styles.secondary, color: styles.secondary }}
-              onMouseEnter={() => setHoveredBtn('export-app')}
-              onMouseLeave={() => setHoveredBtn(null)}
-            >
-              <Download size={16} /> Exportar Google Agenda
-            </button>
-          )}
-          {isStaffMode && (
-            <button
-              onClick={() => setIsImporting(true)}
-              style={{ ...styles.btnAcc(hoveredBtn === 'import-app'), borderColor: styles.secondary, color: styles.secondary }}
-              onMouseEnter={() => setHoveredBtn('import-app')}
-              onMouseLeave={() => setHoveredBtn(null)}
-            >
-              <Upload size={16} /> Importar Google Agenda
-            </button>
-          )}
           <button
             onClick={() => setIsAdding(true)}
             style={styles.btnAcc(hoveredBtn === 'new-app')}
@@ -1314,11 +1063,11 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
         <div style={styles.modalOverlay}>
           <div style={{ ...styles.modalContent, maxWidth: '500px' }} role="dialog" aria-modal="true" aria-labelledby="booking-modal-title">
             <div style={styles.modalHeader}>
-              <h2 id="booking-modal-title" style={styles.modalTitle}>Novo Agendamento</h2>
-              <button onClick={() => setIsAdding(false)} style={styles.modalCloseBtn(false)} aria-label="Fechar">✕</button>
+              <h2 id="booking-modal-title" style={styles.modalTitle}>{editingApp ? 'Editar Agendamento' : 'Novo Agendamento'}</h2>
+              <button onClick={closeBooking} style={styles.modalCloseBtn(false)} aria-label="Fechar">✕</button>
             </div>
 
-            {activePetsList.length === 0 ? (
+            {activePetsList.length === 0 && !isStaffMode && !editingApp ? (
               <div style={{ textAlign: 'center', padding: '20px 0' }}>
                 <PawPrint size={32} style={{ color: styles.secondary, margin: '0 auto 10px', display: 'block' }} />
                 <p style={{ color: styles.sidebarWidgetText?.color, fontSize: '0.9rem', marginBottom: '15px' }}>
@@ -1338,23 +1087,43 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
               </div>
             ) : (
               <form onSubmit={handleSchedule} style={styles.modalForm}>
-                <div style={styles.formGroup}>
-                  <label htmlFor="book-pet" style={styles.formLabel}>Selecione o Pet *</label>
-                  <select
-                    id="book-pet"
-                    value={selectedPetId}
-                    onChange={(e) => setSelectedPetId(e.target.value)}
-                    style={styles.formInput}
-                    required
-                  >
-                    <option value="">Selecione...</option>
-                    {activePetsList.map(p => (
-                      <option key={p.id} value={p.id}>
-                        {p.name} ({p.species}){isStaffMode ? ` - Tutor: ${p.tutor_name} (${p.tutor_email})` : ''}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                {editingApp ? (
+                  <div style={{ fontSize: '0.92rem', color: styles.textMain, padding: '10px 12px', borderRadius: '8px', backgroundColor: styles.background, border: `1px solid ${styles.borderColor}` }}>
+                    Pet: <strong>{editingApp.pet_name}</strong>{editingApp.tutor_name ? <> · Tutor: <strong>{editingApp.tutor_name}</strong></> : null}
+                  </div>
+                ) : (
+                  <div style={styles.formGroup}>
+                    <label htmlFor="book-pet" style={styles.formLabel}>Selecione o Pet *</label>
+                    <select
+                      id="book-pet"
+                      value={selectedPetId}
+                      onChange={(e) => setSelectedPetId(e.target.value)}
+                      style={styles.formInput}
+                      required
+                    >
+                      <option value="">Selecione...</option>
+                      {isStaffMode && <option value="__manual">✍ Pet sem cadastro (digitar o nome)</option>}
+                      {activePetsList.map(p => (
+                        <option key={p.id} value={p.id}>
+                          {p.name} ({p.species}){isStaffMode ? ` - Tutor: ${p.tutor_name} (${p.tutor_email})` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {!editingApp && selectedPetId === '__manual' && (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: '15px' }}>
+                    <div style={styles.formGroup}>
+                      <label htmlFor="book-manual-pet" style={styles.formLabel}>Nome do pet *</label>
+                      <input id="book-manual-pet" type="text" value={manualPet} onChange={(e) => setManualPet(e.target.value)} style={styles.formInput} placeholder="Ex: Neusa" required />
+                    </div>
+                    <div style={styles.formGroup}>
+                      <label htmlFor="book-manual-tutor" style={styles.formLabel}>Tutor</label>
+                      <input id="book-manual-tutor" type="text" value={manualTutor} onChange={(e) => setManualTutor(e.target.value)} style={styles.formInput} placeholder="Ex: Luciene" />
+                    </div>
+                  </div>
+                )}
 
                 <div style={styles.formGroup}>
                   <label htmlFor="book-service" style={styles.formLabel}>Serviço *</label>
@@ -1382,7 +1151,7 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
                       value={scheduledDate}
                       onChange={(e) => setScheduledDate(e.target.value)}
                       style={styles.formInput}
-                      min={getTodayDateString()}
+                      min={editingApp ? undefined : getTodayDateString()}
                       required
                     />
                   </div>
@@ -1410,17 +1179,52 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
                   />
                 </div>
 
+                {!editingApp && (
+                  <div style={styles.formGroup}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.9rem', color: styles.textMain, cursor: 'pointer' }}>
+                      <input type="checkbox" checked={repeatWeekly} onChange={(e) => setRepeatWeekly(e.target.checked)} />
+                      Repetir toda semana, no mesmo dia e horário
+                    </label>
+                    {repeatWeekly && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem', color: styles.textMain }}>
+                        Total de
+                        <input
+                          type="number"
+                          min={2}
+                          max={104}
+                          value={repeatCount}
+                          onChange={(e) => setRepeatCount(e.target.value)}
+                          style={{ ...styles.formInput, width: '90px', padding: '6px 10px' }}
+                          aria-label="Quantas vezes repetir"
+                        />
+                        atendimentos (contando o primeiro)
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {editingApp?.recurringEventId && (
+                  <div style={styles.formGroup}>
+                    <span style={styles.formLabel}>Este agendamento se repete. Aplicar a:</span>
+                    {([['this', 'Só este dia'], ['series', 'Todos os dias da série (mantém o mesmo deslocamento de data e horário)']] as const).map(([v, label]) => (
+                      <label key={v} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem', color: styles.textMain, cursor: 'pointer' }}>
+                        <input type="radio" name="edit-scope" checked={editScope === v} onChange={() => setEditScope(v)} /> {label}
+                      </label>
+                    ))}
+                  </div>
+                )}
+
                 <div style={{ display: 'flex', gap: '10px', marginTop: '15px' }}>
                   <button
                     type="submit"
                     className="btn-save"
                     style={{ ...styles.formSubmitBtn(false), display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', flexGrow: 1, margin: 0 }}
                   >
-                    <Save size={16} /> Confirmar Agendamento
+                    <Save size={16} /> {editingApp ? 'Salvar alterações' : 'Confirmar Agendamento'}
                   </button>
                   <button
                     type="button"
-                    onClick={() => setIsAdding(false)}
+                    onClick={closeBooking}
                     style={{ ...styles.btnAcc(false), padding: '12px' }}
                   >
                     Cancelar
@@ -1454,7 +1258,11 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', backgroundColor: styles.background, padding: '15px', borderRadius: '8px', border: `1px solid ${styles.borderColor}` }}>
                 <div style={{ fontSize: '0.92rem', color: styles.textMain }}>
                   Pet: <strong>{selectedCalendarApp.pet_name}</strong>
+                  {selectedCalendarApp.tutor_name ? <> · Tutor: <strong>{selectedCalendarApp.tutor_name}</strong></> : null}
                 </div>
+                {selectedCalendarApp.recurringEventId && (
+                  <div style={{ fontSize: '0.8rem', color: styles.sidebarWidgetText?.color }}>🔁 Este agendamento se repete</div>
+                )}
                 <div style={{ fontSize: '0.92rem', color: styles.textMain, display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <Clock size={14} style={{ color: styles.primary }} />
                   <strong>{formatDate(selectedCalendarApp.scheduled_at)}</strong>
@@ -1470,9 +1278,15 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
               </div>
 
               {/* Actions */}
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '15px', borderTop: `1px solid ${styles.borderColor}`, paddingTop: '15px' }}>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '15px', borderTop: `1px solid ${styles.borderColor}`, paddingTop: '15px', flexWrap: 'wrap' }}>
                 {isStaffMode ? (
                   <>
+                    <button
+                      onClick={() => openEdit(selectedCalendarApp)}
+                      style={{ ...styles.btnAcc(false), display: 'flex', alignItems: 'center', gap: '4px' }}
+                    >
+                      <Clock size={14} /> Editar / Reagendar
+                    </button>
                     {selectedCalendarApp.status === 'Agendado' && (
                       <button
                         onClick={async () => {
@@ -1541,207 +1355,33 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
         </div>
       )}
 
-      {/* Google Calendar Export Modal */}
-      {isExporting && (() => {
-        const count = exportableAppointments().length;
-        const opt = (value: 'futuro' | 'mes' | 'tudo', label: string) => (
-          <label key={value} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.9rem', color: styles.textMain, cursor: 'pointer' }}>
-            <input type="radio" name="export-scope" checked={exportScope === value} onChange={() => setExportScope(value)} /> {label}
-          </label>
-        );
-        return (
-          <div style={styles.modalOverlay}>
-            <div style={{ ...styles.modalContent, maxWidth: '520px' }} role="dialog" aria-modal="true" aria-labelledby="export-modal-title">
-              <div style={styles.modalHeader}>
-                <h2 id="export-modal-title" style={styles.modalTitle}>Exportar para o Google Agenda</h2>
-                <button onClick={() => setIsExporting(false)} style={styles.modalCloseBtn(false)} aria-label="Fechar">✕</button>
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                <span style={{ fontSize: '0.85rem', color: styles.sidebarWidgetText?.color }}>O que você quer levar para o Google Agenda?</span>
-                {opt('futuro', 'De hoje em diante')}
-                {opt('mes', 'Só o mês atual')}
-                {opt('tudo', 'Tudo (inclui o histórico)')}
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem', color: styles.textMain, cursor: 'pointer' }}>
-                  <input type="checkbox" checked={exportCancelled} onChange={(e) => setExportCancelled(e.target.checked)} /> Incluir agendamentos cancelados
-                </label>
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', padding: '12px', backgroundColor: 'rgba(54, 162, 235, 0.05)', borderRadius: '8px', borderLeft: `4px solid ${styles.primary}`, fontSize: '0.82rem', color: styles.sidebarWidgetText?.color }}>
-                  <Info size={16} style={{ color: styles.primary, marginTop: '2px', flexShrink: 0 }} />
-                  <div>
-                    Será baixado um arquivo <code>.ics</code>. No Google Agenda: <strong>Configurações → Importar e exportar → Importar</strong>, escolha o arquivo e a agenda de destino.
-                    Importar o mesmo arquivo de novo atualiza os eventos, sem duplicar.
-                  </div>
-                </div>
-                <strong style={{ color: styles.textMain, fontSize: '0.9rem' }}>{count} {count === 1 ? 'agendamento será exportado' : 'agendamentos serão exportados'}</strong>
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-                  <button type="button" onClick={() => setIsExporting(false)} style={{ ...styles.btnAcc(false), padding: '10px 16px' }}>Cancelar</button>
-                  <button type="button" onClick={handleExport} disabled={count === 0} className="btn-save" style={{ ...styles.formSubmitBtn(false), margin: 0, width: 'auto', padding: '10px 20px', opacity: count === 0 ? 0.5 : 1 }}>
-                    <Download size={16} style={{ verticalAlign: 'middle', marginRight: '6px' }} /> Baixar arquivo
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
-
-      {/* Google Calendar Import Modal */}
-      {isImporting && (
+      {/* Pergunta: excluir só este dia ou a série inteira */}
+      {scopeAsk && (
         <div style={styles.modalOverlay}>
-          <div style={{ ...styles.modalContent, maxWidth: '650px', maxHeight: '90vh', overflowY: 'auto' }} role="dialog" aria-modal="true" aria-labelledby="import-modal-title">
+          <div style={{ ...styles.modalContent, maxWidth: '440px' }} role="dialog" aria-modal="true" aria-labelledby="scope-modal-title">
             <div style={styles.modalHeader}>
-              <h2 id="import-modal-title" style={styles.modalTitle}>Importar Google Agenda (.ics)</h2>
-              <button onClick={() => { setIsImporting(false); setImportEvents([]); setImportError(null); setImportSuccessMsg(null); }} style={styles.modalCloseBtn(false)} aria-label="Fechar">✕</button>
+              <h2 id="scope-modal-title" style={{ ...styles.modalTitle, fontSize: '1.1rem' }}>Este agendamento se repete</h2>
+              <button onClick={() => setScopeAsk(null)} style={styles.modalCloseBtn(false)} aria-label="Fechar">✕</button>
             </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginTop: '10px' }}>
-              {!importSuccessMsg && importEvents.length === 0 && (
-                <div style={{ fontSize: '0.9rem', color: styles.sidebarWidgetText?.color, display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', padding: '12px', backgroundColor: 'rgba(54, 162, 235, 0.05)', borderRadius: '8px', borderLeft: `4px solid ${styles.primary}` }}>
-                    <Info size={16} style={{ color: styles.primary, marginTop: '2px', flexShrink: 0 }} />
-                    <div>
-                      <strong>Como exportar seus agendamentos:</strong>
-                      <ol style={{ margin: '5px 0 0 15px', padding: 0 }}>
-                        <li>Acesse o <a href="https://calendar.google.com" target="_blank" rel="noopener noreferrer" style={{ color: styles.primary, textDecoration: 'underline' }}>Google Agenda</a> no computador.</li>
-                        <li>No canto superior direito, clique em <strong>Configurações</strong> (engrenagem).</li>
-                        <li>No menu à esquerda, clique em <strong>Importar e exportar</strong>.</li>
-                        <li>Na seção Exportar, clique no botão <strong>Exportar</strong>.</li>
-                        <li>Um arquivo <code>.zip</code> será baixado. Pode escolher o <code>.zip</code> direto, ou extrair e selecionar <strong>todos</strong> os arquivos <code>.ics</code> de uma vez (Ctrl + A).</li>
-                      </ol>
-                    </div>
-                  </div>
-
-                  <div
-                    onDragEnter={(e) => { e.preventDefault(); setIsDraggingFile(true); }}
-                    onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; setIsDraggingFile(true); }}
-                    onDragLeave={() => setIsDraggingFile(false)}
-                    onDrop={handleDropFiles}
-                    style={{
-                    border: `2px dashed ${isDraggingFile ? styles.primary : styles.borderColor}`,
-                    borderRadius: '12px',
-                    padding: '30px 20px',
-                    textAlign: 'center',
-                    backgroundColor: isDraggingFile ? `${styles.primary}12` : styles.background,
-                    cursor: 'pointer',
-                    position: 'relative'
-                  }}>
-                    <Upload size={36} style={{ color: styles.primary, margin: '0 auto 10px', display: 'block' }} />
-                    <span style={{ fontWeight: 600, color: styles.textMain, display: 'block', marginBottom: '5px' }}>Arraste os arquivos aqui ou clique para selecionar (vários de uma vez)</span>
-                    <span style={{ fontSize: '0.8rem', color: styles.textMuted }}>Arquivos .ics do Google Agenda, ou o .zip que ele baixou</span>
-                    <input
-                      type="file"
-                      accept=".ics,.zip"
-                      multiple
-                      onChange={handleFileUpload}
-                      style={{
-                        position: 'absolute',
-                        top: 0,
-                        left: 0,
-                        width: '100%',
-                        height: '100%',
-                        opacity: 0,
-                        cursor: 'pointer'
-                      }}
-                    />
-                  </div>
-                </div>
-              )}
-
-              {importLoading && (
-                <div style={{ textAlign: 'center', padding: '30px 0' }}>
-                  <Clock size={32} style={{ color: styles.secondary, margin: '0 auto 10px', display: 'block', animation: 'spin 1.5s linear infinite' }} />
-                  <p style={{ color: styles.textMain, fontWeight: 500 }}>Processando arquivo e sincronizando cadastros...</p>
-                </div>
-              )}
-
-              {importError && (
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', padding: '12px', backgroundColor: 'rgba(255, 99, 132, 0.08)', color: 'hsl(0, 75%, 55%)', borderRadius: '8px', border: '1px solid rgba(255, 99, 132, 0.2)' }}>
-                  <AlertCircle size={16} style={{ flexShrink: 0 }} />
-                  <span style={{ fontSize: '0.88rem', fontWeight: 500 }}>{importError}</span>
-                </div>
-              )}
-
-              {importSuccessMsg && (
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '20px 0', gap: '12px' }}>
-                  <Check size={48} style={{ color: 'hsl(142, 60%, 40%)', backgroundColor: 'rgba(75, 192, 192, 0.1)', padding: '12px', borderRadius: '50%' }} />
-                  <h3 style={{ fontSize: '1.2rem', fontWeight: 700, color: styles.textMain, margin: 0 }}>Importação Concluída com Sucesso!</h3>
-                  <p style={{ fontSize: '0.92rem', color: styles.sidebarWidgetText?.color, margin: 0 }}>{importSuccessMsg}</p>
-                  <button
-                    onClick={() => { setIsImporting(false); setImportSuccessMsg(null); }}
-                    style={{ ...styles.formSubmitBtn(false), margin: '15px 0 0 0', width: 'auto', padding: '10px 24px' }}
-                  >
-                    Fechar Importador
-                  </button>
-                </div>
-              )}
-
-              {!importLoading && !importSuccessMsg && importEvents.length > 0 && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-                    <div>
-                      <h3 style={{ fontSize: '1.1rem', fontWeight: 700, margin: 0, color: styles.primary }}>Pré-visualização dos Dados</h3>
-                      <span style={{ fontSize: '0.85rem', color: styles.textMuted }}>
-                        {importEvents.length} eventos encontrados ({importEvents.filter(e => e.isDuplicate).length} duplicados serão ignorados).{importNote ? ` ${importNote}` : ''}
-                      </span>
-                    </div>
-                    <div style={{ display: 'flex', gap: '8px' }}>
-                      <button
-                        onClick={handleConfirmImport}
-                        disabled={importEvents.every(e => e.isDuplicate)}
-                        className="btn-save"
-                        style={{ ...styles.btnAcc(false), backgroundColor: undefined, borderColor: undefined, padding: '8px 16px', fontSize: '0.85rem' }}
-                      >
-                        Confirmar Importação ({importEvents.filter(e => !e.isDuplicate).length})
-                      </button>
-                      <button
-                        onClick={() => setImportEvents([])}
-                        style={{ ...styles.btnAcc(false), padding: '8px 16px', fontSize: '0.85rem' }}
-                      >
-                        Trocar Arquivos
-                      </button>
-                    </div>
-                  </div>
-
-                  <div style={{ overflowX: 'auto', border: `1px solid ${styles.borderColor}`, borderRadius: '8px', maxHeight: '350px' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem', textAlign: 'left' }}>
-                      <thead>
-                        <tr style={{ backgroundColor: styles.background, borderBottom: `1px solid ${styles.borderColor}` }}>
-                          <th style={{ padding: '10px', color: styles.textMain }}>Data e Hora</th>
-                          <th style={{ padding: '10px', color: styles.textMain }}>Serviço Mapeado</th>
-                          <th style={{ padding: '10px', color: styles.textMain }}>Nome do Pet</th>
-                          <th style={{ padding: '10px', color: styles.textMain }}>Tutor / Status</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {importEvents.map((evt, idx) => (
-                          <tr key={idx} style={{ borderBottom: `1px solid ${styles.borderColor}`, opacity: evt.isDuplicate ? 0.5 : 1 }}>
-                            <td style={{ padding: '10px', color: styles.textMain, fontWeight: 500 }}>
-                              {formatDate(evt.scheduled_at)}
-                            </td>
-                            <td style={{ padding: '10px', color: styles.textMain }}>
-                              {evt.service_type}
-                            </td>
-                            <td style={{ padding: '10px', color: styles.textMain }}>
-                              <strong>{evt.detectedPetName}</strong>{' '}
-                              {evt.matchedPet ? (
-                                <span style={{ fontSize: '0.7rem', color: 'hsl(142, 60%, 40%)', backgroundColor: 'rgba(75,192,192,0.1)', padding: '2px 6px', borderRadius: '10px', marginLeft: '5px' }}>Cadastrado</span>
-                              ) : (
-                                <span style={{ fontSize: '0.7rem', color: 'hsl(36, 95%, 45%)', backgroundColor: 'rgba(255,206,86,0.15)', padding: '2px 6px', borderRadius: '10px', marginLeft: '5px' }}>Novo Pet</span>
-                              )}
-                            </td>
-                            <td style={{ padding: '10px', color: styles.textMain }}>
-                              {evt.isDuplicate ? (
-                                <span style={{ color: 'hsl(0, 75%, 55%)', fontWeight: 600 }}>Duplicado</span>
-                              ) : (
-                                <span>{evt.matchedOwnerName || 'Você (Responsável)'}</span>
-                              )}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
+            <p style={{ fontSize: '0.9rem', color: styles.textMain, margin: 0 }}>O que você quer excluir?</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <button
+                type="button"
+                onClick={async () => { const id = scopeAsk.id; setScopeAsk(null); setSelectedCalendarApp(null); await runDelete(id, 'this'); }}
+                style={{ ...styles.btnAcc(false), padding: '12px', justifyContent: 'center' }}
+              >
+                Só este dia
+              </button>
+              <button
+                type="button"
+                onClick={async () => { const id = scopeAsk.id; setScopeAsk(null); setSelectedCalendarApp(null); await runDelete(id, 'series'); }}
+                style={{ ...styles.btnAcc(false), padding: '12px', justifyContent: 'center', border: '1px solid hsl(0, 75%, 55%)', color: 'hsl(0, 75%, 55%)' }}
+              >
+                Todos os dias da série (inclusive os passados)
+              </button>
+              <button type="button" onClick={() => setScopeAsk(null)} style={{ ...styles.btnAcc(false), padding: '10px', justifyContent: 'center' }}>
+                Voltar
+              </button>
             </div>
           </div>
         </div>

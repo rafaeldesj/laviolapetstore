@@ -50,6 +50,86 @@ async function getRole(uid, projectId) {
   return (await r.json()).fields?.role?.stringValue || null;
 }
 
+// ---- Google Agenda (fonte de dados da agenda de Banho e Tosa / Clubinho) ---------------------------------------
+// Conta de serviço (segredo GOOGLE_AGENDA_SA) com acesso à agenda compartilhada com ela. O operador nunca precisa abrir o Google Agenda.
+const TZ = 'America/Sao_Paulo';
+let gToken = { value: '', exp: 0 };
+const roleCache = new Map();
+
+async function googleAccessToken(env) {
+  if (gToken.value && gToken.exp > Date.now() + 60000) return gToken.value;
+  const sa = JSON.parse(env.GOOGLE_AGENDA_SA);
+  const enc = new TextEncoder();
+  const now = Math.floor(Date.now() / 1000);
+  const header = b64url(enc.encode(JSON.stringify({ alg: 'RS256', typ: 'JWT' })));
+  const claims = b64url(enc.encode(JSON.stringify({
+    iss: sa.client_email, scope: 'https://www.googleapis.com/auth/calendar', aud: 'https://oauth2.googleapis.com/token', iat: now, exp: now + 3600,
+  })));
+  const pem = sa.private_key.replace(/-----[A-Z ]+-----/g, '').replace(/\s+/g, '');
+  const key = await crypto.subtle.importKey('pkcs8', Uint8Array.from(atob(pem), (c) => c.charCodeAt(0)), { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['sign']);
+  const sig = await crypto.subtle.sign('RSASSA-PKCS1-v1_5', key, enc.encode(`${header}.${claims}`));
+  const r = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer', assertion: `${header}.${claims}.${b64url(sig)}` }),
+  });
+  const j = await r.json();
+  if (!j.access_token) throw new Error('google auth: ' + (j.error_description || j.error));
+  gToken = { value: j.access_token, exp: Date.now() + (j.expires_in || 3600) * 1000 };
+  return gToken.value;
+}
+
+async function gcal(env, path, init = {}) {
+  const token = await googleAccessToken(env);
+  const base = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(env.AGENDA_CALENDAR_ID)}`;
+  const r = await fetch(base + path, { ...init, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', ...(init.headers || {}) } });
+  const body = r.status === 204 ? {} : await r.json().catch(() => ({}));
+  return { status: r.status, ok: r.ok, body };
+}
+
+// Evento do Google -> formato simples que a tela usa
+function toAgendaEvent(e) {
+  const priv = e.extendedProperties?.private || {};
+  return {
+    id: e.id,
+    recurringEventId: e.recurringEventId || null,
+    summary: e.summary || '',
+    description: e.description || '',
+    start: e.start?.dateTime || e.start?.date,
+    end: e.end?.dateTime || e.end?.date,
+    allDay: !e.start?.dateTime,
+    pet_id: priv.lv_pet_id || '',
+    owner_id: priv.lv_owner || '',
+    service_type: priv.lv_service || '',
+    status: priv.lv_status || '',
+    created: e.created,
+    updated: e.updated,
+  };
+}
+
+function eventBody(input, uid, isStaff, existing) {
+  const out = {};
+  if (input.summary !== undefined) out.summary = String(input.summary).slice(0, 300);
+  if (input.description !== undefined) out.description = String(input.description).slice(0, 4000);
+  if (input.start) {
+    const start = new Date(input.start);
+    if (isNaN(start.getTime())) throw new Error('data inválida');
+    const dur = Math.min(Math.max(Number(input.durationMin) || 60, 5), 24 * 60);
+    out.start = { dateTime: start.toISOString(), timeZone: TZ };
+    out.end = { dateTime: new Date(start.getTime() + dur * 60000).toISOString(), timeZone: TZ };
+  }
+  const priv = {};
+  if (input.pet_id !== undefined) priv.lv_pet_id = String(input.pet_id);
+  if (input.service_type !== undefined) priv.lv_service = String(input.service_type);
+  if (input.status !== undefined) priv.lv_status = String(input.status);
+  // Cliente só mexe no que é dele; a equipe pode indicar o dono.
+  if (!existing) priv.lv_owner = isStaff ? String(input.owner_id || '') : uid;
+  else if (isStaff && input.owner_id !== undefined) priv.lv_owner = String(input.owner_id);
+  if (Object.keys(priv).length) out.extendedProperties = { private: priv };
+  if (!existing && input.repeatCount > 1) out.recurrence = [`RRULE:FREQ=WEEKLY;COUNT=${Math.min(Math.floor(input.repeatCount), 104)}`];
+  return out;
+}
+
 const b64url = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 
 // Web Push sem conteúdo (não exige criptografia do texto): o serviço do celular só "acorda" o aparelho,
@@ -91,7 +171,7 @@ export default {
     const cors = {
       'Access-Control-Allow-Origin': allowed.includes(origin) ? origin : allowed[0],
       'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-      'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
+      'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
       Vary: 'Origin',
     };
     const json = (data, status = 200) =>
@@ -104,8 +184,83 @@ export default {
       const bearer = /^Bearer (.+)$/.exec(request.headers.get('Authorization') || '');
       if (!bearer) return json({ mensagem: 'Acesso negado.' }, 401);
       const user = await verifyFirebaseToken(bearer[1], env.FIREBASE_PROJECT_ID);
-      const role = await getRole(user.sub, env.FIREBASE_PROJECT_ID);
+      let cached = roleCache.get(user.sub);
+      if (!cached || cached.exp < Date.now()) {
+        cached = { role: await getRole(user.sub, env.FIREBASE_PROJECT_ID), exp: Date.now() + 5 * 60000 };
+        roleCache.set(user.sub, cached);
+      }
+      const role = cached.role;
       const isStaff = STAFF.includes(role);
+
+      // ---- Agenda (Google Agenda como fonte de dados) ----
+      const agendaUrl = new URL(request.url);
+      const agendaRoute = agendaUrl.pathname.replace(/\/+$/, '');
+      if (agendaRoute.startsWith('/agenda/')) {
+        if (!role || ACCOUNTANT.includes(role)) return json({ mensagem: 'Acesso negado.' }, 403);
+        if (!env.GOOGLE_AGENDA_SA || !env.AGENDA_CALENDAR_ID) return json({ mensagem: 'Agenda não configurada.' }, 503);
+
+        if (request.method === 'GET' && agendaRoute === '/agenda/events') {
+          const from = new Date(agendaUrl.searchParams.get('from') || '');
+          const to = new Date(agendaUrl.searchParams.get('to') || '');
+          if (isNaN(from.getTime()) || isNaN(to.getTime())) return json({ mensagem: 'Período inválido.' }, 400);
+          const events = [];
+          let pageToken = '';
+          for (let i = 0; i < 6; i++) {
+            const q = new URLSearchParams({ timeMin: from.toISOString(), timeMax: to.toISOString(), singleEvents: 'true', orderBy: 'startTime', maxResults: '2500', showDeleted: 'false' });
+            if (!isStaff) q.append('privateExtendedProperty', `lv_owner=${user.sub}`);
+            if (pageToken) q.set('pageToken', pageToken);
+            const r = await gcal(env, `/events?${q}`);
+            if (!r.ok) return json({ mensagem: 'Erro ao ler a agenda.', detalhe: r.body.error?.message, status: r.status }, r.status === 404 ? 404 : 502);
+            events.push(...(r.body.items || []).filter((e) => e.status !== 'cancelled').map(toAgendaEvent));
+            pageToken = r.body.nextPageToken || '';
+            if (!pageToken) break;
+          }
+          return json({ events });
+        }
+
+        if (request.method === 'POST' && agendaRoute === '/agenda/events') {
+          const input = await request.json();
+          if (!input.start) return json({ mensagem: 'Informe a data e a hora.' }, 400);
+          const r = await gcal(env, '/events', { method: 'POST', body: JSON.stringify(eventBody({ ...input, summary: input.summary || 'Sem título' }, user.sub, isStaff, null)) });
+          if (!r.ok) return json({ mensagem: 'Erro ao criar o agendamento.', detalhe: r.body.error?.message }, 502);
+          return json({ event: toAgendaEvent(r.body) }, 201);
+        }
+
+        const one = /^\/agenda\/events\/([\w-]+)$/.exec(agendaRoute);
+        if (one && (request.method === 'PATCH' || request.method === 'DELETE')) {
+          const id = one[1];
+          const scope = (agendaUrl.searchParams.get('scope') || 'this') === 'series' ? 'series' : 'this';
+          const cur = await gcal(env, `/events/${id}`);
+          if (!cur.ok) return json({ mensagem: 'Agendamento não encontrado.' }, 404);
+          if (!isStaff && cur.body.extendedProperties?.private?.lv_owner !== user.sub) return json({ mensagem: 'Acesso negado.' }, 403);
+          const masterId = cur.body.recurringEventId;
+          const targetId = scope === 'series' && masterId ? masterId : id;
+
+          if (request.method === 'DELETE') {
+            const r = await gcal(env, `/events/${targetId}?sendUpdates=none`, { method: 'DELETE' });
+            return r.ok || r.status === 410 ? json({ ok: true }) : json({ mensagem: 'Erro ao excluir.', detalhe: r.body.error?.message }, 502);
+          }
+
+          const input = await request.json();
+          const patch = eventBody(input, user.sub, isStaff, cur.body);
+          if (scope === 'series' && masterId && patch.start) {
+            // Mover a série inteira: desloca o início da série pela mesma diferença da ocorrência escolhida.
+            const master = await gcal(env, `/events/${masterId}`);
+            if (!master.ok) return json({ mensagem: 'Série não encontrada.' }, 404);
+            const delta = new Date(patch.start.dateTime).getTime() - new Date(cur.body.start.dateTime).getTime();
+            const ms = new Date(master.body.start.dateTime).getTime() + delta;
+            const dur = new Date(patch.end.dateTime).getTime() - new Date(patch.start.dateTime).getTime();
+            patch.start = { dateTime: new Date(ms).toISOString(), timeZone: TZ };
+            patch.end = { dateTime: new Date(ms + dur).toISOString(), timeZone: TZ };
+          }
+          const r = await gcal(env, `/events/${targetId}?sendUpdates=none`, { method: 'PATCH', body: JSON.stringify(patch) });
+          if (!r.ok) return json({ mensagem: 'Erro ao salvar.', detalhe: r.body.error?.message }, 502);
+          return json({ event: toAgendaEvent(r.body) });
+        }
+
+        return json({ mensagem: 'Rota não encontrada.' }, 404);
+      }
+
       // O contador só consulta e baixa arquivos; emitir e cancelar é só da equipe.
       if (!isStaff && !(ACCOUNTANT.includes(role) && request.method === 'GET')) return json({ mensagem: 'Acesso negado.' }, 403);
 

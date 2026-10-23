@@ -8,6 +8,7 @@ import { supabase, mockSupabaseDb, isSupabaseConfigured, logAction } from '../su
 import type { Appointment } from '../supabaseClient';
 import type { AuthUser } from '../hooks/useAuth';
 import { addDelivery } from '../utils/deliveriesService';
+import { listAppointments } from '../utils/agendaService';
 
 declare const L: any;
 
@@ -157,8 +158,8 @@ export const Pagamentos: React.FC<PagamentosProps> = ({
         }));
         setAppointments(mapped);
       } else {
-        const { data } = await mockSupabaseDb.getAppointments(currentUser.id, false);
-        setAppointments(data || []);
+        const now = Date.now();
+        setAppointments(await listAppointments(new Date(now - 365 * 86400000), new Date(now + 365 * 86400000)));
       }
     } catch (err: any) {
       setErrorMsg(err.message || 'Erro ao carregar serviços.');

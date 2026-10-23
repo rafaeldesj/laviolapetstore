@@ -3,6 +3,7 @@ import { BarChart3, PawPrint, CalendarDays, Wallet, Package, CreditCard, PieChar
 import { supabase, mockSupabaseDb, isSupabaseConfigured } from '../supabaseClient';
 import type { Product } from '../supabaseClient';
 import { fetchSales } from '../utils/salesService';
+import { listAppointments } from '../utils/agendaService';
 
 interface RelatoriosProps {
   styles: any;
@@ -45,12 +46,13 @@ export const Relatorios: React.FC<RelatoriosProps> = ({ styles }) => {
           }).length;
         }
       } else {
-        const { data } = await mockSupabaseDb.getAppointments('', true);
-        if (data) {
-          totalAppts = data.filter((a: any) => {
-            const d = new Date(a.date);
-            return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-          }).length;
+        // Agenda de Banho e Tosa / Clubinho: vem do Google Agenda (via Worker), só o mês atual
+        try {
+          const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+          const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+          totalAppts = (await listAppointments(monthStart, monthEnd)).filter(a => a.status !== 'Cancelado').length;
+        } catch (e) {
+          console.warn('Agenda indisponível para o relatório:', e);
         }
       }
       setAppointmentsCount(totalAppts);

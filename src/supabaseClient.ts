@@ -155,6 +155,10 @@ export interface Appointment {
   status: 'Agendado' | 'Em Andamento' | 'Concluído' | 'Cancelado';
   notes: string;
   created_at: string;
+  /** Vem da agenda (Google Agenda): quem é o tutor, se é parte de uma série e quanto dura. */
+  tutor_name?: string;
+  recurringEventId?: string | null;
+  duration_min?: number;
 }
 
 export interface MockAppointment {
