@@ -870,70 +870,6 @@ export const VendaAvulsa: React.FC<VendaAvulsaProps> = ({ styles, currentUser })
               </div>
             )}
 
-              {/* Autocomplete / Search Results dropdown */}
-              {isSearching && (
-                <div role="region" aria-label="Produtos encontrados" style={{
-                  backgroundColor: styles.isDark ? '#26293b' : '#fff',
-                  border: `1px solid ${styles.borderColor}`,
-                  borderRadius: '10px', overflow: 'hidden',
-                  marginTop: '14px', width: '100%',
-                }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', fontSize: '0.75rem', fontWeight: 700, color: styles.sidebarWidgetText?.color, borderBottom: `1px solid ${styles.borderColor}` }}>
-                    <span>{searchTotal} {searchTotal === 1 ? 'produto encontrado' : 'produtos encontrados'}</span>
-                    <button type="button" onClick={() => { setSearchQuery(''); setIsSearching(false); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: styles.primary, fontWeight: 700, fontSize: '0.75rem' }}>Fechar ✕</button>
-                  </div>
-                  <div style={{ maxHeight: 'min(55vh, 480px)', overflowY: 'auto' }}>
-                  {filteredSearch.length === 0 ? (
-                    <div style={{ padding: '12px', fontSize: '0.82rem', color: styles.sidebarWidgetText?.color, textAlign: 'center' }}>
-                      Nenhum produto correspondente.
-                      <button 
-                        onClick={() => openRegisterModal('')}
-                        style={{
-                          display: 'block', margin: '8px auto 0', padding: '6px 12px',
-                          border: 'none', borderRadius: '6px', backgroundColor: styles.primary,
-                          color: '#fff', fontSize: '0.78rem', cursor: 'pointer', fontWeight: 600
-                        }}
-                      >
-                        Cadastrar na Hora
-                      </button>
-                    </div>
-                  ) : (
-                    <>
-                    {filteredSearch.map(product => (
-                      <button
-                        key={product.id}
-                        onClick={() => addToCart(product)}
-                        style={{
-                          width: '100%', padding: '10px 12px', border: 'none',
-                          borderBottom: `1px solid ${styles.borderColor}`,
-                          backgroundColor: 'transparent', color: styles.textMain,
-                          textAlign: 'left', cursor: 'pointer', display: 'flex',
-                          justifyContent: 'space-between', alignItems: 'center',
-                          transition: 'background 0.2s'
-                        }}
-                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = styles.isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.03)'}
-                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                      >
-                        <div>
-                          <div style={{ fontWeight: 600, fontSize: '0.85rem' }}>{product.name}</div>
-                          <span style={{ fontSize: '0.7rem', color: styles.sidebarWidgetText?.color }}>SKU: {product.sku || 'Sem SKU'}</span>
-                        </div>
-                        <div style={{ textAlign: 'right', flexShrink: 0, whiteSpace: 'nowrap', marginLeft: '10px' }}>
-                          <strong style={{ color: styles.primary, fontSize: '0.85rem' }}>{priceLabel(product.price, product.unit)}</strong>
-                          <div style={{ fontSize: '0.7rem', color: product.quantity === 0 ? 'red' : styles.sidebarWidgetText?.color }}>Estoque: {formatQty(product.quantity, product.unit)}</div>
-                        </div>
-                      </button>
-                    ))}
-                    {searchTotal > filteredSearch.length && (
-                      <div style={{ padding: '8px 12px', fontSize: '0.74rem', textAlign: 'center', color: styles.sidebarWidgetText?.color }}>
-                        Mostrando {filteredSearch.length} de {searchTotal}. Digite mais para afinar a busca.
-                      </div>
-                    )}
-                    </>
-                  )}
-                  </div>
-                </div>
-              )}
           </div>
         </div>
 
@@ -994,6 +930,74 @@ export const VendaAvulsa: React.FC<VendaAvulsaProps> = ({ styles, currentUser })
               <ArrowRight size={16} />
             </button>
           </div>
+        </div>
+
+        {/* Produtos encontrados: ocupa a largura toda, do card da lista até a borda direita do cupom */}
+        <div style={{ gridColumn: '1 / -1', minWidth: 0 }}>
+              {/* Autocomplete / Search Results dropdown */}
+              {isSearching && (
+                <div role="region" aria-label="Produtos encontrados" style={{
+                  backgroundColor: styles.isDark ? '#26293b' : '#fff',
+                  border: `1px solid ${styles.borderColor}`,
+                  borderRadius: '10px', overflow: 'hidden',
+                  marginTop: 0, width: '100%',
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', fontSize: '0.75rem', fontWeight: 700, color: styles.sidebarWidgetText?.color, borderBottom: `1px solid ${styles.borderColor}` }}>
+                    <span>{searchTotal} {searchTotal === 1 ? 'produto encontrado' : 'produtos encontrados'}</span>
+                    <button type="button" onClick={() => { setSearchQuery(''); setIsSearching(false); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: styles.primary, fontWeight: 700, fontSize: '0.75rem' }}>Fechar ✕</button>
+                  </div>
+                  <div style={{ maxHeight: 'min(55vh, 480px)', overflowY: 'auto' }}>
+                  {filteredSearch.length === 0 ? (
+                    <div style={{ padding: '12px', fontSize: '0.82rem', color: styles.sidebarWidgetText?.color, textAlign: 'center' }}>
+                      Nenhum produto correspondente.
+                      <button 
+                        onClick={() => openRegisterModal('')}
+                        style={{
+                          display: 'block', margin: '8px auto 0', padding: '6px 12px',
+                          border: 'none', borderRadius: '6px', backgroundColor: styles.primary,
+                          color: '#fff', fontSize: '0.78rem', cursor: 'pointer', fontWeight: 600
+                        }}
+                      >
+                        Cadastrar na Hora
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                    {filteredSearch.map(product => (
+                      <button
+                        key={product.id}
+                        onClick={() => addToCart(product)}
+                        style={{
+                          width: '100%', padding: '10px 12px', border: 'none',
+                          borderBottom: `1px solid ${styles.borderColor}`,
+                          backgroundColor: 'transparent', color: styles.textMain,
+                          textAlign: 'left', cursor: 'pointer', display: 'flex',
+                          justifyContent: 'space-between', alignItems: 'center',
+                          transition: 'background 0.2s'
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = styles.isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.03)'}
+                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                      >
+                        <div>
+                          <div style={{ fontWeight: 600, fontSize: '0.85rem' }}>{product.name}</div>
+                          <span style={{ fontSize: '0.7rem', color: styles.sidebarWidgetText?.color }}>SKU: {product.sku || 'Sem SKU'}</span>
+                        </div>
+                        <div style={{ textAlign: 'right', flexShrink: 0, whiteSpace: 'nowrap', marginLeft: '10px' }}>
+                          <strong style={{ color: styles.primary, fontSize: '0.85rem' }}>{priceLabel(product.price, product.unit)}</strong>
+                          <div style={{ fontSize: '0.7rem', color: product.quantity === 0 ? 'red' : styles.sidebarWidgetText?.color }}>Estoque: {formatQty(product.quantity, product.unit)}</div>
+                        </div>
+                      </button>
+                    ))}
+                    {searchTotal > filteredSearch.length && (
+                      <div style={{ padding: '8px 12px', fontSize: '0.74rem', textAlign: 'center', color: styles.sidebarWidgetText?.color }}>
+                        Mostrando {filteredSearch.length} de {searchTotal}. Digite mais para afinar a busca.
+                      </div>
+                    )}
+                    </>
+                  )}
+                  </div>
+                </div>
+              )}
         </div>
       </div>
 
