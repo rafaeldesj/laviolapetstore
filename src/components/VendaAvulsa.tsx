@@ -772,7 +772,7 @@ export const VendaAvulsa: React.FC<VendaAvulsaProps> = ({ styles, currentUser })
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
                 {/* Scrollable list */}
-                <div style={{ maxHeight: '350px', overflowY: 'auto', flexGrow: 1 }}>
+                <div style={{ flexGrow: 1 }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem' }}>
                     <thead>
                       <tr style={{ borderBottom: `2px solid ${styles.borderColor}`, color: styles.sidebarWidgetText?.color }}>
