@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { db } from './firebaseClient';
-import { collection, addDoc, getDocs, updateDoc, deleteDoc, doc, query, where } from 'firebase/firestore';
+import { collection, addDoc, getDocs, updateDoc, deleteDoc, setDoc, doc, query, where, serverTimestamp, Timestamp } from 'firebase/firestore';
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
@@ -185,6 +185,78 @@ export interface MockProduct {
   created_at: string;
 }
 
+// ---- Cache do catálogo de produtos (localStorage) -------------------------------------------------
+const PRODUCTS_CACHE_KEY = 'lv:products:v2';
+const FULL_RESYNC_MS = 24 * 3600 * 1000;
+const OVERLAP_MS = 2 * 60 * 1000;
+let productsMem: { map: Map<string, any>; syncedMs: number; fullAt: number } | null = null;
+let productsInflight: Promise<any[]> | null = null;
+let productsDirty = false;
+let productsLastSync = 0;
+
+function readProductsCache() {
+  if (productsMem) return productsMem;
+  try {
+    const raw = localStorage.getItem(PRODUCTS_CACHE_KEY);
+    if (raw) {
+      const o = JSON.parse(raw);
+      productsMem = { map: new Map(o.items.map((p: any) => [p.id, p])), syncedMs: o.syncedMs || 0, fullAt: o.fullAt || 0 };
+    }
+  } catch { productsMem = null; }
+  return productsMem;
+}
+
+function writeProductsCache() {
+  if (!productsMem) return;
+  try {
+    localStorage.setItem(PRODUCTS_CACHE_KEY, JSON.stringify({ items: [...productsMem.map.values()], syncedMs: productsMem.syncedMs, fullAt: productsMem.fullAt }));
+  } catch { /* sem espaço: segue só na memória */ }
+}
+
+/** Chamado depois de gravar um produto neste aparelho: a próxima leitura sincroniza na hora. */
+export function invalidateProducts() { productsDirty = true; }
+
+function toProduct(d: any) {
+  const { updated_at, ...rest } = d.data();
+  return { id: d.id, ...rest, updated_ms: updated_at?.toMillis ? updated_at.toMillis() : 0 };
+}
+
+async function syncProducts(): Promise<any[]> {
+  // várias telas pedindo ao mesmo tempo (ou em sequência rápida) compartilham a mesma sincronização
+  if (productsInflight) return productsInflight;
+  const fresh = productsMem && !productsDirty && Date.now() - productsLastSync < 5000;
+  if (fresh) return [...productsMem!.map.values()];
+
+  productsInflight = (async () => {
+    const cache = readProductsCache();
+    const needFull = !cache || Date.now() - cache.fullAt > FULL_RESYNC_MS;
+    if (needFull) {
+      const snap = await getDocs(collection(db, 'products'));
+      const map = new Map<string, any>();
+      let maxMs = 0;
+      snap.docs.forEach((d: any) => {
+        const p = toProduct(d);
+        maxMs = Math.max(maxMs, p.updated_ms || 0);
+        if (!p.deleted) map.set(p.id, p);
+      });
+      productsMem = { map, syncedMs: maxMs, fullAt: Date.now() };
+    } else {
+      const since = Timestamp.fromMillis(Math.max(0, cache!.syncedMs - OVERLAP_MS));
+      const snap = await getDocs(query(collection(db, 'products'), where('updated_at', '>', since)));
+      snap.docs.forEach((d: any) => {
+        const p = toProduct(d);
+        cache!.syncedMs = Math.max(cache!.syncedMs, p.updated_ms || 0);
+        if (p.deleted) cache!.map.delete(p.id); else cache!.map.set(p.id, p);
+      });
+    }
+    productsDirty = false;
+    productsLastSync = Date.now();
+    writeProductsCache();
+    return [...productsMem!.map.values()];
+  })();
+  try { return await productsInflight; } finally { productsInflight = null; }
+}
+
 export const mockSupabaseDb = {
   getPets: async (userId: string) => {
     if (!db) return { data: [], error: null };
@@ -256,7 +328,18 @@ export const mockSupabaseDb = {
       return { error: null };
     } catch(e: unknown) { return { error: e as Error }; }
   },
+  /**
+   * Catálogo de produtos com cache no navegador. O plano gratuito do Firestore dá 50 mil leituras por dia, e ler
+   * os ~1.700 produtos a cada tela estourava esse limite. Agora lê tudo uma vez por dia (por aparelho) e, nas
+   * demais vezes, pede só o que mudou desde a última sincronização (campo `updated_at`, carimbado pelo servidor).
+   */
   getProducts: async () => {
+    if (!db) return { data: [], error: null };
+    try {
+      return { data: await syncProducts(), error: null };
+    } catch(e: unknown) { return { data: null, error: e as Error }; }
+  },
+  getProductsUncached: async () => {
     if (!db) return { data: [], error: null };
     try {
       const snap = await getDocs(collection(db, 'products'));
@@ -268,21 +351,25 @@ export const mockSupabaseDb = {
     if (!db) return { data: null, error: new Error('Firebase missing') };
     try {
       const newProd = { ...product, created_at: new Date().toISOString() };
-      const docRef = await addDoc(collection(db, 'products'), newProd);
+      const docRef = await addDoc(collection(db, 'products'), { ...newProd, updated_at: serverTimestamp() });
+      invalidateProducts();
       return { data: { id: docRef.id, ...newProd }, error: null };
     } catch(e: unknown) { return { data: null, error: e as Error }; }
   },
   updateProduct: async (id: string, updates: Partial<Omit<MockProduct, 'id' | 'created_at'>>) => {
     if (!db) return { data: null, error: new Error('Firebase missing') };
     try {
-      await updateDoc(doc(db, 'products', id), updates);
+      await updateDoc(doc(db, 'products', id), { ...updates, updated_at: serverTimestamp() });
+      invalidateProducts();
       return { data: { id, ...updates }, error: null };
     } catch(e: unknown) { return { data: null, error: e as Error }; }
   },
   deleteProduct: async (id: string) => {
     if (!db) return { error: new Error('Firebase missing') };
     try {
-      await deleteDoc(doc(db, 'products', id));
+      // Não apaga de verdade: marca como removido, para os outros aparelhos perceberem na próxima sincronização.
+      await setDoc(doc(db, 'products', id), { deleted: true, updated_at: serverTimestamp() }, { merge: true });
+      invalidateProducts();
       return { error: null };
     } catch(e: unknown) { return { error: e as Error }; }
   }
@@ -298,6 +385,8 @@ export interface AuditLog {
 
 export interface Product {
   id: string;
+  /** Carimbo do servidor da última alteração (ms); usado na sincronização do cache. */
+  updated_ms?: number;
   name: string;
   category: string;
   brand: string;

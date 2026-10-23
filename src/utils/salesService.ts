@@ -1,7 +1,8 @@
-import { collection, doc, getDocs, runTransaction, setDoc, updateDoc } from 'firebase/firestore';
+import { collection, doc, getDocs, runTransaction, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
 import { auth, db } from '../firebaseClient';
 import type { ReceiptFiscal, ReceiptItem } from './printer';
 import { roundQty } from './units';
+import { invalidateProducts } from '../supabaseClient';
 
 export interface SaleItem extends ReceiptItem {
   product_id: string;
@@ -58,18 +59,19 @@ export async function finalizeSale(sale: Omit<Sale, 'id' | 'number'>): Promise<S
 
     snaps.forEach((snap, idx) => {
       const productId = refs[idx].id;
-      if (!snap.exists()) throw new Error('Um dos produtos da venda não existe mais no estoque.');
+      if (!snap.exists() || snap.data().deleted) throw new Error('Um dos produtos da venda não existe mais no estoque.');
       const current = Number(snap.data().quantity) || 0;
       const wanted = qtyByProduct.get(productId) || 0;
       if (current < wanted) {
         throw new Error(`Estoque insuficiente de "${snap.data().name}": disponível ${current}, na venda ${wanted}.`);
       }
-      tx.update(refs[idx], { quantity: roundQty(current - wanted) });
+      tx.update(refs[idx], { quantity: roundQty(current - wanted), updated_at: serverTimestamp() });
     });
 
     tx.set(saleRef, saved);
   });
 
+  invalidateProducts(); // o estoque mudou: a próxima leitura do catálogo sincroniza
   return saved;
 }
 
@@ -79,7 +81,7 @@ export async function voidSale(sale: Sale, reason: string): Promise<Sale> {
   const firestore = db;
   const saleRef = doc(firestore, 'sales', sale.id);
 
-  return runTransaction(firestore, async (tx) => {
+  const result = await runTransaction(firestore, async (tx) => {
     const saleSnap = await tx.get(saleRef);
     if (!saleSnap.exists()) throw new Error('Venda não encontrada.');
     const current = { ...(saleSnap.data() as Sale), id: sale.id };
@@ -92,7 +94,7 @@ export async function voidSale(sale: Sale, reason: string): Promise<Sale> {
 
     snaps.forEach((snap, idx) => {
       // Produto apagado do estoque depois da venda: não há o que devolver.
-      if (snap.exists()) tx.update(refs[idx], { quantity: roundQty((Number(snap.data().quantity) || 0) + (qtyByProduct.get(refs[idx].id) || 0)) });
+      if (snap.exists()) tx.update(refs[idx], { quantity: roundQty((Number(snap.data().quantity) || 0) + (qtyByProduct.get(refs[idx].id) || 0)), updated_at: serverTimestamp() });
     });
 
     const patch = {
@@ -104,6 +106,8 @@ export async function voidSale(sale: Sale, reason: string): Promise<Sale> {
     tx.update(saleRef, patch);
     return { ...sale, ...current, ...patch };
   });
+  invalidateProducts();
+  return result;
 }
 
 export async function updateSaleFiscal(saleId: string, fiscal: ReceiptFiscal): Promise<void> {

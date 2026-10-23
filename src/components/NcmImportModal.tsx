@@ -1,5 +1,6 @@
 import React, { useRef, useState } from 'react';
-import { doc, writeBatch } from 'firebase/firestore';
+import { doc, serverTimestamp, writeBatch } from 'firebase/firestore';
+import { invalidateProducts } from '../supabaseClient';
 import { db } from '../firebaseClient';
 import { readSheet } from 'read-excel-file/browser';
 import { analyzeNcmRows, analyzeNcmSheet, buildProductsCsv, excelRowsToText } from '../utils/ncmImport';
@@ -62,10 +63,11 @@ export const NcmImportModal: React.FC<NcmImportModalProps> = ({ styles, products
       for (let i = 0; i < report.changes.length; i += 400) {
         const batch = writeBatch(db);
         report.changes.slice(i, i + 400).forEach(c =>
-          batch.update(doc(db!, 'products', c.product.id), { ncm: c.ncm, origin: c.origin })
+          batch.update(doc(db!, 'products', c.product.id), { ncm: c.ncm, origin: c.origin, updated_at: serverTimestamp() })
         );
         await batch.commit();
       }
+      invalidateProducts();
       setDone(report.changes.length);
       onDone();
     } catch (e) {
