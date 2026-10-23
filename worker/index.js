@@ -50,85 +50,74 @@ async function getRole(uid, projectId) {
   return (await r.json()).fields?.role?.stringValue || null;
 }
 
-// ---- Google Agenda (fonte de dados da agenda de Banho e Tosa / Clubinho) ---------------------------------------
-// Conta de serviço (segredo GOOGLE_AGENDA_SA) com acesso à agenda compartilhada com ela. O operador nunca precisa abrir o Google Agenda.
-const TZ = 'America/Sao_Paulo';
-let gToken = { value: '', exp: 0 };
+// ---- Supabase (produtos e agenda) -------------------------------------------------------------------------------
+// O navegador nunca fala com o Supabase: tudo passa por aqui. O Worker confere quem é o usuário e o cargo, e só então
+// usa a chave de serviço (segredo SUPABASE_SERVICE_ROLE), que ignora o RLS das tabelas.
 const roleCache = new Map();
 
-async function googleAccessToken(env) {
-  if (gToken.value && gToken.exp > Date.now() + 60000) return gToken.value;
-  const sa = JSON.parse(env.GOOGLE_AGENDA_SA);
-  const enc = new TextEncoder();
-  const now = Math.floor(Date.now() / 1000);
-  const header = b64url(enc.encode(JSON.stringify({ alg: 'RS256', typ: 'JWT' })));
-  const claims = b64url(enc.encode(JSON.stringify({
-    iss: sa.client_email, scope: 'https://www.googleapis.com/auth/calendar', aud: 'https://oauth2.googleapis.com/token', iat: now, exp: now + 3600,
-  })));
-  const pem = sa.private_key.replace(/-----[A-Z ]+-----/g, '').replace(/\s+/g, '');
-  const key = await crypto.subtle.importKey('pkcs8', Uint8Array.from(atob(pem), (c) => c.charCodeAt(0)), { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['sign']);
-  const sig = await crypto.subtle.sign('RSASSA-PKCS1-v1_5', key, enc.encode(`${header}.${claims}`));
-  const r = await fetch('https://oauth2.googleapis.com/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer', assertion: `${header}.${claims}.${b64url(sig)}` }),
+async function sb(env, path, init = {}) {
+  const r = await fetch(`${env.SUPABASE_URL}/rest/v1${path}`, {
+    ...init,
+    headers: {
+      apikey: env.SUPABASE_SERVICE_ROLE,
+      Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE}`,
+      'Content-Type': 'application/json',
+      Prefer: 'return=representation',
+      ...(init.headers || {}),
+    },
   });
-  const j = await r.json();
-  if (!j.access_token) throw new Error('google auth: ' + (j.error_description || j.error));
-  gToken = { value: j.access_token, exp: Date.now() + (j.expires_in || 3600) * 1000 };
-  return gToken.value;
+  const text = await r.text();
+  let body = null;
+  try { body = text ? JSON.parse(text) : null; } catch { body = text; }
+  return { ok: r.ok, status: r.status, body };
 }
 
-async function gcal(env, path, init = {}) {
-  const token = await googleAccessToken(env);
-  const base = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(env.AGENDA_CALENDAR_ID)}`;
-  const r = await fetch(base + path, { ...init, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', ...(init.headers || {}) } });
-  const body = r.status === 204 ? {} : await r.json().catch(() => ({}));
-  return { status: r.status, ok: r.ok, body };
-}
-
-// Evento do Google -> formato simples que a tela usa
-function toAgendaEvent(e) {
-  const priv = e.extendedProperties?.private || {};
-  return {
-    id: e.id,
-    recurringEventId: e.recurringEventId || null,
-    summary: e.summary || '',
-    description: e.description || '',
-    start: e.start?.dateTime || e.start?.date,
-    end: e.end?.dateTime || e.end?.date,
-    allDay: !e.start?.dateTime,
-    pet_id: priv.lv_pet_id || '',
-    owner_id: priv.lv_owner || '',
-    service_type: priv.lv_service || '',
-    status: priv.lv_status || '',
-    created: e.created,
-    updated: e.updated,
-  };
-}
-
-function eventBody(input, uid, isStaff, existing) {
-  const out = {};
-  if (input.summary !== undefined) out.summary = String(input.summary).slice(0, 300);
-  if (input.description !== undefined) out.description = String(input.description).slice(0, 4000);
-  if (input.start) {
-    const start = new Date(input.start);
-    if (isNaN(start.getTime())) throw new Error('data inválida');
-    const dur = Math.min(Math.max(Number(input.durationMin) || 60, 5), 24 * 60);
-    out.start = { dateTime: start.toISOString(), timeZone: TZ };
-    out.end = { dateTime: new Date(start.getTime() + dur * 60000).toISOString(), timeZone: TZ };
+// O Supabase devolve no máximo 1000 linhas por pedido: lê página por página.
+async function sbAll(env, path) {
+  const rows = [];
+  for (let from = 0; from < 50000; from += 1000) {
+    const r = await sb(env, path, { headers: { Range: `${from}-${from + 999}`, 'Range-Unit': 'items' } });
+    if (!r.ok) throw new Error(`supabase ${r.status} ${JSON.stringify(r.body).slice(0, 200)}`);
+    rows.push(...r.body);
+    if (r.body.length < 1000) break;
   }
-  const priv = {};
-  if (input.pet_id !== undefined) priv.lv_pet_id = String(input.pet_id);
-  if (input.service_type !== undefined) priv.lv_service = String(input.service_type);
-  if (input.status !== undefined) priv.lv_status = String(input.status);
-  // Cliente só mexe no que é dele; a equipe pode indicar o dono.
-  if (!existing) priv.lv_owner = isStaff ? String(input.owner_id || '') : uid;
-  else if (isStaff && input.owner_id !== undefined) priv.lv_owner = String(input.owner_id);
-  if (Object.keys(priv).length) out.extendedProperties = { private: priv };
-  if (!existing && input.repeatCount > 1) out.recurrence = [`RRULE:FREQ=WEEKLY;COUNT=${Math.min(Math.floor(input.repeatCount), 104)}`];
+  return rows;
+}
+
+const PRODUCT_TEXT = ['name', 'category', 'brand', 'sku', 'unit', 'ncm', 'origin'];
+const PRODUCT_NUM = ['price', 'cost_price', 'quantity', 'min_stock'];
+
+// Só aceita os campos conhecidos, com o tipo certo.
+function pickProduct(input) {
+  const out = {};
+  for (const k of PRODUCT_TEXT) if (input[k] !== undefined) out[k] = String(input[k]).slice(0, 300);
+  for (const k of PRODUCT_NUM) {
+    if (input[k] === undefined) continue;
+    const n = Number(input[k]);
+    if (!Number.isFinite(n) || n < 0 || n > 1e9) throw new Error(`valor inválido em ${k}`);
+    out[k] = n;
+  }
   return out;
 }
+
+const toProduct = (row) => ({ ...row, updated_ms: Date.parse(row.updated_at) || 0 });
+
+const toAppt = (row) => ({
+  id: row.id,
+  series_id: row.series_id || null,
+  pet_id: row.pet_id,
+  pet_name: row.pet_name,
+  tutor_name: row.tutor_name,
+  owner_id: row.owner_id,
+  service_type: row.service_type,
+  status: row.status,
+  start: row.starts_at,
+  duration_min: row.duration_min,
+  notes: row.notes,
+  created_at: row.created_at,
+});
+
+const APPT_STATUS = ['Agendado', 'Em Andamento', 'Concluído', 'Cancelado'];
 
 const b64url = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 
@@ -192,77 +181,162 @@ export default {
       const role = cached.role;
       const isStaff = STAFF.includes(role);
 
-      // ---- Agenda (Google Agenda como fonte de dados) ----
-      const agendaUrl = new URL(request.url);
-      const agendaRoute = agendaUrl.pathname.replace(/\/+$/, '');
-      if (agendaRoute.startsWith('/agenda/')) {
-        if (!role || ACCOUNTANT.includes(role)) return json({ mensagem: 'Acesso negado.' }, 403);
-        if (!env.GOOGLE_AGENDA_SA || !env.AGENDA_CALENDAR_ID) return json({ mensagem: 'Agenda não configurada.' }, 503);
+      // ---- Produtos e agenda (Supabase) ----
+      const dbUrl = new URL(request.url);
+      const dbRoute = dbUrl.pathname.replace(/\/+$/, '');
+      if (dbRoute.startsWith('/agenda/') || dbRoute.startsWith('/produtos')) {
+        if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE) return json({ mensagem: 'Banco de dados não configurado.' }, 503);
+        const fail = (mensagem, r) => json({ mensagem, detalhe: typeof r?.body === 'object' ? r.body?.message : undefined }, 502);
 
-        if (request.method === 'GET' && agendaRoute === '/agenda/events') {
-          const from = new Date(agendaUrl.searchParams.get('from') || '');
-          const to = new Date(agendaUrl.searchParams.get('to') || '');
-          if (isNaN(from.getTime()) || isNaN(to.getTime())) return json({ mensagem: 'Período inválido.' }, 400);
-          const events = [];
-          let pageToken = '';
-          for (let i = 0; i < 6; i++) {
-            const q = new URLSearchParams({ timeMin: from.toISOString(), timeMax: to.toISOString(), singleEvents: 'true', orderBy: 'startTime', maxResults: '2500', showDeleted: 'false' });
-            if (!isStaff) q.append('privateExtendedProperty', `lv_owner=${user.sub}`);
-            if (pageToken) q.set('pageToken', pageToken);
-            const r = await gcal(env, `/events?${q}`);
-            if (!r.ok) return json({ mensagem: 'Erro ao ler a agenda.', detalhe: r.body.error?.message, status: r.status }, r.status === 404 ? 404 : 502);
-            events.push(...(r.body.items || []).filter((e) => e.status !== 'cancelled').map(toAgendaEvent));
-            pageToken = r.body.nextPageToken || '';
-            if (!pageToken) break;
+        // ----- Produtos: só a equipe -----
+        if (dbRoute.startsWith('/produtos')) {
+          if (!isStaff) return json({ mensagem: 'Acesso negado.' }, 403);
+
+          // Sincronização: tudo (since=0) ou só o que mudou desde o último instante visto
+          if (request.method === 'GET' && dbRoute === '/produtos') {
+            const since = Number(dbUrl.searchParams.get('since') || 0);
+            let path = '/products?select=*&order=updated_at.asc';
+            path += since > 0 ? `&updated_at=gt.${encodeURIComponent(new Date(since).toISOString())}` : '&deleted=eq.false';
+            return json({ products: (await sbAll(env, path)).map(toProduct) });
           }
-          return json({ events });
+
+          if (request.method === 'POST' && dbRoute === '/produtos') {
+            const input = pickProduct(await request.json());
+            if (!input.name) return json({ mensagem: 'Informe o nome do produto.' }, 400);
+            const r = await sb(env, '/products', { method: 'POST', body: JSON.stringify(input) });
+            return r.ok ? json({ product: toProduct(r.body[0]) }, 201) : fail('Erro ao cadastrar o produto.', r);
+          }
+
+          // Preenche NCM/origem de vários produtos (importação por planilha)
+          if (request.method === 'POST' && dbRoute === '/produtos/lote') {
+            const { items } = await request.json();
+            if (!Array.isArray(items) || items.length > 2000) return json({ mensagem: 'Requisição inválida.' }, 400);
+            const clean = items.map((i) => ({ id: String(i.id), ncm: i.ncm === undefined ? null : String(i.ncm).replace(/\D/g, '').slice(0, 8), origin: i.origin === undefined ? null : String(i.origin).slice(0, 1) }));
+            const r = await sb(env, '/rpc/set_ncm_batch', { method: 'POST', body: JSON.stringify({ items: clean }) });
+            return r.ok ? json({ updated: r.body }) : fail('Erro ao salvar o lote.', r);
+          }
+
+          // Baixa/devolve estoque, tudo ou nada. mode: sale (não deixa ficar negativo), void/undo (devolve ou desfaz).
+          if (request.method === 'POST' && dbRoute === '/produtos/estoque') {
+            const { items, mode } = await request.json();
+            const valid = Array.isArray(items) && items.length > 0 && items.length <= 300 &&
+              items.every((i) => typeof i.id === 'string' && Number.isFinite(Number(i.delta)));
+            if (!valid || !['sale', 'void', 'undo'].includes(mode)) return json({ mensagem: 'Requisição inválida.' }, 400);
+            const r = await sb(env, '/rpc/adjust_stock', {
+              method: 'POST',
+              body: JSON.stringify({ items: items.map((i) => ({ id: i.id, delta: Number(i.delta) })), enforce: mode === 'sale', ignore_missing: mode !== 'sale' }),
+            });
+            if (!r.ok) return fail('Erro ao ajustar o estoque.', r);
+            return json(r.body, r.body.ok ? 200 : 409);
+          }
+
+          const prod = /^\/produtos\/([\w-]+)$/.exec(dbRoute);
+          if (prod && request.method === 'PATCH') {
+            const patch = pickProduct(await request.json());
+            if (Object.keys(patch).length === 0) return json({ mensagem: 'Nada para alterar.' }, 400);
+            const r = await sb(env, `/products?id=eq.${encodeURIComponent(prod[1])}`, { method: 'PATCH', body: JSON.stringify(patch) });
+            if (!r.ok) return fail('Erro ao salvar o produto.', r);
+            return r.body.length ? json({ product: toProduct(r.body[0]) }) : json({ mensagem: 'Produto não encontrado.' }, 404);
+          }
+          if (prod && request.method === 'DELETE') {
+            // Não apaga de verdade: marca como removido, para os outros aparelhos perceberem na sincronização.
+            const r = await sb(env, `/products?id=eq.${encodeURIComponent(prod[1])}`, { method: 'PATCH', body: JSON.stringify({ deleted: true }) });
+            return r.ok ? json({ ok: true }) : fail('Erro ao remover o produto.', r);
+          }
+          return json({ mensagem: 'Rota não encontrada.' }, 404);
         }
 
-        if (request.method === 'POST' && agendaRoute === '/agenda/events') {
+        // ----- Agenda de Banho e Tosa / Clubinho: equipe vê tudo; cliente só o que é dele -----
+        if (!role || ACCOUNTANT.includes(role)) return json({ mensagem: 'Acesso negado.' }, 403);
+
+        if (request.method === 'GET' && dbRoute === '/agenda/events') {
+          const from = new Date(dbUrl.searchParams.get('from') || '');
+          const to = new Date(dbUrl.searchParams.get('to') || '');
+          if (isNaN(from.getTime()) || isNaN(to.getTime())) return json({ mensagem: 'Período inválido.' }, 400);
+          let path = `/appointments?select=*&starts_at=gte.${encodeURIComponent(from.toISOString())}&starts_at=lt.${encodeURIComponent(to.toISOString())}&order=starts_at.asc`;
+          if (!isStaff) path += `&owner_id=eq.${encodeURIComponent(user.sub)}`;
+          return json({ events: (await sbAll(env, path)).map(toAppt) });
+        }
+
+        if (request.method === 'POST' && dbRoute === '/agenda/events') {
           const input = await request.json();
-          if (!input.start) return json({ mensagem: 'Informe a data e a hora.' }, 400);
-          const r = await gcal(env, '/events', { method: 'POST', body: JSON.stringify(eventBody({ ...input, summary: input.summary || 'Sem título' }, user.sub, isStaff, null)) });
-          if (!r.ok) return json({ mensagem: 'Erro ao criar o agendamento.', detalhe: r.body.error?.message }, 502);
-          return json({ event: toAgendaEvent(r.body) }, 201);
+          const start = new Date(input.start);
+          const petName = String(input.petName || '').trim().slice(0, 120);
+          if (!petName || isNaN(start.getTime())) return json({ mensagem: 'Informe o pet, a data e a hora.' }, 400);
+          const count = Math.min(Math.max(Math.floor(Number(input.repeatCount) || 1), 1), 104);
+          const seriesId = count > 1 ? crypto.randomUUID() : null;
+          const rows = Array.from({ length: count }, (_, i) => ({
+            series_id: seriesId,
+            pet_id: String(input.petId || ''),
+            pet_name: petName,
+            tutor_name: String(input.tutorName || '').slice(0, 120),
+            owner_id: isStaff ? String(input.ownerId || '') : user.sub, // cliente só agenda para si mesmo
+            service_type: String(input.serviceType || 'Banho & Tosa').slice(0, 60),
+            status: 'Agendado',
+            starts_at: new Date(start.getTime() + i * 7 * 86400000).toISOString(), // o Brasil não tem horário de verão
+            duration_min: Math.min(Math.max(Math.floor(Number(input.durationMin) || 60), 5), 1440),
+            notes: String(input.notes || '').slice(0, 4000),
+            created_by: user.sub,
+          }));
+          const r = await sb(env, '/appointments', { method: 'POST', body: JSON.stringify(rows) });
+          return r.ok ? json({ events: r.body.map(toAppt) }, 201) : fail('Erro ao criar o agendamento.', r);
         }
 
-        const one = /^\/agenda\/events\/([\w-]+)$/.exec(agendaRoute);
+        const one = /^\/agenda\/events\/([\w-]+)$/.exec(dbRoute);
         if (one && (request.method === 'PATCH' || request.method === 'DELETE')) {
-          const id = one[1];
-          const scope = (agendaUrl.searchParams.get('scope') || 'this') === 'series' ? 'series' : 'this';
-          const cur = await gcal(env, `/events/${id}`);
-          if (!cur.ok) return json({ mensagem: 'Agendamento não encontrado.' }, 404);
-          if (!isStaff && cur.body.extendedProperties?.private?.lv_owner !== user.sub) return json({ mensagem: 'Acesso negado.' }, 403);
-          const masterId = cur.body.recurringEventId;
-          const targetId = scope === 'series' && masterId ? masterId : id;
+          const id = encodeURIComponent(one[1]);
+          const scope = dbUrl.searchParams.get('scope') === 'series' ? 'series' : 'this';
+          const cur = await sb(env, `/appointments?id=eq.${id}&select=*`);
+          if (!cur.ok) return fail('Erro ao buscar o agendamento.', cur);
+          const row = cur.body[0];
+          if (!row) return json({ mensagem: 'Agendamento não encontrado.' }, 404);
+          if (!isStaff && row.owner_id !== user.sub) return json({ mensagem: 'Acesso negado.' }, 403);
+          const whole = scope === 'series' && row.series_id;
+          const where = whole ? `series_id=eq.${encodeURIComponent(row.series_id)}` : `id=eq.${id}`;
 
           if (request.method === 'DELETE') {
-            const r = await gcal(env, `/events/${targetId}?sendUpdates=none`, { method: 'DELETE' });
-            return r.ok || r.status === 410 ? json({ ok: true }) : json({ mensagem: 'Erro ao excluir.', detalhe: r.body.error?.message }, 502);
+            const r = await sb(env, `/appointments?${where}`, { method: 'DELETE' });
+            return r.ok ? json({ ok: true }) : fail('Erro ao excluir.', r);
           }
 
           const input = await request.json();
-          const patch = eventBody(input, user.sub, isStaff, cur.body);
-          if (scope === 'series' && masterId && patch.start) {
-            // Mover a série inteira: desloca o início da série pela mesma diferença da ocorrência escolhida.
-            const master = await gcal(env, `/events/${masterId}`);
-            if (!master.ok) return json({ mensagem: 'Série não encontrada.' }, 404);
-            const delta = new Date(patch.start.dateTime).getTime() - new Date(cur.body.start.dateTime).getTime();
-            const ms = new Date(master.body.start.dateTime).getTime() + delta;
-            const dur = new Date(patch.end.dateTime).getTime() - new Date(patch.start.dateTime).getTime();
-            patch.start = { dateTime: new Date(ms).toISOString(), timeZone: TZ };
-            patch.end = { dateTime: new Date(ms + dur).toISOString(), timeZone: TZ };
+          const common = {};
+          if (input.notes !== undefined) common.notes = String(input.notes).slice(0, 4000);
+          if (input.serviceType !== undefined) common.service_type = String(input.serviceType).slice(0, 60);
+          if (input.durationMin !== undefined) common.duration_min = Math.min(Math.max(Math.floor(Number(input.durationMin) || 60), 5), 1440);
+          if (input.petName !== undefined) common.pet_name = String(input.petName).slice(0, 120);
+          if (input.tutorName !== undefined) common.tutor_name = String(input.tutorName).slice(0, 120);
+          if (isStaff && input.ownerId !== undefined) common.owner_id = String(input.ownerId);
+
+          if (input.start) {
+            const start = new Date(input.start);
+            if (isNaN(start.getTime())) return json({ mensagem: 'Data inválida.' }, 400);
+            if (whole) {
+              const deltaSeconds = Math.round((start.getTime() - Date.parse(row.starts_at)) / 1000);
+              const sh = await sb(env, '/rpc/shift_series', { method: 'POST', body: JSON.stringify({ sid: row.series_id, delta_seconds: deltaSeconds }) });
+              if (!sh.ok) return fail('Erro ao reagendar a série.', sh);
+            } else {
+              common.starts_at = start.toISOString();
+            }
           }
-          const r = await gcal(env, `/events/${targetId}?sendUpdates=none`, { method: 'PATCH', body: JSON.stringify(patch) });
-          if (!r.ok) return json({ mensagem: 'Erro ao salvar.', detalhe: r.body.error?.message }, 502);
-          return json({ event: toAgendaEvent(r.body) });
+          // Situação (Em Andamento, Concluído...) vale só para o dia escolhido
+          const single = { ...(input.status !== undefined && APPT_STATUS.includes(input.status) ? { status: input.status } : {}) };
+
+          if (whole && Object.keys(common).length > 0) {
+            const r = await sb(env, `/appointments?${where}`, { method: 'PATCH', body: JSON.stringify(common) });
+            if (!r.ok) return fail('Erro ao salvar a série.', r);
+          }
+          const own = whole ? single : { ...common, ...single };
+          if (Object.keys(own).length > 0) {
+            const r = await sb(env, `/appointments?id=eq.${id}`, { method: 'PATCH', body: JSON.stringify(own) });
+            if (!r.ok) return fail('Erro ao salvar.', r);
+          }
+          const after = await sb(env, `/appointments?id=eq.${id}&select=*`);
+          return after.ok && after.body[0] ? json({ event: toAppt(after.body[0]) }) : fail('Erro ao ler o agendamento.', after);
         }
 
         return json({ mensagem: 'Rota não encontrada.' }, 404);
       }
-
-      // O contador só consulta e baixa arquivos; emitir e cancelar é só da equipe.
-      if (!isStaff && !(ACCOUNTANT.includes(role) && request.method === 'GET')) return json({ mensagem: 'Acesso negado.' }, 403);
 
       // Um token por ambiente (teste/real); se só houver o token único, ele serve para os dois.
       const authFor = (ambiente) => 'Basic ' + btoa(`${env[`FOCUS_NFE_TOKEN_${String(ambiente).toUpperCase()}`] || env.FOCUS_NFE_TOKEN}:`);

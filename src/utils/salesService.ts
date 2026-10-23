@@ -1,8 +1,9 @@
-import { collection, doc, getDocs, runTransaction, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, runTransaction, setDoc, updateDoc } from 'firebase/firestore';
 import { auth, db } from '../firebaseClient';
 import type { ReceiptFiscal, ReceiptItem } from './printer';
 import { roundQty } from './units';
 import { invalidateProducts } from '../supabaseClient';
+import { WorkerError, workerCall } from './workerApi';
 
 export interface SaleItem extends ReceiptItem {
   product_id: string;
@@ -38,76 +39,95 @@ export interface Sale {
 
 const LEGACY_KEY = 'laviola_pdv_sales';
 
+interface StockChange { id: string; delta: number }
+
 /**
- * Grava a venda e baixa o estoque na MESMA transação: ou acontece tudo, ou nada.
- * (Antes o estoque era baixado item a item com a quantidade lida na tela, e a venda só ia para o localStorage.)
+ * Baixa ou devolve estoque no Supabase, tudo ou nada (a função do banco trava as linhas e recusa estoque negativo).
+ * modo "sale": vendendo (recusa se não houver estoque); "void": devolvendo; "undo": desfazendo um ajuste anterior.
+ */
+async function adjustStock(items: StockChange[], mode: 'sale' | 'void' | 'undo'): Promise<void> {
+  try {
+    await workerCall('/produtos/estoque', { method: 'POST', body: JSON.stringify({ items, mode }) });
+  } catch (e) {
+    if (e instanceof WorkerError && e.status === 409 && Array.isArray(e.body?.errors)) {
+      const err = e.body.errors[0];
+      if (err.error === 'insufficient') {
+        const wanted = -(items.find(i => i.id === err.id)?.delta || 0);
+        throw new Error(`Estoque insuficiente de "${err.name}": disponível ${err.available}, na venda ${wanted}.`);
+      }
+      throw new Error('Um dos produtos da venda não existe mais no estoque.');
+    }
+    throw e;
+  }
+}
+
+function stockChanges(items: { product_id: string; quantity: number }[], sign: 1 | -1): StockChange[] {
+  // Soma quantidades por produto (o mesmo produto pode aparecer em mais de uma linha).
+  const qtyByProduct = new Map<string, number>();
+  items.forEach(i => qtyByProduct.set(i.product_id, roundQty((qtyByProduct.get(i.product_id) || 0) + i.quantity)));
+  return [...qtyByProduct].map(([id, qty]) => ({ id, delta: sign * qty }));
+}
+
+/**
+ * Baixa o estoque (Supabase) e grava a venda (Firebase). Os dois bancos não têm uma transação em comum, então a ordem
+ * é: 1) baixa o estoque, tudo ou nada; 2) grava a venda; se a gravação falhar, devolve o estoque.
  */
 export async function finalizeSale(sale: Omit<Sale, 'id' | 'number'>): Promise<Sale> {
   if (!db) throw new Error('Firebase não configurado.');
-  const firestore = db;
-  const saleRef = doc(collection(firestore, 'sales'));
+  const saleRef = doc(collection(db, 'sales'));
   // JSON round-trip remove `undefined`, que o Firestore rejeita.
   const saved: Sale = JSON.parse(JSON.stringify({ ...sale, id: saleRef.id, number: saleRef.id.slice(0, 6).toUpperCase() }));
 
-  // Soma quantidades por produto (o mesmo produto pode aparecer em mais de uma linha).
-  const qtyByProduct = new Map<string, number>();
-  sale.items.forEach(i => qtyByProduct.set(i.product_id, roundQty((qtyByProduct.get(i.product_id) || 0) + i.quantity)));
-
-  await runTransaction(firestore, async (tx) => {
-    const refs = [...qtyByProduct.keys()].map(id => doc(firestore, 'products', id));
-    const snaps = await Promise.all(refs.map(r => tx.get(r)));
-
-    snaps.forEach((snap, idx) => {
-      const productId = refs[idx].id;
-      if (!snap.exists() || snap.data().deleted) throw new Error('Um dos produtos da venda não existe mais no estoque.');
-      const current = Number(snap.data().quantity) || 0;
-      const wanted = qtyByProduct.get(productId) || 0;
-      if (current < wanted) {
-        throw new Error(`Estoque insuficiente de "${snap.data().name}": disponível ${current}, na venda ${wanted}.`);
-      }
-      tx.update(refs[idx], { quantity: roundQty(current - wanted), updated_at: serverTimestamp() });
-    });
-
-    tx.set(saleRef, saved);
-  });
-
-  invalidateProducts(); // o estoque mudou: a próxima leitura do catálogo sincroniza
+  const down = stockChanges(sale.items, -1);
+  await adjustStock(down, 'sale');
+  try {
+    await setDoc(saleRef, saved);
+  } catch (e) {
+    await adjustStock(stockChanges(sale.items, 1), 'undo').catch(() => {}); // venda não gravada: o estoque volta
+    throw e;
+  } finally {
+    invalidateProducts();
+  }
   return saved;
 }
 
-/** Cancela a venda e devolve os produtos ao estoque, tudo na mesma transação. */
+class AlreadyVoided extends Error {}
+
+/** Cancela a venda e devolve os produtos ao estoque: primeiro devolve (Supabase), depois marca a venda (Firebase). */
 export async function voidSale(sale: Sale, reason: string): Promise<Sale> {
   if (!db) throw new Error('Firebase não configurado.');
   const firestore = db;
   const saleRef = doc(firestore, 'sales', sale.id);
 
-  const result = await runTransaction(firestore, async (tx) => {
-    const saleSnap = await tx.get(saleRef);
-    if (!saleSnap.exists()) throw new Error('Venda não encontrada.');
-    const current = { ...(saleSnap.data() as Sale), id: sale.id };
-    if (current.voided) return { ...sale, ...current };
+  const snap = await getDoc(saleRef);
+  if (!snap.exists()) throw new Error('Venda não encontrada.');
+  const current = { ...(snap.data() as Sale), id: sale.id };
+  if (current.voided) return { ...sale, ...current };
 
-    const qtyByProduct = new Map<string, number>();
-    current.items.forEach(i => qtyByProduct.set(i.product_id, roundQty((qtyByProduct.get(i.product_id) || 0) + i.quantity)));
-    const refs = [...qtyByProduct.keys()].map(id => doc(firestore, 'products', id));
-    const snaps = await Promise.all(refs.map(r => tx.get(r)));
+  const back = stockChanges(current.items, 1); // produto removido do estoque depois da venda é ignorado pelo banco
+  await adjustStock(back, 'void');
 
-    snaps.forEach((snap, idx) => {
-      // Produto apagado do estoque depois da venda: não há o que devolver.
-      if (snap.exists()) tx.update(refs[idx], { quantity: roundQty((Number(snap.data().quantity) || 0) + (qtyByProduct.get(refs[idx].id) || 0)), updated_at: serverTimestamp() });
+  const patch = {
+    voided: true,
+    voided_at: new Date().toISOString(),
+    voided_reason: reason,
+    voided_by: auth?.currentUser?.displayName || auth?.currentUser?.email || '',
+  };
+  try {
+    return await runTransaction(firestore, async (tx) => {
+      const again = await tx.get(saleRef);
+      if (!again.exists()) throw new Error('Venda não encontrada.');
+      if ((again.data() as Sale).voided) throw new AlreadyVoided(); // outra pessoa cancelou ao mesmo tempo
+      tx.update(saleRef, patch);
+      return { ...sale, ...current, ...patch };
     });
-
-    const patch = {
-      voided: true,
-      voided_at: new Date().toISOString(),
-      voided_reason: reason,
-      voided_by: auth?.currentUser?.displayName || auth?.currentUser?.email || '',
-    };
-    tx.update(saleRef, patch);
-    return { ...sale, ...current, ...patch };
-  });
-  invalidateProducts();
-  return result;
+  } catch (e) {
+    await adjustStock(stockChanges(current.items, -1), 'undo').catch(() => {}); // não marcou: desfaz a devolução
+    if (e instanceof AlreadyVoided) return { ...sale, ...current, voided: true };
+    throw e;
+  } finally {
+    invalidateProducts();
+  }
 }
 
 export async function updateSaleFiscal(saleId: string, fiscal: ReceiptFiscal): Promise<void> {

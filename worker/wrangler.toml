@@ -10,5 +10,4 @@ ALLOWED_ORIGINS = "https://laviolapet.web.app,https://laviolapetstore.web.app,ht
 # Chave PÚBLICA do push (a privada fica em segredo: npx wrangler secret put VAPID_PRIVATE_JWK)
 VAPID_PUBLIC_KEY = "BH3HIMpCblEGh9EFzIQ2nMtKYQPpmHuyajU2hORiI54F7fC7FPch2R8W7ak4iKU-OEXpl5GgRgrvy4JUgT8i29k"
 VAPID_SUBJECT = "https://laviolapet.web.app"
-# Agenda de Banho e Tosa / Clubinho: o ID da agenda e o e-mail da conta dona dela
-AGENDA_CALENDAR_ID = "laviolapetstore@gmail.com"
+SUPABASE_URL = "__PREENCHER__"

@@ -190,7 +190,8 @@ export const Estoque: React.FC<EstoqueProps> = ({ styles }) => {
           const { error } = await supabase.from('products').update(productData).eq('id', editingProduct.id);
           if (error) throw error;
         } else {
-          await mockSupabaseDb.updateProduct(editingProduct.id, productData);
+          const { error } = await mockSupabaseDb.updateProduct(editingProduct.id, productData);
+          if (error) throw error;
         }
 
         await logAction(
@@ -205,7 +206,8 @@ export const Estoque: React.FC<EstoqueProps> = ({ styles }) => {
           const { error } = await supabase.from('products').insert(productData);
           if (error) throw error;
         } else {
-          await mockSupabaseDb.addProduct(productData);
+          const { error } = await mockSupabaseDb.addProduct(productData);
+          if (error) throw error;
         }
 
         await logAction(
@@ -236,7 +238,8 @@ export const Estoque: React.FC<EstoqueProps> = ({ styles }) => {
         const { error } = await supabase.from('products').delete().eq('id', product.id);
         if (error) throw error;
       } else {
-        await mockSupabaseDb.deleteProduct(product.id);
+        const { error } = await mockSupabaseDb.deleteProduct(product.id);
+        if (error) throw error;
       }
 
       await logAction(

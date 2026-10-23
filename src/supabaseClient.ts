@@ -2,6 +2,7 @@
 import { db } from './firebaseClient';
 import { collection, addDoc, getDocs, updateDoc, deleteDoc, setDoc, doc, query, where, serverTimestamp, Timestamp } from 'firebase/firestore';
 import { createClient } from '@supabase/supabase-js';
+import { workerCall } from './utils/workerApi';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
@@ -190,7 +191,7 @@ export interface MockProduct {
 }
 
 // ---- Cache do catálogo de produtos (localStorage) -------------------------------------------------
-const PRODUCTS_CACHE_KEY = 'lv:products:v2';
+const PRODUCTS_CACHE_KEY = 'lv:products:v3'; // v3: catálogo no Supabase (ids novos)
 const FULL_RESYNC_MS = 24 * 3600 * 1000;
 const OVERLAP_MS = 2 * 60 * 1000;
 let productsMem: { map: Map<string, any>; syncedMs: number; fullAt: number } | null = null;
@@ -220,9 +221,16 @@ function writeProductsCache() {
 /** Chamado depois de gravar um produto neste aparelho: a próxima leitura sincroniza na hora. */
 export function invalidateProducts() { productsDirty = true; }
 
-function toProduct(d: any) {
-  const { updated_at, ...rest } = d.data();
-  return { id: d.id, ...rest, updated_ms: updated_at?.toMillis ? updated_at.toMillis() : 0 };
+function normalizeProduct(p: any) {
+  const { updated_at, ...rest } = p;
+  return {
+    ...rest,
+    price: Number(p.price) || 0,
+    cost_price: Number(p.cost_price) || 0,
+    quantity: Number(p.quantity) || 0,
+    min_stock: Number(p.min_stock) || 0,
+    updated_ms: p.updated_ms || Date.parse(updated_at) || 0,
+  };
 }
 
 async function syncProducts(): Promise<any[]> {
@@ -234,24 +242,23 @@ async function syncProducts(): Promise<any[]> {
   productsInflight = (async () => {
     const cache = readProductsCache();
     const needFull = !cache || Date.now() - cache.fullAt > FULL_RESYNC_MS;
+    const since = needFull ? 0 : Math.max(0, cache!.syncedMs - OVERLAP_MS);
+    const { products } = await workerCall(`/produtos?since=${since}`);
     if (needFull) {
-      const snap = await getDocs(collection(db, 'products'));
       const map = new Map<string, any>();
       let maxMs = 0;
-      snap.docs.forEach((d: any) => {
-        const p = toProduct(d);
-        maxMs = Math.max(maxMs, p.updated_ms || 0);
+      for (const raw of products) {
+        const p = normalizeProduct(raw);
+        maxMs = Math.max(maxMs, p.updated_ms);
         if (!p.deleted) map.set(p.id, p);
-      });
+      }
       productsMem = { map, syncedMs: maxMs, fullAt: Date.now() };
     } else {
-      const since = Timestamp.fromMillis(Math.max(0, cache!.syncedMs - OVERLAP_MS));
-      const snap = await getDocs(query(collection(db, 'products'), where('updated_at', '>', since)));
-      snap.docs.forEach((d: any) => {
-        const p = toProduct(d);
-        cache!.syncedMs = Math.max(cache!.syncedMs, p.updated_ms || 0);
+      for (const raw of products) {
+        const p = normalizeProduct(raw);
+        cache!.syncedMs = Math.max(cache!.syncedMs, p.updated_ms);
         if (p.deleted) cache!.map.delete(p.id); else cache!.map.set(p.id, p);
-      });
+      }
     }
     productsDirty = false;
     productsLastSync = Date.now();
@@ -333,46 +340,33 @@ export const mockSupabaseDb = {
     } catch(e: unknown) { return { error: e as Error }; }
   },
   /**
-   * Catálogo de produtos com cache no navegador. O plano gratuito do Firestore dá 50 mil leituras por dia, e ler
-   * os ~1.700 produtos a cada tela estourava esse limite. Agora lê tudo uma vez por dia (por aparelho) e, nas
-   * demais vezes, pede só o que mudou desde a última sincronização (campo `updated_at`, carimbado pelo servidor).
+   * Catálogo de produtos, guardado no Supabase (sem limite diário de leituras) e lido pelo Worker.
+   * Mesmo assim fica em cache no navegador: lê tudo uma vez por dia (por aparelho) e, nas demais vezes, pede só o que
+   * mudou desde a última sincronização. Fica rápido e leve.
    */
   getProducts: async () => {
-    if (!db) return { data: [], error: null };
     try {
       return { data: await syncProducts(), error: null };
     } catch(e: unknown) { return { data: null, error: e as Error }; }
   },
-  getProductsUncached: async () => {
-    if (!db) return { data: [], error: null };
-    try {
-      const snap = await getDocs(collection(db, 'products'));
-      const data = snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as MockProduct));
-      return { data, error: null };
-    } catch(e: unknown) { return { data: null, error: e as Error }; }
-  },
   addProduct: async (product: Omit<MockProduct, 'id' | 'created_at'>) => {
-    if (!db) return { data: null, error: new Error('Firebase missing') };
     try {
-      const newProd = { ...product, created_at: new Date().toISOString() };
-      const docRef = await addDoc(collection(db, 'products'), { ...newProd, updated_at: serverTimestamp() });
+      const { product: created } = await workerCall('/produtos', { method: 'POST', body: JSON.stringify(product) });
       invalidateProducts();
-      return { data: { id: docRef.id, ...newProd }, error: null };
+      return { data: normalizeProduct(created), error: null };
     } catch(e: unknown) { return { data: null, error: e as Error }; }
   },
   updateProduct: async (id: string, updates: Partial<Omit<MockProduct, 'id' | 'created_at'>>) => {
-    if (!db) return { data: null, error: new Error('Firebase missing') };
     try {
-      await updateDoc(doc(db, 'products', id), { ...updates, updated_at: serverTimestamp() });
+      await workerCall(`/produtos/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(updates) });
       invalidateProducts();
       return { data: { id, ...updates }, error: null };
     } catch(e: unknown) { return { data: null, error: e as Error }; }
   },
   deleteProduct: async (id: string) => {
-    if (!db) return { error: new Error('Firebase missing') };
     try {
-      // Não apaga de verdade: marca como removido, para os outros aparelhos perceberem na próxima sincronização.
-      await setDoc(doc(db, 'products', id), { deleted: true, updated_at: serverTimestamp() }, { merge: true });
+      // O Worker não apaga de verdade: marca como removido, para os outros aparelhos perceberem na sincronização.
+      await workerCall(`/produtos/${encodeURIComponent(id)}`, { method: 'DELETE' });
       invalidateProducts();
       return { error: null };
     } catch(e: unknown) { return { error: e as Error }; }
