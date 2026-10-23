@@ -30,3 +30,7 @@ firebase-service-account.json
 migrate.cjs
 
 .claude/settings.local.json
+
+# Arquivos locais que nao sobem (ex.: relatorio de estoque do sistema antigo)
+ignore git/
+*.pdf
