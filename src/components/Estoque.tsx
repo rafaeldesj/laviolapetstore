@@ -4,6 +4,8 @@ import { supabase, mockSupabaseDb, isSupabaseConfigured, logAction } from '../su
 import type { Product } from '../supabaseClient';
 import { useAuth } from '../hooks/useAuth';
 import { NcmImportModal } from './NcmImportModal';
+import { EntradaMercadoriaModal } from './EntradaMercadoriaModal';
+import { NotasCompraModal } from './NotasCompraModal';
 import { SkuField } from './SkuField';
 import { matchesQuery, searchTokens } from '../utils/productSearch';
 import { UNIT_OPTIONS, formatQty, isFractional, priceLabel, roundQty, unitShort } from '../utils/units';
@@ -78,6 +80,8 @@ export const Estoque: React.FC<EstoqueProps> = ({ styles }) => {
   const toNum = (v: string): number => { const n = Number(String(v).replace(',', '.')); return Number.isFinite(n) ? n : 0; };
   const [sku, setSku] = useState<string>('');
   const [isNcmImportOpen, setIsNcmImportOpen] = useState<boolean>(false);
+  const [isEntradaOpen, setIsEntradaOpen] = useState<boolean>(false);
+  const [isNotasOpen, setIsNotasOpen] = useState<boolean>(false);
   const [ncm, setNcm] = useState<string>('');
   const [origin, setOrigin] = useState<string>('0');
 
@@ -443,6 +447,22 @@ export const Estoque: React.FC<EstoqueProps> = ({ styles }) => {
         </div>
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
           <button
+            onClick={() => setIsEntradaOpen(true)}
+            style={{ ...styles.btnAcc(hoveredBtn === 'entrada'), borderColor: styles.primary, color: styles.primary }}
+            onMouseEnter={() => setHoveredBtn('entrada')}
+            onMouseLeave={() => setHoveredBtn(null)}
+          >
+            Entrada de mercadoria (XML)
+          </button>
+          <button
+            onClick={() => setIsNotasOpen(true)}
+            style={styles.btnAcc(hoveredBtn === 'notas')}
+            onMouseEnter={() => setHoveredBtn('notas')}
+            onMouseLeave={() => setHoveredBtn(null)}
+          >
+            Notas de compra
+          </button>
+          <button
             onClick={() => setIsNcmImportOpen(true)}
             style={styles.btnAcc(hoveredBtn === 'import-ncm')}
             onMouseEnter={() => setHoveredBtn('import-ncm')}
@@ -472,6 +492,18 @@ export const Estoque: React.FC<EstoqueProps> = ({ styles }) => {
           </button>
         </div>
       )}
+
+      {isEntradaOpen && (
+        <EntradaMercadoriaModal
+          styles={styles}
+          products={products}
+          categories={categories}
+          onClose={() => setIsEntradaOpen(false)}
+          onDone={fetchProducts}
+        />
+      )}
+
+      {isNotasOpen && <NotasCompraModal styles={styles} onClose={() => setIsNotasOpen(false)} />}
 
       {isNcmImportOpen && (
         <NcmImportModal

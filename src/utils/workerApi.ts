@@ -36,3 +36,15 @@ export async function workerCall<T = any>(path: string, init: RequestInit = {}):
   if (!res.ok) throw new WorkerError(body.mensagem || `Erro ${res.status} ao falar com o servidor.`, res.status, body);
   return body as T;
 }
+
+/** Como workerCall, mas devolve a resposta crua (arquivos: XML, PDF). Lança erro se não vier 200. */
+export async function workerRaw(path: string, init: RequestInit = {}): Promise<Response> {
+  const token = await auth?.currentUser?.getIdToken();
+  if (!token) throw new WorkerError('Você precisa estar logado.');
+  const res = await fetch(`${await workerBase()}${path}`, { ...init, headers: { Authorization: `Bearer ${token}`, ...(init.headers || {}) } });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new WorkerError(body.mensagem || `Erro ${res.status} ao falar com o servidor.`, res.status, body);
+  }
+  return res;
+}

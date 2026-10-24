@@ -173,7 +173,7 @@ export default {
     const cors = {
       'Access-Control-Allow-Origin': allowed.includes(origin) ? origin : allowed[0],
       'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-      'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
+      'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
       Vary: 'Origin',
     };
     const json = (data, status = 200) =>
@@ -202,7 +202,7 @@ export default {
       // ---- Produtos e agenda (Supabase) ----
       const dbUrl = new URL(request.url);
       const dbRoute = dbUrl.pathname.replace(/\/+$/, '');
-      if (dbRoute.startsWith('/agenda/') || dbRoute.startsWith('/produtos')) {
+      if (dbRoute.startsWith('/agenda/') || dbRoute.startsWith('/produtos') || dbRoute.startsWith('/compras')) {
         if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE) return json({ mensagem: 'Banco de dados não configurado.' }, 503);
         const fail = (mensagem, r) => json({ mensagem, detalhe: typeof r?.body === 'object' ? r.body?.message : undefined }, 502);
 
@@ -260,6 +260,99 @@ export default {
             // Não apaga de verdade: marca como removido, para os outros aparelhos perceberem na sincronização.
             const r = await sb(env, `/products?id=eq.${encodeURIComponent(prod[1])}`, { method: 'PATCH', body: JSON.stringify({ deleted: true }) });
             return r.ok ? json({ ok: true }) : fail('Erro ao remover o produto.', r);
+          }
+          return json({ mensagem: 'Rota não encontrada.' }, 404);
+        }
+
+        // ----- Notas fiscais de compra (entrada de mercadoria): só a equipe -----
+        if (dbRoute.startsWith('/compras')) {
+          if (!isStaff) return json({ mensagem: 'Acesso negado.' }, 403);
+          const storage = (path, init = {}) => fetch(`${env.SUPABASE_URL}/storage/v1/object/compras/${path}`, {
+            ...init,
+            headers: {
+              apikey: env.SUPABASE_SERVICE_ROLE,
+              ...(env.SUPABASE_SERVICE_ROLE.startsWith('eyJ') ? { Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE}` } : {}),
+              ...(init.headers || {}),
+            },
+          });
+
+          // Lista das notas já lançadas (sem o XML, que é pesado)
+          if (request.method === 'GET' && dbRoute === '/compras') {
+            const r = await sb(env, '/purchases?select=id,access_key,number,series,issued_at,supplier_name,supplier_cnpj,total,has_pdf,created_at,created_by,items&order=created_at.desc&limit=500');
+            return r.ok ? json({ purchases: r.body }) : fail('Erro ao listar as notas de compra.', r);
+          }
+
+          // Vínculos "código do fornecedor → produto" de um fornecedor
+          if (request.method === 'GET' && dbRoute === '/compras/vinculos') {
+            const cnpj = (dbUrl.searchParams.get('cnpj') || '').replace(/\D/g, '');
+            if (!cnpj) return json({ links: [] });
+            const r = await sb(env, `/purchase_links?select=supplier_code,product_id&supplier_cnpj=eq.${encodeURIComponent(cnpj)}`);
+            return r.ok ? json({ links: r.body }) : fail('Erro ao ler os vínculos.', r);
+          }
+
+          // Lança a nota: cria/atualiza os produtos e guarda o XML, tudo ou nada
+          if (request.method === 'POST' && dbRoute === '/compras') {
+            const { note } = await request.json();
+            const key = String(note?.access_key || '').replace(/\D/g, '');
+            if (key.length !== 44 || !Array.isArray(note.items) || note.items.length === 0 || note.items.length > 2000) return json({ mensagem: 'Nota inválida.' }, 400);
+            const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
+            const items = note.items.map((i) => ({
+              action: ['link', 'new', 'skip'].includes(i.action) ? i.action : 'skip',
+              product_id: i.product_id ? String(i.product_id) : null,
+              supplier_code: String(i.supplier_code || '').slice(0, 60),
+              name: String(i.name || '').slice(0, 300),
+              ean: String(i.ean || '').replace(/\D/g, '').slice(0, 14),
+              ncm: String(i.ncm || '').replace(/\D/g, '').slice(0, 8),
+              origin: String(i.origin || '0').slice(0, 1),
+              unit: ['UN', 'KG', 'LT'].includes(i.unit) ? i.unit : 'UN',
+              category: String(i.category || 'Outros').slice(0, 60),
+              qty: Math.max(0, num(i.qty)),
+              cost: Math.max(0, num(i.cost)),
+              price: Math.max(0, num(i.price)),
+              update_cost: i.update_cost !== false,
+            }));
+            if (items.some((i) => i.action === 'link' && !i.product_id)) return json({ mensagem: 'Há item vinculado sem produto.' }, 400);
+            const payload = {
+              access_key: key,
+              number: String(note.number || '').slice(0, 20),
+              series: String(note.series || '').slice(0, 10),
+              issued_at: note.issued_at || '',
+              supplier_name: String(note.supplier_name || '').slice(0, 200),
+              supplier_cnpj: String(note.supplier_cnpj || '').replace(/\D/g, '').slice(0, 14),
+              total: num(note.total),
+              xml: String(note.xml || '').slice(0, 3000000),
+              created_by: user.sub,
+              items,
+            };
+            const r = await sb(env, '/rpc/register_purchase', { method: 'POST', body: JSON.stringify({ payload }) });
+            if (!r.ok) return fail('Erro ao lançar a nota de compra.', r);
+            return json(r.body, r.body.ok ? 201 : 409);
+          }
+
+          const one = /^\/compras\/([\w-]+)\/(xml|pdf)$/.exec(dbRoute);
+          if (one) {
+            const [, pid, kind] = one;
+            if (kind === 'xml' && request.method === 'GET') {
+              const r = await sb(env, `/purchases?id=eq.${encodeURIComponent(pid)}&select=xml,access_key`);
+              if (!r.ok || !r.body[0]) return json({ mensagem: 'Nota não encontrada.' }, 404);
+              return new Response(r.body[0].xml, { headers: { ...cors, 'Content-Type': 'application/xml; charset=utf-8' } });
+            }
+            if (kind === 'pdf' && request.method === 'PUT') {
+              const bytes = await request.arrayBuffer();
+              const head = new TextDecoder().decode(bytes.slice(0, 5));
+              if (bytes.byteLength === 0 || bytes.byteLength > 15 * 1024 * 1024 || head !== '%PDF-') return json({ mensagem: 'Envie um arquivo PDF de até 15 MB.' }, 400);
+              const ex = await sb(env, `/purchases?id=eq.${encodeURIComponent(pid)}&select=id`);
+              if (!ex.ok || !ex.body[0]) return json({ mensagem: 'Nota não encontrada.' }, 404);
+              const up = await storage(`${encodeURIComponent(pid)}.pdf`, { method: 'POST', headers: { 'Content-Type': 'application/pdf', 'x-upsert': 'true' }, body: bytes });
+              if (!up.ok) return json({ mensagem: 'Erro ao guardar o PDF.' }, 502);
+              await sb(env, `/purchases?id=eq.${encodeURIComponent(pid)}`, { method: 'PATCH', body: JSON.stringify({ has_pdf: true }) });
+              return json({ ok: true });
+            }
+            if (kind === 'pdf' && request.method === 'GET') {
+              const f = await storage(`${encodeURIComponent(pid)}.pdf`);
+              if (!f.ok) return json({ mensagem: 'PDF não encontrado.' }, 404);
+              return new Response(f.body, { headers: { ...cors, 'Content-Type': 'application/pdf' } });
+            }
           }
           return json({ mensagem: 'Rota não encontrada.' }, 404);
         }
