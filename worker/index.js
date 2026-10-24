@@ -163,17 +163,6 @@ async function sbStorage(env, bucket, path, init = {}) {
   });
 }
 
-// Dono de um pet (campo owner_id do Firestore). null = pet não existe.
-async function petOwnerUid(env, petId) {
-  const token = await firestoreAccessToken(env);
-  const r = await fetch(`https://firestore.googleapis.com/v1/projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents/pets/${petId}`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (r.status === 404) return null;
-  if (!r.ok) throw new Error('não foi possível conferir o dono do pet');
-  return (await r.json()).fields?.owner_id?.stringValue || null;
-}
-
 async function sbAll(env, path) {
   const rows = [];
   for (let from = 0; from < 50000; from += 1000) {
@@ -354,56 +343,137 @@ export default {
       const role = cached.role;
       const isStaff = STAFF.includes(role);
 
-      // ---- Fotos e documentos do pet (foto, pedigree, documento de identidade...) ----
-      // Quem pode: a equipe, ou só o próprio tutor do pet (nunca o tutor de outro pet).
+      // ---- Pets (cadastro, foto e documentos) ----
+      // Leitura: equipe vê todos; cliente só os seus. Escrita: equipe cuida de qualquer pet; o tutor cuida dos
+      // próprios (cadastra, edita, anexa documentos) — mas só a equipe liga um pet "sem dono" a um cliente,
+      // pra ninguém conseguir reivindicar o pet de outra pessoa só adivinhando o nome.
       const petsUrl = new URL(request.url);
       const petsRoute = petsUrl.pathname.replace(/\/+$/, '');
-      if (petsRoute.startsWith('/pets/')) {
-        if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE) return json({ mensagem: 'Serviço de arquivos não configurado.' }, 503);
-        const m = /^\/pets\/([\w-]+)\/(photo|docs)(?:\/([\w.-]+))?$/.exec(petsRoute);
-        if (!m) return json({ mensagem: 'Rota não encontrada.' }, 404);
-        const [, petId, kind, docId] = m;
-        if (kind === 'docs' && request.method !== 'GET' && !docId) return json({ mensagem: 'Requisição inválida.' }, 400);
+      if (petsRoute === '/pets' || petsRoute.startsWith('/pets/') || petsRoute.startsWith('/meuspets')) {
+        if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE) return json({ mensagem: 'Banco de dados não configurado.' }, 503);
+        const failPet = (mensagem, r) => json({ mensagem, detalhe: typeof r?.body === 'object' ? r.body?.message : undefined }, 502);
 
-        let owner;
-        try {
-          owner = await petOwnerUid(env, petId);
-        } catch (e) {
-          return json({ mensagem: 'Não foi possível conferir o dono do pet agora. Tente de novo em instantes.' }, 503);
-        }
-        if (!owner) return json({ mensagem: 'Pet não encontrado.' }, 404);
-        if (!isStaff && owner !== user.sub) return json({ mensagem: 'Acesso negado.' }, 403);
+        const PET_TEXT = ['name', 'species', 'breed', 'tutor_hint'];
+        const pickPet = (input, { allowOwner }) => {
+          const out = {};
+          for (const k of PET_TEXT) if (input[k] !== undefined) out[k] = String(input[k]).slice(0, 200);
+          if (input.age !== undefined) {
+            const n = Math.floor(Number(input.age));
+            if (!Number.isFinite(n) || n < 0 || n > 100) throw new Error('idade inválida');
+            out.age = n;
+          }
+          if (input.owner_id !== undefined) {
+            if (!allowOwner) throw new Error('só a equipe pode definir o dono do pet');
+            out.owner_id = String(input.owner_id).slice(0, 80);
+          }
+          return out;
+        };
 
-        const storagePath = kind === 'photo' ? `${petId}/photo` : `${petId}/docs/${docId}`;
-
-        if (request.method === 'GET') {
-          const f = await sbStorage(env, 'pets', storagePath);
-          if (!f.ok) return json({ mensagem: kind === 'photo' ? 'Este pet ainda não tem foto.' : 'Documento não encontrado.' }, 404);
-          return new Response(f.body, { headers: { ...cors, 'Content-Type': f.headers.get('Content-Type') || 'application/octet-stream' } });
-        }
-
-        if (request.method === 'PUT') {
-          const ct = request.headers.get('Content-Type') || '';
-          const bytes = await request.arrayBuffer();
-          const limit = kind === 'photo' ? 8 * 1024 * 1024 : 15 * 1024 * 1024;
-          if (bytes.byteLength === 0 || bytes.byteLength > limit) return json({ mensagem: `Envie um arquivo de até ${limit / 1024 / 1024} MB.` }, 400);
-          const head = new Uint8Array(bytes.slice(0, 4));
-          const isJpeg = head[0] === 0xff && head[1] === 0xd8;
-          const isPng = head[0] === 0x89 && head[1] === 0x50;
-          const isPdf = new TextDecoder().decode(bytes.slice(0, 5)) === '%PDF-';
-          if (kind === 'photo' && !(isJpeg || isPng)) return json({ mensagem: 'Envie uma foto em JPG ou PNG.' }, 400);
-          if (kind === 'docs' && !(isJpeg || isPng || isPdf)) return json({ mensagem: 'Envie uma foto (JPG/PNG) ou um PDF.' }, 400);
-          const up = await sbStorage(env, 'pets', storagePath, { method: 'POST', headers: { 'Content-Type': ct || (isPdf ? 'application/pdf' : isPng ? 'image/png' : 'image/jpeg'), 'x-upsert': 'true' }, body: bytes });
-          if (!up.ok) return json({ mensagem: 'Erro ao guardar o arquivo.' }, 502);
-          return json({ ok: true }, 201);
+        // Lista: a equipe vê todos; o cliente só os seus.
+        if (request.method === 'GET' && (petsRoute === '/pets' || petsRoute === '/meuspets')) {
+          const path = isStaff ? '/pets?select=*&order=name.asc' : `/pets?select=*&owner_id=eq.${encodeURIComponent(user.sub)}&order=name.asc`;
+          const r = await sb(env, path);
+          return r.ok ? json({ pets: r.body }) : failPet('Erro ao listar os pets.', r);
         }
 
-        if (request.method === 'DELETE') {
-          const del = await sbStorage(env, 'pets', storagePath, { method: 'DELETE' });
-          return del.ok || del.status === 404 ? json({ ok: true }) : json({ mensagem: 'Erro ao remover o arquivo.' }, 502);
+        // Cadastra: cliente cadastra o próprio pet (owner_id = ele mesmo); equipe pode indicar outro dono.
+        if (request.method === 'POST' && petsRoute === '/pets') {
+          const input = await request.json();
+          if (!String(input.name || '').trim()) return json({ mensagem: 'Informe o nome do pet.' }, 400);
+          let fields;
+          try { fields = pickPet(input, { allowOwner: isStaff }); } catch (e) { return json({ mensagem: e.message }, 400); }
+          if (!isStaff) fields.owner_id = user.sub;
+          fields.created_by = user.sub;
+          const r = await sb(env, '/pets', { method: 'POST', body: JSON.stringify(fields) });
+          return r.ok ? json({ pet: r.body[0] }, 201) : failPet('Erro ao cadastrar o pet.', r);
         }
 
-        return json({ mensagem: 'Método não permitido.' }, 405);
+        const one = /^\/pets\/([\w-]+)$/.exec(petsRoute);
+        if (one) {
+          const petId = one[1];
+          if (request.method === 'PATCH') {
+            const cur = await sb(env, `/pets?id=eq.${encodeURIComponent(petId)}&select=owner_id`);
+            if (!cur.ok || !cur.body[0]) return json({ mensagem: 'Pet não encontrado.' }, 404);
+            if (!isStaff && cur.body[0].owner_id !== user.sub) return json({ mensagem: 'Acesso negado.' }, 403);
+            const input = await request.json();
+            let fields;
+            try { fields = pickPet(input, { allowOwner: isStaff }); } catch (e) { return json({ mensagem: e.message }, 403); }
+            if (Object.keys(fields).length === 0) return json({ mensagem: 'Nada para alterar.' }, 400);
+            const r = await sb(env, `/pets?id=eq.${encodeURIComponent(petId)}`, { method: 'PATCH', body: JSON.stringify(fields) });
+            return r.ok ? json({ pet: r.body[0] }) : failPet('Erro ao salvar o pet.', r);
+          }
+          if (request.method === 'DELETE') {
+            const cur = await sb(env, `/pets?id=eq.${encodeURIComponent(petId)}&select=owner_id`);
+            if (!cur.ok || !cur.body[0]) return json({ mensagem: 'Pet não encontrado.' }, 404);
+            if (!isStaff && cur.body[0].owner_id !== user.sub) return json({ mensagem: 'Acesso negado.' }, 403);
+            const r = await sb(env, `/pets?id=eq.${encodeURIComponent(petId)}`, { method: 'DELETE' });
+            if (!r.ok) return failPet('Erro ao remover o pet.', r);
+            await sbStorage(env, 'pets', `${petId}/photo`, { method: 'DELETE' }).catch(() => {});
+            return json({ ok: true });
+          }
+        }
+
+        // Foto e documentos (sempre dentro de /pets/:id/...)
+        const fm = /^\/pets\/([\w-]+)\/(photo|docs)(?:\/([\w.-]+))?$/.exec(petsRoute);
+        if (fm) {
+          const [, petId, kind, docId] = fm;
+          if (kind === 'docs' && request.method !== 'GET' && !docId) return json({ mensagem: 'Requisição inválida.' }, 400);
+
+          const cur = await sb(env, `/pets?id=eq.${encodeURIComponent(petId)}&select=owner_id,documents`);
+          if (!cur.ok) return failPet('Não foi possível conferir o dono do pet agora.', cur);
+          if (!cur.body[0]) return json({ mensagem: 'Pet não encontrado.' }, 404);
+          const petRow = cur.body[0];
+          if (!isStaff && petRow.owner_id !== user.sub) return json({ mensagem: 'Acesso negado.' }, 403);
+
+          const storagePath = kind === 'photo' ? `${petId}/photo` : `${petId}/docs/${docId}`;
+
+          if (request.method === 'GET') {
+            const f = await sbStorage(env, 'pets', storagePath);
+            if (!f.ok) return json({ mensagem: kind === 'photo' ? 'Este pet ainda não tem foto.' : 'Documento não encontrado.' }, 404);
+            return new Response(f.body, { headers: { ...cors, 'Content-Type': f.headers.get('Content-Type') || 'application/octet-stream' } });
+          }
+
+          if (request.method === 'PUT') {
+            const ct = request.headers.get('Content-Type') || '';
+            const label = (request.headers.get('X-Doc-Label') || '').slice(0, 80);
+            const bytes = await request.arrayBuffer();
+            const limit = kind === 'photo' ? 8 * 1024 * 1024 : 15 * 1024 * 1024;
+            if (bytes.byteLength === 0 || bytes.byteLength > limit) return json({ mensagem: `Envie um arquivo de até ${limit / 1024 / 1024} MB.` }, 400);
+            const head = new Uint8Array(bytes.slice(0, 4));
+            const isJpeg = head[0] === 0xff && head[1] === 0xd8;
+            const isPng = head[0] === 0x89 && head[1] === 0x50;
+            const isPdf = new TextDecoder().decode(bytes.slice(0, 5)) === '%PDF-';
+            if (kind === 'photo' && !(isJpeg || isPng)) return json({ mensagem: 'Envie uma foto em JPG ou PNG.' }, 400);
+            if (kind === 'docs' && !(isJpeg || isPng || isPdf)) return json({ mensagem: 'Envie uma foto (JPG/PNG) ou um PDF.' }, 400);
+            const contentType = ct || (isPdf ? 'application/pdf' : isPng ? 'image/png' : 'image/jpeg');
+            const up = await sbStorage(env, 'pets', storagePath, { method: 'POST', headers: { 'Content-Type': contentType, 'x-upsert': 'true' }, body: bytes });
+            if (!up.ok) return json({ mensagem: 'Erro ao guardar o arquivo.' }, 502);
+            if (kind === 'docs') {
+              const docs = Array.isArray(petRow.documents) ? petRow.documents.filter((d) => d.id !== docId) : [];
+              docs.push({ id: docId, label: label || 'Documento', content_type: contentType, uploaded_at: new Date().toISOString() });
+              const up2 = await sb(env, `/pets?id=eq.${encodeURIComponent(petId)}`, { method: 'PATCH', body: JSON.stringify({ documents: docs }) });
+              if (!up2.ok) return failPet('Arquivo guardado, mas não consegui atualizar a lista de documentos.', up2);
+              return json({ ok: true, documents: docs }, 201);
+            }
+            return json({ ok: true }, 201);
+          }
+
+          if (request.method === 'DELETE') {
+            const del = await sbStorage(env, 'pets', storagePath, { method: 'DELETE' });
+            if (!del.ok && del.status !== 404) return json({ mensagem: 'Erro ao remover o arquivo.' }, 502);
+            if (kind === 'docs') {
+              const docs = (Array.isArray(petRow.documents) ? petRow.documents : []).filter((d) => d.id !== docId);
+              const up2 = await sb(env, `/pets?id=eq.${encodeURIComponent(petId)}`, { method: 'PATCH', body: JSON.stringify({ documents: docs }) });
+              if (!up2.ok) return failPet('Arquivo removido, mas não consegui atualizar a lista de documentos.', up2);
+              return json({ ok: true, documents: docs });
+            }
+            return json({ ok: true });
+          }
+
+          return json({ mensagem: 'Método não permitido.' }, 405);
+        }
+
+        return json({ mensagem: 'Rota não encontrada.' }, 404);
       }
 
       // ---- Produtos e agenda (Supabase) ----

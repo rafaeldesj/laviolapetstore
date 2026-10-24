@@ -4,6 +4,7 @@ import { supabase, mockSupabaseDb, isSupabaseConfigured } from '../supabaseClien
 import type { Product } from '../supabaseClient';
 import { fetchSales } from '../utils/salesService';
 import { listAppointments } from '../utils/agendaService';
+import { listPets } from '../utils/petsService';
 
 interface RelatoriosProps {
   styles: any;
@@ -29,8 +30,8 @@ export const Relatorios: React.FC<RelatoriosProps> = ({ styles }) => {
         const { count, error } = await supabase.from('pets').select('*', { count: 'exact', head: true });
         if (!error && count !== null) totalPets = count;
       } else {
-        const { data } = await mockSupabaseDb.getAllPets();
-        totalPets = data?.length || 0;
+        // Só os pets com um dono de fato vinculado (os trazidos da agenda antiga, ainda sem tutor, não contam aqui).
+        try { totalPets = (await listPets()).filter(p => p.owner_id).length; } catch { /* mantém 0 */ }
       }
       setPetsCount(totalPets);
 

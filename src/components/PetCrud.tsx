@@ -1,30 +1,22 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Plus, Trash2, Edit3, X, Save, PawPrint, Camera, FileText, Upload, Download,
-  Rows3, List, LayoutGrid, Grid2x2, Clock, AlertCircle,
+  Rows3, List, LayoutGrid, Grid2x2, Clock, AlertCircle, UserPlus, Search,
 } from 'lucide-react';
-import { supabase, mockSupabaseDb, isSupabaseConfigured, logAction } from '../supabaseClient';
-import type { PetDocument } from '../supabaseClient';
-import { useAuth } from '../hooks/useAuth';
+import { logAction, roleHierarchy } from '../supabaseClient';
+import type { AuthUser } from '../hooks/useAuth';
+import { listPets, createPet, updatePet, deletePet } from '../utils/petsService';
+import type { Pet } from '../utils/petsService';
 import {
   fetchPetPhotoUrl, uploadPetPhoto, deletePetPhoto,
   uploadPetDocument, deletePetDocument, openPetDocument, newDocId,
 } from '../utils/petFilesService';
 import { listAppointments } from '../utils/agendaService';
 import type { Appointment } from '../supabaseClient';
-
-interface Pet {
-  id: string;
-  name: string;
-  species: string;
-  breed: string;
-  age: number;
-  owner_id: string;
-  documents?: PetDocument[];
-}
+import { searchProducts } from '../utils/productSearch';
 
 interface PetCrudProps {
-  userId: string;
+  currentUser: AuthUser;
   styles: any;
 }
 
@@ -40,9 +32,14 @@ const readView = (): ViewMode => {
   return 'large-cards';
 };
 
-export const PetCrud: React.FC<PetCrudProps> = ({ userId, styles }) => {
-  const { user: currentUser } = useAuth();
-  const [pets, setPets] = useState<Pet[]>([]);
+interface ClientOption { id: string; name: string; email: string }
+
+export const PetCrud: React.FC<PetCrudProps> = ({ currentUser, styles }) => {
+  const userId = currentUser.id;
+  const role = currentUser.profile?.role;
+  const isStaff = role ? roleHierarchy[role] >= roleHierarchy.collaborator : false;
+
+  const [allPets, setAllPets] = useState<Pet[]>([]);
   const [name, setName] = useState<string>('');
   const [species, setSpecies] = useState<string>('Cão');
   const [breed, setBreed] = useState<string>('');
@@ -55,10 +52,14 @@ export const PetCrud: React.FC<PetCrudProps> = ({ userId, styles }) => {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [hoveredBtn, setHoveredBtn] = useState<string | null>(null);
 
+  // Equipe: também vê os pets sem dono, prontos para vincular a um cliente.
+  const [showUnowned, setShowUnowned] = useState<boolean>(false);
+  const pets = showUnowned ? allPets.filter(p => !p.owner_id) : allPets.filter(p => p.owner_id === userId);
+  const unownedCount = allPets.filter(p => !p.owner_id).length;
+
   const [viewMode, setViewMode] = useState<ViewMode>(readView);
   useEffect(() => { try { localStorage.setItem(VIEW_KEY, viewMode); } catch { /* ignora */ } }, [viewMode]);
 
-  // Fotos: cada pet carrega a própria foto (ou null, se não tiver) e guarda como URL temporária do navegador.
   const [photos, setPhotos] = useState<Record<string, string | null>>({});
   const photosRef = useRef<Record<string, string | null>>({});
   useEffect(() => { photosRef.current = photos; }, [photos]);
@@ -83,6 +84,13 @@ export const PetCrud: React.FC<PetCrudProps> = ({ userId, styles }) => {
   const [docError, setDocError] = useState<string | null>(null);
   const [busyDocId, setBusyDocId] = useState<string | null>(null);
 
+  // Vincular dono (só equipe)
+  const [assigningPetId, setAssigningPetId] = useState<string | null>(null);
+  const [clients, setClients] = useState<ClientOption[]>([]);
+  const [ownerSearch, setOwnerSearch] = useState<string>('');
+  const [assignError, setAssignError] = useState<string | null>(null);
+  const [assignBusy, setAssignBusy] = useState<boolean>(false);
+
   useEffect(() => {
     fetchPets();
   }, [userId]);
@@ -91,19 +99,10 @@ export const PetCrud: React.FC<PetCrudProps> = ({ userId, styles }) => {
     setIsLoading(true);
     setErrorMsg(null);
     try {
-      if (false && supabase) {
-        const { data, error } = await supabase
-          .from('pets')
-          .select('*')
-          .eq('owner_id', userId);
-        if (error) throw error;
-        setPets(data || []);
-        void loadPhotos(data || []);
-      } else {
-        const { data } = await mockSupabaseDb.getPets(userId);
-        setPets((data || []) as Pet[]);
-        void loadPhotos((data || []) as Pet[]);
-      }
+      const data = await listPets();
+      setAllPets(data);
+      const visible = isStaff ? data : data.filter(p => p.owner_id === userId);
+      void loadPhotos(visible);
     } catch (err: any) {
       setErrorMsg(err.message || 'Erro ao carregar os pets.');
     } finally {
@@ -120,24 +119,14 @@ export const PetCrud: React.FC<PetCrudProps> = ({ userId, styles }) => {
     setIsLoading(true);
     setErrorMsg(null);
 
-    const newPetData = { name, species, breed, age };
-
     try {
-      let newId: string | null = null;
-      if (false && supabase) {
-        const { data, error } = await supabase.from('pets').insert({ ...newPetData, owner_id: userId }).select('id').single();
-        if (error) throw error;
-        newId = data?.id || null;
-      } else {
-        const { data } = await mockSupabaseDb.addPet(newPetData, userId);
-        newId = data?.id || null;
-      }
-      if (newId && formPhotoFile) {
-        try { await uploadPetPhoto(newId, formPhotoFile); } catch (e: any) { setErrorMsg(`Pet cadastrado, mas a foto não foi salva: ${e.message || e}`); }
+      const pet = await createPet({ name, species, breed, age });
+      if (formPhotoFile) {
+        try { await uploadPetPhoto(pet.id, formPhotoFile); } catch (e: any) { setErrorMsg(`Pet cadastrado, mas a foto não foi salva: ${e.message || e}`); }
       }
       await logAction(
-        currentUser?.email || '',
-        currentUser?.name || 'Tutor',
+        currentUser.email || '',
+        currentUser.name || 'Tutor',
         'Cadastro de Pet',
         `O pet "${name}" (Espécie: ${species}, Raça: ${breed}, Idade: ${age}) foi cadastrado.`
       );
@@ -162,21 +151,14 @@ export const PetCrud: React.FC<PetCrudProps> = ({ userId, styles }) => {
     setIsLoading(true);
     setErrorMsg(null);
 
-    const updatedData = { name, species, breed, age };
-
     try {
-      if (false && supabase) {
-        const { error } = await supabase.from('pets').update(updatedData).eq('id', petId);
-        if (error) throw error;
-      } else {
-        await mockSupabaseDb.updatePet(petId, updatedData);
-      }
+      await updatePet(petId, { name, species, breed, age });
       if (formPhotoFile) {
         try { await uploadPetPhoto(petId, formPhotoFile); } catch (e: any) { setErrorMsg(`Dados salvos, mas a foto não foi atualizada: ${e.message || e}`); }
       }
       await logAction(
-        currentUser?.email || '',
-        currentUser?.name || 'Tutor',
+        currentUser.email || '',
+        currentUser.name || 'Tutor',
         'Edição de Pet',
         `O pet "${name}" (ID: ${petId}, Espécie: ${species}, Raça: ${breed}, Idade: ${age}) foi editado.`
       );
@@ -197,19 +179,13 @@ export const PetCrud: React.FC<PetCrudProps> = ({ userId, styles }) => {
     if (!confirm('Deseja realmente remover este pet?')) return;
     setIsLoading(true);
     setErrorMsg(null);
-    const petToDelete = pets.find(p => p.id === petId);
+    const petToDelete = allPets.find(p => p.id === petId);
     const petName = petToDelete ? petToDelete.name : 'Pet';
     try {
-      if (false && supabase) {
-        const { error } = await supabase.from('pets').delete().eq('id', petId);
-        if (error) throw error;
-      } else {
-        await mockSupabaseDb.deletePet(petId);
-      }
-      await deletePetPhoto(petId).catch(() => {}); // a foto some junto; se der erro, não impede a exclusão
+      await deletePet(petId);
       await logAction(
-        currentUser?.email || '',
-        currentUser?.name || 'Tutor',
+        currentUser.email || '',
+        currentUser.name || 'Tutor',
         'Exclusão de Pet',
         `O pet "${petName}" (ID: ${petId}) foi excluído do sistema.`
       );
@@ -224,9 +200,9 @@ export const PetCrud: React.FC<PetCrudProps> = ({ userId, styles }) => {
   const startEdit = (pet: Pet) => {
     setEditingId(pet.id);
     setName(pet.name);
-    setSpecies(pet.species);
-    setBreed(pet.breed);
-    setAge(pet.age);
+    setSpecies(pet.species || 'Outro');
+    setBreed(pet.breed || '');
+    setAge(pet.age || 0);
     setFormPhotoFile(null);
     setIsAdding(false);
   };
@@ -262,13 +238,9 @@ export const PetCrud: React.FC<PetCrudProps> = ({ userId, styles }) => {
     setUploadingDoc(true);
     setDocError(null);
     try {
-      const id = newDocId();
-      await uploadPetDocument(detailPet.id, id, file);
-      const doc: PetDocument = { id, label: docLabel, content_type: file.type || 'application/octet-stream', uploaded_at: new Date().toISOString() };
-      const updated = [...(detailPet.documents || []), doc];
-      await mockSupabaseDb.updatePet(detailPet.id, { documents: updated });
-      setDetailPet({ ...detailPet, documents: updated });
-      setPets(prev => prev.map(p => (p.id === detailPet.id ? { ...p, documents: updated } : p)));
+      const docs = await uploadPetDocument(detailPet.id, newDocId(), file, docLabel);
+      setDetailPet({ ...detailPet, documents: docs });
+      setAllPets(prev => prev.map(p => (p.id === detailPet.id ? { ...p, documents: docs } : p)));
     } catch (e: any) {
       setDocError(e.message || 'Não foi possível anexar o documento.');
     } finally {
@@ -281,17 +253,51 @@ export const PetCrud: React.FC<PetCrudProps> = ({ userId, styles }) => {
     setBusyDocId(docId);
     setDocError(null);
     try {
-      await deletePetDocument(detailPet.id, docId);
-      const updated = (detailPet.documents || []).filter(d => d.id !== docId);
-      await mockSupabaseDb.updatePet(detailPet.id, { documents: updated });
-      setDetailPet({ ...detailPet, documents: updated });
-      setPets(prev => prev.map(p => (p.id === detailPet.id ? { ...p, documents: updated } : p)));
+      const docs = await deletePetDocument(detailPet.id, docId);
+      setDetailPet({ ...detailPet, documents: docs });
+      setAllPets(prev => prev.map(p => (p.id === detailPet.id ? { ...p, documents: docs } : p)));
     } catch (e: any) {
       setDocError(e.message || 'Não foi possível remover o documento.');
     } finally {
       setBusyDocId(null);
     }
   };
+
+  // ---- Vincular dono (equipe) ----
+  const openAssign = async (petId: string) => {
+    setAssigningPetId(petId);
+    setOwnerSearch('');
+    setAssignError(null);
+    if (clients.length === 0) {
+      try {
+        const { db } = await import('../firebaseClient');
+        const { collection, getDocs, query, where } = await import('firebase/firestore');
+        if (db) {
+          const snap = await getDocs(query(collection(db, 'profiles'), where('role', 'in', ['client', 'cliente'])));
+          setClients(snap.docs.map(d => ({ id: d.id, name: d.data().full_name || d.data().name || 'Cliente', email: d.data().email || '' })));
+        }
+      } catch (e: any) {
+        setAssignError('Não foi possível carregar a lista de clientes.');
+      }
+    }
+  };
+
+  const assignOwner = async (clientId: string) => {
+    if (!assigningPetId) return;
+    setAssignBusy(true);
+    setAssignError(null);
+    try {
+      await updatePet(assigningPetId, { owner_id: clientId });
+      setAssigningPetId(null);
+      fetchPets();
+    } catch (e: any) {
+      setAssignError(e.message || 'Não foi possível vincular o dono.');
+    } finally {
+      setAssignBusy(false);
+    }
+  };
+
+  const clientResults = ownerSearch.trim() ? searchProducts(clients.map(c => ({ ...c, sku: c.email })), ownerSearch, 8).items : clients.slice(0, 8);
 
   const fmtDate = (iso: string) => new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 
@@ -325,6 +331,17 @@ export const PetCrud: React.FC<PetCrudProps> = ({ userId, styles }) => {
 
   const petActions = (pet: Pet) => (
     <div style={{ display: 'flex', gap: '6px' }}>
+      {isStaff && !pet.owner_id && (
+        <button
+          onClick={(e) => { e.stopPropagation(); openAssign(pet.id); }}
+          className="btn-action-icon"
+          style={{ backgroundColor: 'hsl(210,85%,45%,0.1)', color: 'hsl(210,85%,40%)' }}
+          title="Vincular a um cliente"
+          aria-label={`Vincular ${pet.name} a um cliente`}
+        >
+          <UserPlus size={14} />
+        </button>
+      )}
       <button
         onClick={(e) => { e.stopPropagation(); startEdit(pet); }}
         className="btn-action-icon"
@@ -350,12 +367,12 @@ export const PetCrud: React.FC<PetCrudProps> = ({ userId, styles }) => {
       <div style={styles.crudHeader}>
         <div>
           <h2 id="pets-heading" style={styles.sectionTitle}>
-            Meus Pets
+            {showUnowned ? 'Pets sem tutor vinculado' : 'Meus Pets'}
             <div style={styles.sectionTitleBar}></div>
           </h2>
-          {!isSupabaseConfigured && (
-            <p style={{ fontSize: '0.8rem', color: styles.secondary, marginTop: '5px', fontWeight: 600 }}>
-              * Executando em modo de armazenamento local (conecte o Supabase para sincronizar em nuvem).
+          {showUnowned && (
+            <p style={{ fontSize: '0.85rem', color: styles.sidebarWidgetText?.color, marginTop: '5px' }}>
+              Vieram da agenda antiga, sem conta de cliente vinculada ainda. O nome ao lado é uma dica de quem é o tutor.
             </p>
           )}
         </div>
@@ -372,6 +389,13 @@ export const PetCrud: React.FC<PetCrudProps> = ({ userId, styles }) => {
         )}
       </div>
 
+      {isStaff && unownedCount > 0 && (
+        <label style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem', fontWeight: 600, color: styles.textMain, marginTop: '12px', cursor: 'pointer' }}>
+          <input type="checkbox" checked={showUnowned} onChange={(e) => setShowUnowned(e.target.checked)} />
+          Ver pets sem tutor vinculado ({unownedCount})
+        </label>
+      )}
+
       {errorMsg && (
         <div style={{ color: 'hsl(0,75%,45%)', fontSize: '0.85rem', margin: '15px 0', padding: '8px 12px', backgroundColor: 'hsl(0,75%,55%,0.08)', borderRadius: '6px', border: '1px solid hsl(0,75%,55%,0.25)' }}>
           {errorMsg}
@@ -385,7 +409,7 @@ export const PetCrud: React.FC<PetCrudProps> = ({ userId, styles }) => {
           </h3>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-            {editingId ? avatar(pets.find(p => p.id === editingId) || ({} as Pet), 64) : (
+            {editingId ? avatar(allPets.find(p => p.id === editingId) || ({} as Pet), 64) : (
               <div style={{ width: 64, height: 64, borderRadius: '50%', backgroundColor: styles.isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: styles.secondary }}>
                 <PawPrint size={30} />
               </div>
@@ -457,12 +481,14 @@ export const PetCrud: React.FC<PetCrudProps> = ({ userId, styles }) => {
         </div>
       )}
 
-      {isLoading && pets.length === 0 ? (
+      {isLoading && allPets.length === 0 ? (
         <p style={{ color: styles.sidebarWidgetText.color, marginTop: '16px' }}>Carregando seus pets...</p>
       ) : pets.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '40px 20px', border: `1px dashed ${styles.borderColor}`, borderRadius: '12px', marginTop: '20px' }}>
           <PawPrint size={40} style={{ color: styles.secondary, margin: '0 auto 10px', display: 'block' }} />
-          <p style={{ color: styles.sidebarWidgetText.color, fontWeight: 500 }}>Nenhum pet cadastrado ainda.</p>
+          <p style={{ color: styles.sidebarWidgetText.color, fontWeight: 500 }}>
+            {showUnowned ? 'Nenhum pet sem tutor no momento.' : 'Nenhum pet cadastrado ainda.'}
+          </p>
         </div>
       ) : viewMode === 'details' ? (
         <div style={{ overflowX: 'auto', border: `1px solid ${styles.borderColor}`, borderRadius: '10px', marginTop: '16px' }}>
@@ -474,6 +500,7 @@ export const PetCrud: React.FC<PetCrudProps> = ({ userId, styles }) => {
                 <th style={{ padding: '8px 10px', textAlign: 'left', fontSize: '0.72rem', fontWeight: 700, color: styles.sidebarWidgetText?.color }}>Espécie</th>
                 <th style={{ padding: '8px 10px', textAlign: 'left', fontSize: '0.72rem', fontWeight: 700, color: styles.sidebarWidgetText?.color }}>Raça</th>
                 <th style={{ padding: '8px 10px', textAlign: 'right', fontSize: '0.72rem', fontWeight: 700, color: styles.sidebarWidgetText?.color }}>Idade</th>
+                {showUnowned && <th style={{ padding: '8px 10px', textAlign: 'left', fontSize: '0.72rem', fontWeight: 700, color: styles.sidebarWidgetText?.color }}>Tutor (dica)</th>}
                 <th style={{ padding: '8px 10px', textAlign: 'right', fontSize: '0.72rem', fontWeight: 700, color: styles.sidebarWidgetText?.color }}>Documentos</th>
                 <th style={{ padding: '8px 10px' }}></th>
               </tr>
@@ -486,6 +513,7 @@ export const PetCrud: React.FC<PetCrudProps> = ({ userId, styles }) => {
                   <td style={{ padding: '8px 10px', color: styles.textMain }}>{pet.species}</td>
                   <td style={{ padding: '8px 10px', color: styles.textMain }}>{pet.breed}</td>
                   <td style={{ padding: '8px 10px', textAlign: 'right', color: styles.textMain }}>{pet.age} {pet.age === 1 ? 'ano' : 'anos'}</td>
+                  {showUnowned && <td style={{ padding: '8px 10px', color: styles.sidebarWidgetText?.color }}>{pet.tutor_hint || '—'}</td>}
                   <td style={{ padding: '8px 10px', textAlign: 'right', color: styles.sidebarWidgetText?.color }}>{(pet.documents || []).length}</td>
                   <td style={{ padding: '6px 10px', textAlign: 'right' }} onClick={(e) => e.stopPropagation()}>{petActions(pet)}</td>
                 </tr>
@@ -504,7 +532,10 @@ export const PetCrud: React.FC<PetCrudProps> = ({ userId, styles }) => {
               {avatar(pet, 40)}
               <div style={{ flex: 1, minWidth: 0 }}>
                 <strong style={{ color: styles.textMain, fontSize: '0.92rem' }}>{pet.name}</strong>
-                <span style={{ color: styles.sidebarWidgetText?.color, fontSize: '0.8rem', marginLeft: '8px' }}>{pet.species} · {pet.breed} · {pet.age} {pet.age === 1 ? 'ano' : 'anos'}</span>
+                <span style={{ color: styles.sidebarWidgetText?.color, fontSize: '0.8rem', marginLeft: '8px' }}>
+                  {pet.species} · {pet.breed || 'raça não informada'} · {pet.age} {pet.age === 1 ? 'ano' : 'anos'}
+                  {showUnowned && pet.tutor_hint ? ` · tutor: ${pet.tutor_hint}` : ''}
+                </span>
               </div>
               <div onClick={(e) => e.stopPropagation()}>{petActions(pet)}</div>
             </article>
@@ -536,12 +567,18 @@ export const PetCrud: React.FC<PetCrudProps> = ({ userId, styles }) => {
               </div>
               <div style={styles.petDetail}>
                 <span>Raça:</span>
-                <strong>{pet.breed}</strong>
+                <strong>{pet.breed || 'não informada'}</strong>
               </div>
               <div style={styles.petDetail}>
                 <span>Idade:</span>
                 <strong>{pet.age} {pet.age === 1 ? 'ano' : 'anos'}</strong>
               </div>
+              {showUnowned && pet.tutor_hint && (
+                <div style={styles.petDetail}>
+                  <span>Tutor (dica):</span>
+                  <strong>{pet.tutor_hint}</strong>
+                </div>
+              )}
               {(pet.documents || []).length > 0 && (
                 <div style={styles.petDetail}>
                   <span>Documentos:</span>
@@ -554,6 +591,39 @@ export const PetCrud: React.FC<PetCrudProps> = ({ userId, styles }) => {
         </div>
       )}
 
+      {/* MODAL: vincular dono (equipe) */}
+      {assigningPetId && (
+        <div style={styles.modalOverlay}>
+          <div style={{ ...styles.modalContent, maxWidth: '420px' }} role="dialog" aria-modal="true" aria-labelledby="assign-owner-title">
+            <div style={styles.modalHeader}>
+              <h2 id="assign-owner-title" style={{ ...styles.modalTitle, fontSize: '1.1rem' }}>Vincular a um cliente</h2>
+              <button onClick={() => setAssigningPetId(null)} style={styles.modalCloseBtn(false)} aria-label="Fechar">✕</button>
+            </div>
+            <div style={{ position: 'relative' }}>
+              <input type="text" value={ownerSearch} onChange={(e) => setOwnerSearch(e.target.value)} placeholder="Buscar cliente por nome ou e-mail..." style={{ ...styles.formInput, width: '100%', paddingLeft: '34px' }} autoFocus />
+              <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: styles.sidebarWidgetText?.color }} />
+            </div>
+            {assignError && <div role="alert" style={{ color: 'hsl(0,75%,45%)', fontSize: '0.82rem' }}>{assignError}</div>}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', maxHeight: '260px', overflowY: 'auto' }}>
+              {clientResults.length === 0 ? (
+                <p style={{ fontSize: '0.82rem', color: styles.sidebarWidgetText?.color, textAlign: 'center' }}>Nenhum cliente encontrado.</p>
+              ) : clientResults.map(c => (
+                <button
+                  key={c.id}
+                  type="button"
+                  disabled={assignBusy}
+                  onClick={() => assignOwner(c.id)}
+                  style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', padding: '8px 12px', border: `1px solid ${styles.borderColor}`, borderRadius: '8px', background: 'none', cursor: 'pointer', textAlign: 'left' }}
+                >
+                  <strong style={{ fontSize: '0.85rem', color: styles.textMain }}>{c.name}</strong>
+                  <span style={{ fontSize: '0.72rem', color: styles.sidebarWidgetText?.color }}>{c.email}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* MODAL: detalhe do pet — documentos e histórico */}
       {detailPet && (
         <div style={styles.modalOverlay}>
@@ -563,7 +633,8 @@ export const PetCrud: React.FC<PetCrudProps> = ({ userId, styles }) => {
                 {avatar(detailPet, 54)}
                 <div>
                   <h2 id="pet-detail-title" style={{ ...styles.modalTitle, fontSize: '1.2rem' }}>{detailPet.name}</h2>
-                  <span style={{ fontSize: '0.8rem', color: styles.sidebarWidgetText?.color }}>{detailPet.species} · {detailPet.breed} · {detailPet.age} {detailPet.age === 1 ? 'ano' : 'anos'}</span>
+                  <span style={{ fontSize: '0.8rem', color: styles.sidebarWidgetText?.color }}>{detailPet.species} · {detailPet.breed || 'raça não informada'} · {detailPet.age} {detailPet.age === 1 ? 'ano' : 'anos'}</span>
+                  {!detailPet.owner_id && <div style={{ fontSize: '0.75rem', color: 'hsl(36,95%,40%)', fontWeight: 700 }}>⚠ Sem tutor vinculado{detailPet.tutor_hint ? ` (dica: ${detailPet.tutor_hint})` : ''}</div>}
                 </div>
               </div>
               <button onClick={() => setDetailPet(null)} style={styles.modalCloseBtn(false)} aria-label="Fechar">✕</button>
@@ -573,6 +644,11 @@ export const PetCrud: React.FC<PetCrudProps> = ({ userId, styles }) => {
               <button type="button" onClick={() => { startEdit(detailPet); setDetailPet(null); }} style={{ ...styles.btnAcc(false), padding: '6px 12px', fontSize: '0.8rem' }}>
                 <Edit3 size={14} /> Editar pet
               </button>
+              {isStaff && !detailPet.owner_id && (
+                <button type="button" onClick={() => { const id = detailPet.id; setDetailPet(null); openAssign(id); }} style={{ ...styles.btnAcc(false), padding: '6px 12px', fontSize: '0.8rem' }}>
+                  <UserPlus size={14} /> Vincular a um cliente
+                </button>
+              )}
             </div>
 
             <div style={{ borderTop: `1px solid ${styles.borderColor}`, paddingTop: '14px' }}>

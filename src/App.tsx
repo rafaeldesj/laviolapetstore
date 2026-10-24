@@ -192,7 +192,7 @@ function App() {
             )}
 
             {activeSection === 'pets' && user && (
-              <PetCrud userId={user.id} styles={styles} />
+              <PetCrud currentUser={user} styles={styles} />
             )}
 
             {activeSection === 'agendamentos' && user && (

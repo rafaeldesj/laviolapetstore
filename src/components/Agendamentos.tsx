@@ -8,6 +8,7 @@ import { listAppointments, createAppointment, updateAppointmentApi, deleteAppoin
 import { buildIcs, downloadIcs } from '../utils/icsExport';
 import { parseIcs } from '../utils/icsParse';
 import type { AgendaScope } from '../utils/agendaService';
+import { listPets } from '../utils/petsService';
 
 interface AgendamentosProps {
   currentUser: AuthUser;
@@ -205,7 +206,7 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
         }
       } else {
         if (isStaffMode) {
-          const { data: pList } = await mockSupabaseDb.getAllPets();
+          const pList = await listPets();
           const mockUsers = JSON.parse(localStorage.getItem('laviola_mock_users') || '[]');
           setProfilesList(mockUsers.map((u: any) => ({ id: u.id, full_name: u.name, email: u.email })));
           const mapped = (pList || []).map((p: any) => {
@@ -218,8 +219,8 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
           });
           setAllPets(mapped);
         } else {
-          const { data } = await mockSupabaseDb.getPets(currentUser.id);
-          setPets(data || []);
+          const data = await listPets();
+          setPets(data);
         }
       }
     } catch (err: any) {

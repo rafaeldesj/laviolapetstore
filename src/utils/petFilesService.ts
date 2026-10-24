@@ -1,4 +1,5 @@
 import { workerCall, workerRaw, WorkerError } from './workerApi';
+import type { PetDocument } from './petsService';
 
 /**
  * Foto e documentos do pet (pedigree, documento de identidade, carteira de vacinação...).
@@ -29,16 +30,19 @@ export async function deletePetPhoto(petId: string): Promise<void> {
   await workerCall(`/pets/${encodeURIComponent(petId)}/photo`, { method: 'DELETE' });
 }
 
-export async function uploadPetDocument(petId: string, docId: string, file: File): Promise<void> {
-  await workerRaw(`/pets/${encodeURIComponent(petId)}/docs/${encodeURIComponent(docId)}`, {
+/** Sobe o documento e já devolve a lista de documentos do pet atualizada (o Worker guarda o rótulo junto). */
+export async function uploadPetDocument(petId: string, docId: string, file: File, label: string): Promise<PetDocument[]> {
+  const res = await workerRaw(`/pets/${encodeURIComponent(petId)}/docs/${encodeURIComponent(docId)}`, {
     method: 'PUT',
-    headers: { 'Content-Type': file.type || 'application/octet-stream' },
+    headers: { 'Content-Type': file.type || 'application/octet-stream', 'X-Doc-Label': label },
     body: file,
   });
+  return ((await res.json()) as { documents: PetDocument[] }).documents;
 }
 
-export async function deletePetDocument(petId: string, docId: string): Promise<void> {
-  await workerCall(`/pets/${encodeURIComponent(petId)}/docs/${encodeURIComponent(docId)}`, { method: 'DELETE' });
+export async function deletePetDocument(petId: string, docId: string): Promise<PetDocument[]> {
+  const body = await workerCall<{ documents: PetDocument[] }>(`/pets/${encodeURIComponent(petId)}/docs/${encodeURIComponent(docId)}`, { method: 'DELETE' });
+  return body.documents;
 }
 
 /** Abre o documento numa aba nova (PDF) ou devolve a URL para mostrar (imagem). */
