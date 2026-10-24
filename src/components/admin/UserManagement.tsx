@@ -511,7 +511,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
         </div>
 
         <button
-          onClick={() => setIsCreating(true)}
+          onClick={() => { setErrorMsg(null); setIsCreating(true); }}
           style={styles.btnAcc(hoveredBtn === 'new-user')}
           onMouseEnter={() => setHoveredBtn('new-user')}
           onMouseLeave={() => setHoveredBtn(null)}
@@ -672,7 +672,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
                     <div style={{ display: 'flex', gap: '6px', flexShrink: 0, marginLeft: 'auto' }}>
                       {canResetPassword && (
                         <button
-                          onClick={() => setResetPasswordUser(user)}
+                          onClick={() => { setErrorMsg(null); setResetPasswordUser(user); }}
                           title="Redefinir Senha"
                           aria-label={`Redefinir senha de ${user.full_name}`}
                           className="btn-action-icon"
@@ -892,8 +892,8 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
           <div style={{ ...styles.modalContent, maxWidth: '500px' }} role="dialog" aria-modal="true" aria-labelledby="create-user-title">
             <div style={styles.modalHeader}>
               <h2 id="create-user-title" style={styles.modalTitle}>Novo Usuário</h2>
-              <button 
-                onClick={() => setIsCreating(false)} 
+              <button
+                onClick={() => { setErrorMsg(null); setIsCreating(false); }}
                 style={styles.modalCloseBtn(hoveredBtn === 'close-create')} 
                 onMouseEnter={() => setHoveredBtn('close-create')}
                 onMouseLeave={() => setHoveredBtn(null)}
@@ -902,6 +902,12 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
                 ✕
               </button>
             </div>
+
+            {errorMsg && (
+              <div style={{ color: 'hsl(0,75%,55%)', fontSize: '0.85rem', margin: '0 0 10px', padding: '8px 12px', backgroundColor: 'hsl(0,75%,55%,0.08)', borderRadius: '6px', border: '1px solid hsl(0,75%,55%,0.25)' }}>
+                {errorMsg}
+              </div>
+            )}
 
             <form onSubmit={handleCreateUser} style={styles.modalForm}>
               <div style={styles.formGroup}>
@@ -1039,7 +1045,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
                 </button>
                 <button
                   type="button"
-                  onClick={() => setIsCreating(false)}
+                  onClick={() => { setErrorMsg(null); setIsCreating(false); }}
                   style={{ ...styles.btnAcc(hoveredBtn === 'cancel-create'), padding: '12px' }}
                   onMouseEnter={() => setHoveredBtn('cancel-create')}
                   onMouseLeave={() => setHoveredBtn(null)}
@@ -1122,14 +1128,20 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
                 <Key size={18} style={{ display: 'inline', marginRight: '6px', color: styles.primary }} />
                 Redefinir Senha
               </h2>
-              <button 
-                onClick={() => { setResetPasswordUser(null); setResetPasswordVal(''); }} 
+              <button
+                onClick={() => { setErrorMsg(null); setResetPasswordUser(null); setResetPasswordVal(''); }}
                 style={styles.modalCloseBtn(false)}
                 aria-label="Fechar"
               >
                 ✕
               </button>
             </div>
+
+            {errorMsg && (
+              <div style={{ color: 'hsl(0,75%,55%)', fontSize: '0.85rem', margin: '0 0 10px', padding: '8px 12px', backgroundColor: 'hsl(0,75%,55%,0.08)', borderRadius: '6px', border: '1px solid hsl(0,75%,55%,0.25)' }}>
+                {errorMsg}
+              </div>
+            )}
 
             <form onSubmit={handleResetPassword} style={styles.modalForm}>
               <p style={{ margin: '0 0 12px 0', fontSize: '0.85rem', color: styles.sidebarWidgetText?.color }}>
@@ -1166,7 +1178,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
               <div style={styles.modalActions}>
                 <button
                   type="button"
-                  onClick={() => { setResetPasswordUser(null); setResetPasswordVal(''); }}
+                  onClick={() => { setErrorMsg(null); setResetPasswordUser(null); setResetPasswordVal(''); }}
                   style={{
                     padding: '10px 16px', borderRadius: '8px', border: `1px solid ${styles.borderColor}`,
                     background: 'none', color: styles.textMain, cursor: 'pointer', fontSize: '0.85rem'
