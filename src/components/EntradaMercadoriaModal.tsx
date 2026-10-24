@@ -35,6 +35,8 @@ interface Row {
   qty: string;
   cost: string;
   price: string;
+  /** Margem sobre o custo, em %: muda junto com o preço de venda (e vice-versa). */
+  margin: string;
   priceEdited: boolean;
   updateCost: boolean;
   category: string;
@@ -57,6 +59,9 @@ const toNum = (v: string): number => {
   return Number.isFinite(n) ? n : 0;
 };
 const money2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
+const txt = (n: number) => String(n).replace('.', ',');
+/** Margem sobre o custo: quanto o preço de venda passa do custo, em %. */
+const marginOf = (price: number, cost: number) => (cost > 0 ? Math.round(((price / cost - 1) * 100 + Number.EPSILON) * 10) / 10 : 0);
 const readText = (f: File) => f.text();
 
 export const EntradaMercadoriaModal: React.FC<Props> = ({ styles, products, categories, onClose, onDone }) => {
@@ -93,7 +98,8 @@ export const EntradaMercadoriaModal: React.FC<Props> = ({ styles, products, cate
         productId: matched?.id || '',
         qty: String(it.qty).replace('.', ','),
         cost: String(it.cost).replace('.', ','),
-        price: String(newPrice(it.cost)).replace('.', ','),
+        price: matched ? txt(matched.price) : txt(newPrice(it.cost)),
+        margin: matched ? txt(marginOf(matched.price, it.cost)) : txt(toNum(margin) || 0),
         priceEdited: false,
         updateCost: true,
         category: guessCategory(it.name),
@@ -158,7 +164,7 @@ export const EntradaMercadoriaModal: React.FC<Props> = ({ styles, products, cate
     const m = toNum(v) || 0;
     setNotes(prev => prev.map(n => ({
       ...n,
-      rows: n.rows.map(r => (r.action === 'new' && !r.priceEdited ? { ...r, price: String(money2(toNum(r.cost) * (1 + m / 100))).replace('.', ',') } : r)),
+      rows: n.rows.map(r => (r.action === 'new' && !r.priceEdited ? { ...r, price: txt(money2(toNum(r.cost) * (1 + m / 100))), margin: txt(m) } : r)),
     })));
   };
 
@@ -190,6 +196,7 @@ export const EntradaMercadoriaModal: React.FC<Props> = ({ styles, products, cate
           cost: toNum(r.cost),
           price: toNum(r.price),
           update_cost: r.updateCost,
+          update_price: r.action === 'link' && !!r.productId && toNum(r.price) > 0 && Math.abs(toNum(r.price) - (productById.get(r.productId)?.price ?? 0)) > 0.004,
         }));
         const res = await registerPurchase(n.note, n.xml, lines);
         if (res.duplicate) {
@@ -323,7 +330,7 @@ export const EntradaMercadoriaModal: React.FC<Props> = ({ styles, products, cate
                                 <th style={th}>Produto na nota</th>
                                 <th style={{ ...th, width: '86px' }}>Qtd</th>
                                 <th style={{ ...th, width: '96px' }}>Custo unit.</th>
-                                <th style={{ ...th, width: '96px' }}>Venda</th>
+                                <th style={{ ...th, width: '118px' }}>Venda / Margem</th>
                                 <th style={{ ...th, width: '330px' }}>No estoque</th>
                               </tr>
                             </thead>
@@ -341,23 +348,39 @@ export const EntradaMercadoriaModal: React.FC<Props> = ({ styles, products, cate
                                     </td>
                                     <td style={{ padding: '6px 8px' }}>
                                       <input type="text" inputMode="decimal" value={r.qty} onChange={(e) => patchRow(key, r.idx, { qty: e.target.value })} style={smallInput} aria-label={`Quantidade de ${r.name}`} />
+                                      <div style={{ fontSize: '0.7rem', color: styles.sidebarWidgetText?.color, marginTop: '2px' }} title="Unidade que veio escrita na nota">na nota: <strong>{r.noteUnit || 'UN'}</strong></div>
                                     </td>
                                     <td style={{ padding: '6px 8px' }}>
-                                      <input type="text" inputMode="decimal" value={r.cost} onChange={(e) => patchRow(key, r.idx, { cost: e.target.value, ...(r.action === 'new' && !r.priceEdited ? { price: String(newPrice(toNum(e.target.value))).replace('.', ',') } : {}) })} style={smallInput} aria-label={`Custo de ${r.name}`} />
+                                      <input type="text" inputMode="decimal" value={r.cost} onChange={(e) => patchRow(key, r.idx, { cost: e.target.value, ...(r.action === 'new' && !r.priceEdited ? { price: txt(newPrice(toNum(e.target.value))), margin: txt(toNum(margin) || 0) } : { margin: txt(marginOf(toNum(r.price), toNum(e.target.value))) }) })} style={smallInput} aria-label={`Custo de ${r.name}`} />
                                     </td>
                                     <td style={{ padding: '6px 8px' }}>
-                                      {r.action === 'new' ? (
-                                        <input type="text" inputMode="decimal" value={r.price} onChange={(e) => patchRow(key, r.idx, { price: e.target.value, priceEdited: true })} style={smallInput} aria-label={`Preço de venda de ${r.name}`} />
-                                      ) : prod ? (
-                                        <span style={{ color: styles.textMain, fontWeight: 600 }}>{brl(prod.price)}</span>
-                                      ) : '—'}
+                                      {r.action === 'skip' ? '—' : (
+                                        <>
+                                          <input
+                                            type="text" inputMode="decimal" value={r.price}
+                                            onChange={(e) => patchRow(key, r.idx, { price: e.target.value, priceEdited: true, margin: txt(marginOf(toNum(e.target.value), toNum(r.cost))) })}
+                                            style={smallInput} aria-label={`Preço de venda de ${r.name}`} title="Preço de venda (R$)"
+                                          />
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '4px' }}>
+                                            <input
+                                              type="text" inputMode="decimal" value={r.margin}
+                                              onChange={(e) => patchRow(key, r.idx, { margin: e.target.value, priceEdited: true, price: txt(money2(toNum(r.cost) * (1 + (toNum(e.target.value) || 0) / 100))) })}
+                                              style={smallInput} aria-label={`Margem sobre o custo de ${r.name}`} title="Margem sobre o custo (%)"
+                                            />
+                                            <span style={{ fontSize: '0.78rem', color: styles.sidebarWidgetText?.color }}>%</span>
+                                          </div>
+                                          {r.action === 'link' && prod && Math.abs(toNum(r.price) - prod.price) > 0.004 && (
+                                            <div style={{ fontSize: '0.68rem', color: 'hsl(30,90%,30%)', marginTop: '2px' }}>preço atual {brl(prod.price)} será trocado</div>
+                                          )}
+                                        </>
+                                      )}
                                     </td>
                                     <td style={{ padding: '6px 8px', position: 'relative' }}>
                                       <select
                                         value={r.action}
                                         onChange={(e) => {
                                           const action = e.target.value as Action;
-                                          patchRow(key, r.idx, { action, ...(action === 'link' && !r.productId ? { searching: true } : {}), ...(action === 'new' && !r.priceEdited ? { price: String(newPrice(toNum(r.cost))).replace('.', ',') } : {}) });
+                                          patchRow(key, r.idx, { action, ...(action === 'link' && !r.productId ? { searching: true } : {}), ...(action === 'link' && prod ? { price: txt(prod.price), margin: txt(marginOf(prod.price, toNum(r.cost))), priceEdited: false } : {}), ...(action === 'new' ? { price: txt(newPrice(toNum(r.cost))), margin: txt(toNum(margin) || 0), priceEdited: false } : {}) });
                                         }}
                                         style={smallInput}
                                         aria-label={`O que fazer com ${r.name}`}
@@ -382,7 +405,7 @@ export const EntradaMercadoriaModal: React.FC<Props> = ({ styles, products, cate
                                               {results.length > 0 && (
                                                 <div style={{ border: `1px solid ${styles.borderColor}`, borderRadius: '8px', marginTop: '3px', backgroundColor: styles.isDark ? '#1e293b' : '#fff', maxHeight: '180px', overflowY: 'auto' }}>
                                                   {results.map(p => (
-                                                    <button key={p.id} type="button" onClick={() => patchRow(key, r.idx, { productId: p.id, searching: false, search: '' })}
+                                                    <button key={p.id} type="button" onClick={() => patchRow(key, r.idx, { productId: p.id, searching: false, search: '', price: txt(p.price), margin: txt(marginOf(p.price, toNum(r.cost))), priceEdited: false })}
                                                       style={{ display: 'block', width: '100%', textAlign: 'left', padding: '6px 8px', border: 'none', borderBottom: `1px solid ${styles.borderColor}`, background: 'none', cursor: 'pointer', fontSize: '0.78rem', color: styles.textMain }}>
                                                       {p.name} <span style={{ color: styles.sidebarWidgetText?.color }}>· estoque {p.quantity}</span>
                                                     </button>

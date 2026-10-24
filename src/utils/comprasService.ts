@@ -40,6 +40,8 @@ export interface PurchaseLine {
   cost: number;
   price: number;
   update_cost: boolean;
+  /** Só para produto que já existe: grava o preço de venda novo. */
+  update_price?: boolean;
 }
 
 export interface PurchaseResult {

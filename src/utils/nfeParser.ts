@@ -89,6 +89,7 @@ export function parseNfeXml(xmlText: string): NfeNote {
     if (!prod) continue;
     const qty = num(text(prod, 'qCom'));
     const lineValue = num(text(prod, 'vProd'));
+    // Provisório (frete, seguro, outras despesas, IPI, ICMS-ST e desconto desta linha); abaixo é refeito com o total da nota.
     const extras =
       num(text(prod, 'vFrete')) + num(text(prod, 'vSeg')) + num(text(prod, 'vOutro')) - num(text(prod, 'vDesc')) +
       num(text(det, 'vIPI')) + num(text(det, 'vICMSST'));
@@ -109,6 +110,17 @@ export function parseNfeXml(xmlText: string): NfeNote {
     });
   }
   if (items.length === 0) throw new Error('Não encontrei produtos neste XML.');
+
+  // Tudo o que a nota soma além dos produtos (frete, seguro, IPI, ICMS-ST, FCP...) menos descontos é custo da compra.
+  // Dividimos esse valor entre os itens na proporção do valor de cada um, assim o custo total fecha com o total da nota.
+  const totalNf = num(text(first(inf, 'ICMSTot'), 'vNF'));
+  const sumProd = items.reduce((a, i) => a + i.lineValue, 0);
+  if (totalNf > 0 && sumProd > 0) {
+    const extra = totalNf - sumProd;
+    for (const it of items) {
+      if (it.qty > 0) it.cost = round((it.lineValue + extra * (it.lineValue / sumProd)) / it.qty, 4);
+    }
+  }
 
   const doc14 = text(emit, 'CNPJ') || text(emit, 'CPF');
   return {

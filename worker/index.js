@@ -310,6 +310,7 @@ export default {
               cost: Math.max(0, num(i.cost)),
               price: Math.max(0, num(i.price)),
               update_cost: i.update_cost !== false,
+              update_price: i.update_price === true,
             }));
             if (items.some((i) => i.action === 'link' && !i.product_id)) return json({ mensagem: 'Há item vinculado sem produto.' }, 400);
             const payload = {

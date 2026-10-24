@@ -71,6 +71,7 @@ begin
       update public.products set
         quantity   = round(quantity + (it->>'qty')::numeric, 3),
         cost_price = case when coalesce((it->>'update_cost')::boolean, true) then coalesce((it->>'cost')::numeric, cost_price) else cost_price end,
+        price      = case when coalesce((it->>'update_price')::boolean, false) and coalesce((it->>'price')::numeric, 0) > 0 then (it->>'price')::numeric else price end,
         ncm        = case when ncm = '' then coalesce(it->>'ncm', '') else ncm end,
         sku        = case when sku = '' then coalesce(it->>'ean', '') else sku end
       where id = pid and not deleted;
