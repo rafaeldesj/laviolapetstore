@@ -1448,8 +1448,8 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
             style={{
               position: 'absolute', top: widePos.top, left: widePos.left, width: widePos.width,
               minHeight: `calc(100vh - ${Math.max(0, widePos.top - window.scrollY)}px)`,
-              zIndex: 40, boxSizing: 'border-box', padding: '16px',
-              backgroundColor: styles.cardBg || styles.background, border: `1px solid ${styles.borderColor}`,
+              zIndex: 90, boxSizing: 'border-box', padding: '16px',
+              backgroundColor: styles.isDark ? '#161a26' : '#ffffff', border: `1px solid ${styles.borderColor}`,
               borderRadius: '14px', boxShadow: '0 12px 40px rgba(0,0,0,0.18)',
             }}
           >
