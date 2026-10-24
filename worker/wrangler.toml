@@ -11,3 +11,7 @@ ALLOWED_ORIGINS = "https://laviolapet.web.app,https://laviolapetstore.web.app,ht
 VAPID_PUBLIC_KEY = "BH3HIMpCblEGh9EFzIQ2nMtKYQPpmHuyajU2hORiI54F7fC7FPch2R8W7ak4iKU-OEXpl5GgRgrvy4JUgT8i29k"
 VAPID_SUBJECT = "https://laviolapet.web.app"
 SUPABASE_URL = "https://cowrckfmifxsgdzwdsfp.supabase.co"
+
+# Robô de 2 em 2 horas que mantém o Supabase acordado
+[triggers]
+crons = ["0 */2 * * *"]

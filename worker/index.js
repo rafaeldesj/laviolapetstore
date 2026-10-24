@@ -46,7 +46,8 @@ async function verifyFirebaseToken(token, projectId) {
 // profiles/{uid} tem leitura aberta nas regras do Firestore, então basta a REST pública.
 async function getRole(uid, projectId) {
   const r = await fetch(`https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/profiles/${uid}`);
-  if (!r.ok) return null;
+  if (r.status === 404) return null; // perfil não existe: sem cargo
+  if (!r.ok) throw new Error('cargo indisponível'); // erro do Firestore (limite diário, instabilidade): não confundir com "sem cargo"
   return (await r.json()).fields?.role?.stringValue || null;
 }
 
@@ -155,6 +156,17 @@ function absolutize(body, host) {
 }
 
 export default {
+  // Cron do Cloudflare (a cada 2 horas): faz uma consulta de verdade nas duas tabelas, para o Supabase nunca "dormir".
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil((async () => {
+      if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE) return;
+      for (const path of ['/products?select=id&limit=1', '/appointments?select=id&limit=1']) {
+        const r = await sb(env, path, { headers: { Prefer: 'count=none' } });
+        console.log(`keep-alive supabase ${path.split('?')[0]}: ${r.status}`);
+      }
+    })());
+  },
+
   async fetch(request, env) {
     const origin = request.headers.get('Origin') || '';
     const allowed = (env.ALLOWED_ORIGINS || '').split(',').map((s) => s.trim());
@@ -176,8 +188,13 @@ export default {
       const user = await verifyFirebaseToken(bearer[1], env.FIREBASE_PROJECT_ID);
       let cached = roleCache.get(user.sub);
       if (!cached || cached.exp < Date.now()) {
-        cached = { role: await getRole(user.sub, env.FIREBASE_PROJECT_ID), exp: Date.now() + 5 * 60000 };
-        roleCache.set(user.sub, cached);
+        try {
+          cached = { role: await getRole(user.sub, env.FIREBASE_PROJECT_ID), exp: Date.now() + 5 * 60000 };
+          roleCache.set(user.sub, cached);
+        } catch (e) {
+          // Sem conseguir confirmar o cargo agora: usa o último conhecido (se houver) em vez de negar o acesso.
+          if (!cached) return json({ mensagem: 'Não foi possível confirmar o seu cargo agora (o cadastro de usuários está indisponível). Tente de novo em alguns minutos.' }, 503);
+        }
       }
       const role = cached.role;
       const isStaff = STAFF.includes(role);
@@ -281,6 +298,35 @@ export default {
           }));
           const r = await sb(env, '/appointments', { method: 'POST', body: JSON.stringify(rows) });
           return r.ok ? json({ events: r.body.map(toAppt) }, 201) : fail('Erro ao criar o agendamento.', r);
+        }
+
+        // Importação em lote (arquivo .ics): só a equipe
+        if (request.method === 'POST' && dbRoute === '/agenda/import') {
+          if (!isStaff) return json({ mensagem: 'Acesso negado.' }, 403);
+          const { items } = await request.json();
+          if (!Array.isArray(items) || items.length === 0 || items.length > 500) return json({ mensagem: 'Requisição inválida.' }, 400);
+          const rows = [];
+          for (const it of items) {
+            const start = new Date(it.startISO);
+            const petName = String(it.petName || '').trim().slice(0, 120);
+            if (!petName || isNaN(start.getTime())) continue;
+            rows.push({
+              series_id: it.seriesKey ? `ics:${String(it.seriesKey).slice(0, 200)}` : null,
+              pet_id: String(it.petId || ''),
+              pet_name: petName,
+              tutor_name: String(it.tutorName || '').slice(0, 120),
+              owner_id: String(it.ownerId || ''),
+              service_type: String(it.serviceType || 'Banho & Tosa').slice(0, 60),
+              status: APPT_STATUS.includes(it.status) ? it.status : 'Agendado',
+              starts_at: start.toISOString(),
+              duration_min: Math.min(Math.max(Math.floor(Number(it.durationMin) || 60), 5), 1440),
+              notes: String(it.notes || '').slice(0, 4000),
+              created_by: user.sub,
+            });
+          }
+          if (rows.length === 0) return json({ inserted: 0 });
+          const r = await sb(env, '/appointments', { method: 'POST', body: JSON.stringify(rows), headers: { Prefer: 'return=minimal' } });
+          return r.ok ? json({ inserted: rows.length }, 201) : fail('Erro ao importar os agendamentos.', r);
         }
 
         const one = /^\/agenda\/events\/([\w-]+)$/.exec(dbRoute);

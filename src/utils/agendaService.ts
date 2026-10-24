@@ -113,3 +113,44 @@ export async function updateAppointmentApi(id: string, patch: AppointmentPatch, 
 export async function deleteAppointmentApi(id: string, scope: AgendaScope = 'this'): Promise<void> {
   await workerCall(`/agenda/events/${encodeURIComponent(id)}?scope=${scope}`, { method: 'DELETE' });
 }
+
+/** "TOSA Mika - Henri" → pet "Mika", tutor "Henri", prefixo "TOSA". Sem " - ", tudo é o nome do pet. */
+export function splitSummary(summary: string): { pet: string; tutor: string; prefix: string } {
+  const [first, ...rest] = summary.split(' - ');
+  const m = /^(tosa|banho(?: e tosa)?)\s+/i.exec(first);
+  const pet = first.replace(/^(tosa|banho(?: e tosa)?)\s+/i, '').trim() || summary.trim();
+  return { pet, tutor: rest.join(' - ').trim(), prefix: m ? m[1].toUpperCase() : '' };
+}
+
+export function guessService(text: string): string {
+  const s = text.toLowerCase();
+  if (/banho|tosa/.test(s)) return 'Banho & Tosa';
+  if (/consulta|veterin/.test(s)) return 'Consulta Veterinária';
+  if (/vacina/.test(s)) return 'Vacinação';
+  if (/hotel|creche/.test(s)) return 'Hotelzinho / Creche';
+  return 'Banho & Tosa'; // a agenda da loja é a de Banho e Tosa / Clubinho
+}
+
+export interface ImportItem {
+  petId?: string;
+  ownerId?: string;
+  petName: string;
+  tutorName?: string;
+  serviceType: string;
+  startISO: string;
+  durationMin: number;
+  notes?: string;
+  status: Appointment['status'];
+  /** Atendimentos com a mesma chave pertencem à mesma série semanal. */
+  seriesKey?: string | null;
+}
+
+/** Grava vários atendimentos de uma vez (importação de arquivo do Google Agenda). Devolve quantos entraram. */
+export async function importAppointments(items: ImportItem[]): Promise<number> {
+  let total = 0;
+  for (let i = 0; i < items.length; i += 400) {
+    const body = await workerCall<{ inserted: number }>('/agenda/import', { method: 'POST', body: JSON.stringify({ items: items.slice(i, i + 400) }) });
+    total += body.inserted;
+  }
+  return total;
+}

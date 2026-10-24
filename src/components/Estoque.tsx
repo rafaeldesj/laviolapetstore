@@ -114,7 +114,8 @@ export const Estoque: React.FC<EstoqueProps> = ({ styles }) => {
         if (error) throw error;
         setProducts(data || []);
       } else {
-        const { data } = await mockSupabaseDb.getProducts();
+        const { data, error } = await mockSupabaseDb.getProducts();
+        if (error) throw error; // mostra o motivo em vez de uma lista vazia
         setProducts(data || []);
       }
     } catch (err: any) {
