@@ -23,6 +23,8 @@ interface NavItem {
   requiresAccounting?: boolean;
   /** O contador também enxerga este item (os demais itens internos ficam escondidos dele). */
   accountant?: boolean;
+  /** Visível para QUALQUER pessoa logada, mesmo as que não têm mais nada no menu (contador, entregador...). */
+  selfAccount?: boolean;
 }
 
 interface NavigationProps {
@@ -53,6 +55,7 @@ export const Navigation: React.FC<NavigationProps> = ({ styles, activeSection, s
   const isDeliveryDriver = userRole === 'collaborator' && isDeliverySpecialty(userSpecialty);
 
   const allNavItems: NavItem[] = [
+    { id: 'minha-conta',  label: 'Minha Conta',          icon: <User size={16} />,          requiresLogin: true, selfAccount: true },
     { id: 'inicio',       label: 'Início',               icon: <Home size={16} />,          requiresLogin: false },
     { id: 'servicos',     label: 'Serviços',             icon: <Scissors size={16} />,      requiresLogin: false },
     { id: 'promocoes',    label: 'Promoções',            icon: <Tag size={16} />,           requiresLogin: false },
@@ -83,8 +86,8 @@ export const Navigation: React.FC<NavigationProps> = ({ styles, activeSection, s
 
   const visibleItems = allNavItems.filter(item => {
     // O contador só vê as áreas da contabilidade (e as páginas públicas do site).
-    if (isAccountant) return !item.requiresLogin || !!item.accountant;
-    if (isDeliveryDriver) return !item.requiresLogin || item.id === 'delivery';
+    if (isAccountant) return !item.requiresLogin || !!item.accountant || !!item.selfAccount;
+    if (isDeliveryDriver) return !item.requiresLogin || item.id === 'delivery' || !!item.selfAccount;
     if (item.requiresAccounting) return isLoggedIn && isManager;
     if (item.requiresClientOnly) return isLoggedIn && isClient;
     if (item.requiresStaff)      return isLoggedIn && isStaff;

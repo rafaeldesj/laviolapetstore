@@ -23,6 +23,7 @@ import { VendaAvulsa } from './components/VendaAvulsa';
 import { Delivery } from './components/Delivery';
 import { Contabilidade } from './components/Contabilidade';
 import { ForcePasswordChange } from './components/ForcePasswordChange';
+import { MinhaConta } from './components/MinhaConta';
 import { isDeliverySpecialty } from './utils/specialties';
 import { useAuth } from './hooks/useAuth';
 import { roleHierarchy } from './supabaseClient';
@@ -83,17 +84,17 @@ function App() {
   }, [highContrast]);
 
   useEffect(() => {
-    const isPrivate = ['venda-avulsa', 'pets', 'agendamentos', 'financeiro', 'estoque', 'prontuario', 'relatorios', 'pagamentos', 'usuarios', 'registros', 'configuracoes', 'delivery', 'contabilidade'].includes(activeSection);
+    const isPrivate = ['venda-avulsa', 'pets', 'agendamentos', 'financeiro', 'estoque', 'prontuario', 'relatorios', 'pagamentos', 'usuarios', 'registros', 'configuracoes', 'delivery', 'contabilidade', 'minha-conta'].includes(activeSection);
     const requiresMgmt = ['usuarios', 'registros'].includes(activeSection);
     const requiresOwnerDev = ['configuracoes'].includes(activeSection);
     const requiresStock = activeSection === 'estoque';
     const isStockAllowed = userRole === 'developer' || userRole === 'owner' || userRole === 'manager' || userSpecialty === 'Estoquista';
 
     // O contador só pode ficar nas áreas da contabilidade e nas páginas públicas.
-    const accountantAllowed = ['inicio', 'servicos', 'promocoes', 'sobre', 'contato', 'contabilidade', 'financeiro'];
+    const accountantAllowed = ['inicio', 'servicos', 'promocoes', 'sobre', 'contato', 'contabilidade', 'financeiro', 'minha-conta'];
 
     // O entregador só usa o Delivery (e as páginas públicas).
-    const driverAllowed = ['inicio', 'servicos', 'promocoes', 'sobre', 'contato', 'delivery'];
+    const driverAllowed = ['inicio', 'servicos', 'promocoes', 'sobre', 'contato', 'delivery', 'minha-conta'];
 
     if (isAccountant && !accountantAllowed.includes(activeSection)) {
       setActiveSection('contabilidade');
@@ -180,6 +181,10 @@ function App() {
                 setSelectedProduct={setSelectedProduct}
                 onLoginClick={() => setModalView('login')}
               />
+            )}
+
+            {activeSection === 'minha-conta' && user && (
+              <MinhaConta styles={styles} currentUser={user} onProfileUpdated={setMockUser} />
             )}
 
             {activeSection === 'venda-avulsa' && user && (
