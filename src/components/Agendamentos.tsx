@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { CalendarDays, Clock, PlusCircle, Trash2, Check, Play, X, User, PawPrint, Save, Upload, Download, ChevronLeft, ChevronRight, AlertCircle, Info } from 'lucide-react';
+import { CalendarDays, Clock, PlusCircle, Trash2, Check, Play, X, User, PawPrint, Save, Upload, Download, ChevronLeft, ChevronRight, ChevronUp, AlertCircle, Info } from 'lucide-react';
 import { supabase, mockSupabaseDb, isSupabaseConfigured, roleHierarchy, logAction } from '../supabaseClient';
 import type { Appointment } from '../supabaseClient';
 import type { AuthUser } from '../hooks/useAuth';
@@ -59,6 +59,9 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
   const isStaffMode = hasRealStaffRole || (simulateStaff && !isSupabaseConfigured);
 
   // Calendar states
+  // Dias do mês com a lista completa aberta (clicou em "Mais")
+  const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
+  const toggleDay = (key: string) => setExpandedDays(prev => { const n = new Set(prev); if (n.has(key)) n.delete(key); else n.add(key); return n; });
   const [viewMode, setViewMode] = useState<'list' | 'week' | 'day' | 'month'>('list');
   const [currentDate, setCurrentDate] = useState<Date>(new Date());
   const [selectedCalendarApp, setSelectedCalendarApp] = useState<Appointment | null>(null);
@@ -1120,8 +1123,10 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
                 const today = isToday(day);
                 const dayApps = getAppointmentsForDay(day);
                 const MAX = 3;
-                const shown = dayApps.slice(0, MAX);
-                const more = dayApps.length - shown.length;
+                const dayKey = `${day.getFullYear()}-${day.getMonth()}-${day.getDate()}`;
+                const expanded = expandedDays.has(dayKey);
+                const shown = expanded ? dayApps : dayApps.slice(0, MAX);
+                const more = dayApps.length - Math.min(dayApps.length, MAX);
                 return (
                   <div
                     key={day.toISOString()}
@@ -1179,13 +1184,24 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
                         </button>
                       );
                     })}
-                    {more > 0 && (
+                    {more > 0 && !expanded && (
                       <button
                         type="button"
-                        onClick={(e) => { e.stopPropagation(); setCurrentDate(day); setViewMode('day'); }}
+                        onClick={(e) => { e.stopPropagation(); toggleDay(dayKey); }}
                         style={{ background: 'none', border: 'none', textAlign: 'left', padding: '1px 4px', cursor: 'pointer', fontSize: '0.74rem', fontWeight: 700, color: styles.primary }}
                       >
                         Mais {more}
+                      </button>
+                    )}
+                    {more > 0 && expanded && (
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); toggleDay(dayKey); }}
+                        title="Recolher"
+                        aria-label="Recolher a lista do dia"
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0 4px', display: 'flex', justifyContent: 'center', color: styles.primary }}
+                      >
+                        <ChevronUp size={18} />
                       </button>
                     )}
                   </div>
