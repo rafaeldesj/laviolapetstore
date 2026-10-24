@@ -9,6 +9,7 @@ import type { Appointment } from '../supabaseClient';
 import type { AuthUser } from '../hooks/useAuth';
 import { addDelivery } from '../utils/deliveriesService';
 import { listAppointments } from '../utils/agendaService';
+import { escapeHtml } from '../utils/units';
 
 declare const L: any;
 
@@ -519,7 +520,7 @@ export const Pagamentos: React.FC<PagamentosProps> = ({
 
         miniMarkersRef.current.client = L.marker([productLat, productLng], { icon: clientIcon })
           .addTo(map)
-          .bindPopup(`<b>Seu Endereço</b><br>${deliveryAddress}`);
+          .bindPopup(`<b>Seu Endereço</b><br>${escapeHtml(deliveryAddress)}`);
 
         // Draw real street route line (solid or dashed)
         miniRouteLineRef.current = L.polyline(routeCoords, { 
@@ -535,7 +536,7 @@ export const Pagamentos: React.FC<PagamentosProps> = ({
         
         if (miniMarkersRef.current.client) {
           miniMarkersRef.current.client.setLatLng([productLat, productLng]);
-          miniMarkersRef.current.client.setPopupContent(`<b>Seu Endereço</b><br>${deliveryAddress}`);
+          miniMarkersRef.current.client.setPopupContent(`<b>Seu Endereço</b><br>${escapeHtml(deliveryAddress)}`);
         }
 
         if (miniRouteLineRef.current) {

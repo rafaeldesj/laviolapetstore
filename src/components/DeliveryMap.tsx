@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { geocodeAddress } from '../utils/geocoding';
+import { escapeHtml } from '../utils/units';
 
 // Fix default marker icons for Leaflet with Vite bundler
 import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
@@ -194,8 +195,8 @@ export const DeliveryMap = ({ onAddressSelect, initialAddress, leftContent, jump
       .bindPopup(
         `<div style="font-family:sans-serif;font-size:13px;line-height:1.5;min-width:180px;">
           <strong style="color:#1d4ed8;">📍 Endereço de Entrega</strong><br/>
-          ${address.street}${address.number ? ', ' + address.number : ''}<br/>
-          ${address.neighborhood ? address.neighborhood + ' · ' : ''}${address.city}
+          ${escapeHtml(address.street)}${address.number ? ', ' + escapeHtml(address.number) : ''}<br/>
+          ${address.neighborhood ? escapeHtml(address.neighborhood) + ' · ' : ''}${escapeHtml(address.city)}
         </div>`,
         { className: 'map-popup' }
       )

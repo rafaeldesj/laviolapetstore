@@ -40,3 +40,8 @@ export function parseQty(text: string): number {
   if (!/^\d*\.?\d*$/.test(cleaned) || cleaned === '' || cleaned === '.') return NaN;
   return roundQty(Number(cleaned));
 }
+
+/** Escapa texto para entrar com segurança num HTML (ex.: popup do mapa) que recebe dados do banco. */
+export function escapeHtml(s: string): string {
+  return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string));
+}

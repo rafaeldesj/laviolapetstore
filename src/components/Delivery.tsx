@@ -9,7 +9,7 @@ import { isDeliverySpecialty } from '../utils/specialties';
 import { notifyDriver } from '../utils/push';
 import { QuantityDialog } from './QuantityDialog';
 import { searchProducts } from '../utils/productSearch';
-import { describeItem, formatQty, isFractional, lineTotal, priceLabel, roundQty } from '../utils/units';
+import { describeItem, escapeHtml, formatQty, isFractional, lineTotal, priceLabel, roundQty } from '../utils/units';
 import { PushSetup } from './PushSetup';
 import { DeliveryPaymentBox } from './DeliveryPaymentBox';
 import { PAYMENT_METHODS, brl, changeToGive, parseMoney, paymentText, stripPaymentTag, usesCardMachine, validatePayment } from '../utils/deliveryPayment';
@@ -492,13 +492,13 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
         // Add client marker
         markersRef.current.client = L.marker([selectedDelivery.client_lat, selectedDelivery.client_lng], { icon: clientIcon })
           .addTo(map)
-          .bindPopup(`<b>Cliente: ${selectedDelivery.client_name}</b><br>${selectedDelivery.client_address}`);
+          .bindPopup(`<b>Cliente: ${escapeHtml(selectedDelivery.client_name)}</b><br>${escapeHtml(selectedDelivery.client_address)}`);
 
         // Add driver marker if dispatched
         if (selectedDelivery.driver_id) {
           markersRef.current.driver = L.marker([selectedDelivery.driver_lat, selectedDelivery.driver_lng], { icon: driverIcon })
             .addTo(map)
-            .bindPopup(`<b>Entregador: ${selectedDelivery.driver_name}</b>`);
+            .bindPopup(`<b>Entregador: ${escapeHtml(selectedDelivery.driver_name)}</b>`);
         }
 
         // Add route polyline using street coordinates
@@ -517,11 +517,11 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
         if (selectedDelivery.driver_id) {
           if (markersRef.current.driver) {
             markersRef.current.driver.setLatLng([selectedDelivery.driver_lat, selectedDelivery.driver_lng]);
-            markersRef.current.driver.setPopupContent(`<b>Entregador: ${selectedDelivery.driver_name}</b>`);
+            markersRef.current.driver.setPopupContent(`<b>Entregador: ${escapeHtml(selectedDelivery.driver_name)}</b>`);
           } else {
             markersRef.current.driver = L.marker([selectedDelivery.driver_lat, selectedDelivery.driver_lng], { icon: driverIcon })
               .addTo(map)
-              .bindPopup(`<b>Entregador: ${selectedDelivery.driver_name}</b>`);
+              .bindPopup(`<b>Entregador: ${escapeHtml(selectedDelivery.driver_name)}</b>`);
           }
         } else {
           if (markersRef.current.driver) {
@@ -651,13 +651,13 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
         // Add client marker (Destino)
         trackingMarkersRef.current.client = L.marker([trackingDelivery.client_lat, trackingDelivery.client_lng], { icon: clientIcon })
           .addTo(map)
-          .bindPopup(`<b>Destino (Cliente): ${trackingDelivery.client_name}</b><br>${trackingDelivery.client_address}`);
+          .bindPopup(`<b>Destino (Cliente): ${escapeHtml(trackingDelivery.client_name)}</b><br>${escapeHtml(trackingDelivery.client_address)}`);
 
         // Add driver marker if dispatched
         if (trackingDelivery.driver_id) {
           trackingMarkersRef.current.driver = L.marker([trackingDelivery.driver_lat, trackingDelivery.driver_lng], { icon: driverIcon })
             .addTo(map)
-            .bindPopup(`<b>Entregador (Tempo Real): ${trackingDelivery.driver_name}</b>`);
+            .bindPopup(`<b>Entregador (Tempo Real): ${escapeHtml(trackingDelivery.driver_name)}</b>`);
         }
 
         // Add route polyline using street coordinates
@@ -676,11 +676,11 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
         if (trackingDelivery.driver_id) {
           if (trackingMarkersRef.current.driver) {
             trackingMarkersRef.current.driver.setLatLng([trackingDelivery.driver_lat, trackingDelivery.driver_lng]);
-            trackingMarkersRef.current.driver.setPopupContent(`<b>Entregador (Tempo Real): ${trackingDelivery.driver_name}</b>`);
+            trackingMarkersRef.current.driver.setPopupContent(`<b>Entregador (Tempo Real): ${escapeHtml(trackingDelivery.driver_name)}</b>`);
           } else {
             trackingMarkersRef.current.driver = L.marker([trackingDelivery.driver_lat, trackingDelivery.driver_lng], { icon: driverIcon })
               .addTo(map)
-              .bindPopup(`<b>Entregador (Tempo Real): ${trackingDelivery.driver_name}</b>`);
+              .bindPopup(`<b>Entregador (Tempo Real): ${escapeHtml(trackingDelivery.driver_name)}</b>`);
           }
         } else {
           if (trackingMarkersRef.current.driver) {
