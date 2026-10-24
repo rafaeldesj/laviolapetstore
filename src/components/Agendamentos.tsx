@@ -59,7 +59,7 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
   const isStaffMode = hasRealStaffRole || (simulateStaff && !isSupabaseConfigured);
 
   // Calendar states
-  const [viewMode, setViewMode] = useState<'list' | 'week' | 'day'>('list');
+  const [viewMode, setViewMode] = useState<'list' | 'week' | 'day' | 'month'>('list');
   const [currentDate, setCurrentDate] = useState<Date>(new Date());
   const [selectedCalendarApp, setSelectedCalendarApp] = useState<Appointment | null>(null);
   
@@ -105,6 +105,10 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
       const days = getWeekDays(currentDate);
       return [startOfDay(days[0]), new Date(startOfDay(days[days.length - 1]).getTime() + DAY_MS)];
     }
+    if (viewMode === 'month') {
+      const days = getMonthGrid(currentDate);
+      return [startOfDay(days[0]), new Date(startOfDay(days[days.length - 1]).getTime() + DAY_MS)];
+    }
     if (viewMode === 'day') {
       const d = startOfDay(currentDate);
       return [d, new Date(d.getTime() + DAY_MS)];
@@ -128,7 +132,7 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
     }
   };
 
-  const periodKey = `${viewMode}|${filterPeriod}|${viewMode === 'list' ? '' : startOfDay(currentDate).getTime()}`;
+  const periodKey = `${viewMode}|${filterPeriod}|${viewMode === 'list' ? '' : viewMode === 'month' ? `${currentDate.getFullYear()}-${currentDate.getMonth()}` : startOfDay(currentDate).getTime()}`;
   useEffect(() => {
     fetchAppointments();
   }, [currentUser.id, isStaffMode, periodKey]);
@@ -224,6 +228,29 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
       date.getMonth() === today.getMonth() &&
       date.getFullYear() === today.getFullYear();
   };
+
+  const getMonthGrid = (date: Date): Date[] => {
+    const first = new Date(date.getFullYear(), date.getMonth(), 1);
+    const start = new Date(first);
+    start.setDate(first.getDate() - ((first.getDay() + 6) % 7)); // volta até a segunda-feira
+    const last = new Date(date.getFullYear(), date.getMonth() + 1, 0);
+    const weeks = Math.ceil(((last.getTime() - start.getTime()) / 86400000 + 1) / 7);
+    return Array.from({ length: weeks * 7 }, (_, i) => new Date(start.getFullYear(), start.getMonth(), start.getDate() + i));
+  };
+
+  const getMonthLabel = (date: Date) => `${monthNames[date.getMonth()]} de ${date.getFullYear()}`;
+
+  const handlePrevMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
+  const handleNextMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
+
+  const getAppointmentsForDay = (day: Date) =>
+    appointments
+      .filter(app => {
+        if (filterStatus !== 'all' && app.status !== filterStatus) return false;
+        const d = new Date(app.scheduled_at);
+        return d.getFullYear() === day.getFullYear() && d.getMonth() === day.getMonth() && d.getDate() === day.getDate();
+      })
+      .sort((a, b) => a.scheduled_at.localeCompare(b.scheduled_at));
 
   const getWeekLabel = (date: Date) => {
     const days = getWeekDays(date);
@@ -802,6 +829,22 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
                 >
                   Dia
                 </button>
+                <button
+                  onClick={() => setViewMode('month')}
+                  style={{
+                    background: viewMode === 'month' ? styles.primary : 'none',
+                    border: viewMode === 'month' ? `1px solid ${styles.primary}` : `1px solid ${styles.borderColor}`,
+                    borderRadius: '6px',
+                    padding: '6px 12px',
+                    fontSize: '0.82rem',
+                    fontWeight: 600,
+                    color: viewMode === 'month' ? '#fff' : styles.textMain,
+                    cursor: 'pointer',
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  Mês
+                </button>
               </>
             )}
           </div>
@@ -838,7 +881,7 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
             // Date Switcher for Calendar Views
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               <button
-                onClick={viewMode === 'week' ? handlePrevWeek : handlePrevDay}
+                onClick={viewMode === 'week' ? handlePrevWeek : viewMode === 'month' ? handlePrevMonth : handlePrevDay}
                 style={{
                   background: styles.background,
                   border: `1px solid ${styles.borderColor}`,
@@ -868,10 +911,10 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
                 Hoje
               </button>
               <span style={{ fontWeight: 700, color: styles.textMain, fontSize: '0.88rem' }}>
-                {viewMode === 'week' ? getWeekLabel(currentDate) : getDayLabel(currentDate)}
+                {viewMode === 'week' ? getWeekLabel(currentDate) : viewMode === 'month' ? getMonthLabel(currentDate) : getDayLabel(currentDate)}
               </span>
               <button
-                onClick={viewMode === 'week' ? handleNextWeek : handleNextDay}
+                onClick={viewMode === 'week' ? handleNextWeek : viewMode === 'month' ? handleNextMonth : handleNextDay}
                 style={{
                   background: styles.background,
                   border: `1px solid ${styles.borderColor}`,
@@ -1061,6 +1104,97 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
             })}
           </div>
         )
+      ) : viewMode === 'month' ? (
+        <div style={{ overflowX: 'auto', width: '100%', marginTop: '20px' }}>
+          <div style={{ minWidth: '720px', border: `1px solid ${styles.borderColor}`, borderRadius: '12px', overflow: 'hidden', backgroundColor: styles.cardBg || styles.background }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', backgroundColor: styles.background }}>
+              {['SEG.', 'TER.', 'QUA.', 'QUI.', 'SEX.', 'SÁB.', 'DOM.'].map(n => (
+                <div key={n} style={{ padding: '8px 4px', textAlign: 'center', fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.04em', color: styles.sidebarWidgetText?.color, borderBottom: `1px solid ${styles.borderColor}`, borderRight: `1px solid ${styles.borderColor}` }}>
+                  {n}
+                </div>
+              ))}
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))' }}>
+              {getMonthGrid(currentDate).map(day => {
+                const inMonth = day.getMonth() === currentDate.getMonth();
+                const today = isToday(day);
+                const dayApps = getAppointmentsForDay(day);
+                const MAX = 3;
+                const shown = dayApps.slice(0, MAX);
+                const more = dayApps.length - shown.length;
+                return (
+                  <div
+                    key={day.toISOString()}
+                    onClick={() => handleCellClick(day, '09:00')}
+                    className="calendar-slot-cell"
+                    style={{
+                      minHeight: '118px',
+                      padding: '4px 4px 6px',
+                      borderBottom: `1px solid ${styles.borderColor}`,
+                      borderRight: `1px solid ${styles.borderColor}`,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '2px',
+                      minWidth: 0,
+                      backgroundColor: inMonth ? 'transparent' : (styles.isDark ? 'rgba(255,255,255,0.025)' : 'rgba(0,0,0,0.025)'),
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '2px' }}>
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); setCurrentDate(day); setViewMode('day'); }}
+                        title="Ver este dia"
+                        style={{
+                          minWidth: '26px', height: '26px', padding: '0 6px', borderRadius: '13px', border: 'none', cursor: 'pointer',
+                          fontSize: '0.78rem', fontWeight: today ? 700 : 600,
+                          backgroundColor: today ? styles.primary : 'transparent',
+                          color: today ? '#fff' : (inMonth ? styles.textMain : styles.sidebarWidgetText?.color),
+                        }}
+                      >
+                        {day.getDate() === 1 ? `1 ${monthNames[day.getMonth()].slice(0, 3).toLowerCase()}.` : day.getDate()}
+                      </button>
+                    </div>
+                    {shown.map(app => {
+                      const dot = (statusBadgeColors[app.status] || { text: '#888' }).text;
+                      const time = new Date(app.scheduled_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+                      return (
+                        <button
+                          key={app.id}
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); setSelectedCalendarApp(app); }}
+                          title={`${time} · ${app.service_type} · ${app.pet_name}${app.tutor_name ? ' - ' + app.tutor_name : ''} (${app.status})`}
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: '5px', width: '100%', minWidth: 0, textAlign: 'left',
+                            background: 'none', border: 'none', borderRadius: '4px', padding: '1px 4px', cursor: 'pointer',
+                            fontSize: '0.74rem', color: styles.textMain,
+                            textDecoration: app.status === 'Cancelado' ? 'line-through' : 'none',
+                            opacity: app.status === 'Cancelado' ? 0.6 : (inMonth ? 1 : 0.7),
+                          }}
+                        >
+                          <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: dot, flexShrink: 0 }} />
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            <strong style={{ fontWeight: 600 }}>{time}</strong> {app.pet_name}{app.tutor_name ? ` - ${app.tutor_name}` : ''}
+                          </span>
+                        </button>
+                      );
+                    })}
+                    {more > 0 && (
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); setCurrentDate(day); setViewMode('day'); }}
+                        style={{ background: 'none', border: 'none', textAlign: 'left', padding: '1px 4px', cursor: 'pointer', fontSize: '0.74rem', fontWeight: 700, color: styles.primary }}
+                      >
+                        Mais {more}
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          {isLoading && <p style={{ color: styles.sidebarWidgetText?.color, fontSize: '0.8rem', marginTop: '8px' }}>Carregando agendamentos...</p>}
+        </div>
       ) : viewMode === 'week' ? (
         <div style={{ overflowX: 'auto', width: '100%', marginTop: '20px' }}>
           <div style={{
