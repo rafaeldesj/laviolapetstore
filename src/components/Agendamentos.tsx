@@ -1106,10 +1106,10 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
         )
       ) : viewMode === 'month' ? (
         <div style={{ overflowX: 'auto', width: '100%', marginTop: '20px' }}>
-          <div style={{ minWidth: '720px', border: `1px solid ${styles.borderColor}`, borderRadius: '12px', overflow: 'hidden', backgroundColor: styles.cardBg || styles.background }}>
+          <div style={{ minWidth: '720px', border: `1px solid ${styles.isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.09)'}`, borderRadius: '12px', overflow: 'hidden', backgroundColor: styles.cardBg || styles.background }}>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', backgroundColor: styles.background }}>
               {['SEG.', 'TER.', 'QUA.', 'QUI.', 'SEX.', 'SÁB.', 'DOM.'].map(n => (
-                <div key={n} style={{ padding: '8px 4px', textAlign: 'center', fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.04em', color: styles.sidebarWidgetText?.color, borderBottom: `1px solid ${styles.borderColor}`, borderRight: `1px solid ${styles.borderColor}` }}>
+                <div key={n} style={{ padding: '8px 4px', textAlign: 'center', fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.04em', color: styles.sidebarWidgetText?.color, borderBottom: `1px solid ${styles.isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.09)'}`, borderRight: `1px solid ${styles.isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.09)'}` }}>
                   {n}
                 </div>
               ))}
@@ -1130,8 +1130,8 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
                     style={{
                       minHeight: '118px',
                       padding: '4px 4px 6px',
-                      borderBottom: `1px solid ${styles.borderColor}`,
-                      borderRight: `1px solid ${styles.borderColor}`,
+                      borderBottom: `1px solid ${styles.isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.09)'}`,
+                      borderRight: `1px solid ${styles.isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.09)'}`,
                       cursor: 'pointer',
                       display: 'flex',
                       flexDirection: 'column',
