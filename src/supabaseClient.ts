@@ -138,6 +138,14 @@ export const lookupEmailByIdentifier = async (identifier: string): Promise<strin
   return null;
 };
 
+export interface PetDocument {
+  id: string;
+  /** Pedigree, Documento de identidade, Carteira de vacinação... */
+  label: string;
+  content_type: string;
+  uploaded_at: string;
+}
+
 interface MockPet {
   id: string;
   name: string;
@@ -146,6 +154,7 @@ interface MockPet {
   age: number;
   owner_id: string;
   created_at: string;
+  documents?: PetDocument[];
 }
 
 export interface Appointment {

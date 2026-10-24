@@ -96,10 +96,12 @@ service cloud.firestore {
     }
 
     // ---- PETS ----
-    // Staff vê todos; cliente vê apenas os seus
+    // Leitura: staff vê todos; cliente só os seus (o app já filtra por owner_id).
+    // Escrita: staff cuida de qualquer pet; o tutor cuida só dos próprios (cadastra, edita, anexa documentos).
     match /pets/{petId} {
       allow read: if isNotAccountant();
-      allow write: if isStaff();
+      allow create: if isStaff() || (isAuth() && request.resource.data.owner_id == request.auth.uid);
+      allow update, delete: if isStaff() || (isAuth() && resource.data.owner_id == request.auth.uid);
     }
 
     // ---- AGENDAMENTOS ----

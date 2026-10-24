@@ -151,6 +151,29 @@ async function sb(env, path, init = {}) {
 }
 
 // O Supabase devolve no máximo 1000 linhas por pedido: lê página por página.
+// Arquivo num bucket do Supabase Storage (qualquer bucket, não só "compras").
+async function sbStorage(env, bucket, path, init = {}) {
+  return fetch(`${env.SUPABASE_URL}/storage/v1/object/${bucket}/${path}`, {
+    ...init,
+    headers: {
+      apikey: env.SUPABASE_SERVICE_ROLE,
+      ...(env.SUPABASE_SERVICE_ROLE.startsWith('eyJ') ? { Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE}` } : {}),
+      ...(init.headers || {}),
+    },
+  });
+}
+
+// Dono de um pet (campo owner_id do Firestore). null = pet não existe.
+async function petOwnerUid(env, petId) {
+  const token = await firestoreAccessToken(env);
+  const r = await fetch(`https://firestore.googleapis.com/v1/projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents/pets/${petId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (r.status === 404) return null;
+  if (!r.ok) throw new Error('não foi possível conferir o dono do pet');
+  return (await r.json()).fields?.owner_id?.stringValue || null;
+}
+
 async function sbAll(env, path) {
   const rows = [];
   for (let from = 0; from < 50000; from += 1000) {
@@ -330,6 +353,58 @@ export default {
       }
       const role = cached.role;
       const isStaff = STAFF.includes(role);
+
+      // ---- Fotos e documentos do pet (foto, pedigree, documento de identidade...) ----
+      // Quem pode: a equipe, ou só o próprio tutor do pet (nunca o tutor de outro pet).
+      const petsUrl = new URL(request.url);
+      const petsRoute = petsUrl.pathname.replace(/\/+$/, '');
+      if (petsRoute.startsWith('/pets/')) {
+        if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE) return json({ mensagem: 'Serviço de arquivos não configurado.' }, 503);
+        const m = /^\/pets\/([\w-]+)\/(photo|docs)(?:\/([\w.-]+))?$/.exec(petsRoute);
+        if (!m) return json({ mensagem: 'Rota não encontrada.' }, 404);
+        const [, petId, kind, docId] = m;
+        if (kind === 'docs' && request.method !== 'GET' && !docId) return json({ mensagem: 'Requisição inválida.' }, 400);
+
+        let owner;
+        try {
+          owner = await petOwnerUid(env, petId);
+        } catch (e) {
+          return json({ mensagem: 'Não foi possível conferir o dono do pet agora. Tente de novo em instantes.' }, 503);
+        }
+        if (!owner) return json({ mensagem: 'Pet não encontrado.' }, 404);
+        if (!isStaff && owner !== user.sub) return json({ mensagem: 'Acesso negado.' }, 403);
+
+        const storagePath = kind === 'photo' ? `${petId}/photo` : `${petId}/docs/${docId}`;
+
+        if (request.method === 'GET') {
+          const f = await sbStorage(env, 'pets', storagePath);
+          if (!f.ok) return json({ mensagem: kind === 'photo' ? 'Este pet ainda não tem foto.' : 'Documento não encontrado.' }, 404);
+          return new Response(f.body, { headers: { ...cors, 'Content-Type': f.headers.get('Content-Type') || 'application/octet-stream' } });
+        }
+
+        if (request.method === 'PUT') {
+          const ct = request.headers.get('Content-Type') || '';
+          const bytes = await request.arrayBuffer();
+          const limit = kind === 'photo' ? 8 * 1024 * 1024 : 15 * 1024 * 1024;
+          if (bytes.byteLength === 0 || bytes.byteLength > limit) return json({ mensagem: `Envie um arquivo de até ${limit / 1024 / 1024} MB.` }, 400);
+          const head = new Uint8Array(bytes.slice(0, 4));
+          const isJpeg = head[0] === 0xff && head[1] === 0xd8;
+          const isPng = head[0] === 0x89 && head[1] === 0x50;
+          const isPdf = new TextDecoder().decode(bytes.slice(0, 5)) === '%PDF-';
+          if (kind === 'photo' && !(isJpeg || isPng)) return json({ mensagem: 'Envie uma foto em JPG ou PNG.' }, 400);
+          if (kind === 'docs' && !(isJpeg || isPng || isPdf)) return json({ mensagem: 'Envie uma foto (JPG/PNG) ou um PDF.' }, 400);
+          const up = await sbStorage(env, 'pets', storagePath, { method: 'POST', headers: { 'Content-Type': ct || (isPdf ? 'application/pdf' : isPng ? 'image/png' : 'image/jpeg'), 'x-upsert': 'true' }, body: bytes });
+          if (!up.ok) return json({ mensagem: 'Erro ao guardar o arquivo.' }, 502);
+          return json({ ok: true }, 201);
+        }
+
+        if (request.method === 'DELETE') {
+          const del = await sbStorage(env, 'pets', storagePath, { method: 'DELETE' });
+          return del.ok || del.status === 404 ? json({ ok: true }) : json({ mensagem: 'Erro ao remover o arquivo.' }, 502);
+        }
+
+        return json({ mensagem: 'Método não permitido.' }, 405);
+      }
 
       // ---- Produtos e agenda (Supabase) ----
       const dbUrl = new URL(request.url);
