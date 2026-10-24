@@ -984,7 +984,7 @@ export const VendaAvulsa: React.FC<VendaAvulsaProps> = ({ styles, currentUser })
                         </div>
                         <div style={{ textAlign: 'right', flexShrink: 0, whiteSpace: 'nowrap', marginLeft: '10px' }}>
                           <strong style={{ color: styles.primary, fontSize: '0.85rem' }}>{priceLabel(product.price, product.unit)}</strong>
-                          <div style={{ fontSize: '0.7rem', color: product.quantity === 0 ? 'red' : styles.sidebarWidgetText?.color }}>Estoque: {formatQty(product.quantity, product.unit)}</div>
+                          <div style={{ fontSize: '0.7rem', color: product.quantity <= 0 ? 'red' : styles.sidebarWidgetText?.color }}>Estoque: {formatQty(product.quantity, product.unit)}</div>
                         </div>
                       </button>
                     ))}

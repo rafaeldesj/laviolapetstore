@@ -263,7 +263,7 @@ export const Estoque: React.FC<EstoqueProps> = ({ styles }) => {
 
   // Metrics
   const totalProducts = products.length;
-  const outOfStockCount = products.filter(p => p.quantity === 0).length;
+  const outOfStockCount = products.filter(p => p.quantity <= 0).length;
   const lowStockCount = products.filter(p => p.quantity > 0 && p.quantity <= p.min_stock).length;
 
   const searchTok = searchTokens(searchQuery);
@@ -272,8 +272,8 @@ export const Estoque: React.FC<EstoqueProps> = ({ styles }) => {
   const filteredProducts = products.filter(p => {
     if (filterCategory !== 'all' && p.category !== filterCategory) return false;
     
-    if (filterStatus === 'out' && p.quantity !== 0) return false;
-    if (filterStatus === 'low' && (p.quantity === 0 || p.quantity > p.min_stock)) return false;
+    if (filterStatus === 'out' && p.quantity > 0) return false;
+    if (filterStatus === 'low' && (p.quantity <= 0 || p.quantity > p.min_stock)) return false;
     if (filterStatus === 'normal' && p.quantity <= p.min_stock) return false;
 
     return matchesQuery(p, searchTok);
@@ -297,7 +297,7 @@ export const Estoque: React.FC<EstoqueProps> = ({ styles }) => {
   const pagedProducts = pageSize === 0 ? sortedProducts : sortedProducts.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   const statusOf = (p: Product) => {
-    if (p.quantity === 0) return { color: 'hsl(0, 75%, 55%)', bg: 'rgba(255, 99, 132, 0.08)', border: 'rgba(255, 99, 132, 0.25)', label: 'Sem Estoque' };
+    if (p.quantity <= 0) return { color: 'hsl(0, 75%, 55%)', bg: 'rgba(255, 99, 132, 0.08)', border: 'rgba(255, 99, 132, 0.25)', label: 'Sem Estoque' };
     if (p.quantity <= p.min_stock) return { color: 'hsl(36, 95%, 50%)', bg: 'rgba(255, 165, 0, 0.08)', border: 'rgba(255, 165, 0, 0.25)', label: 'Estoque Baixo' };
     return { color: 'hsl(142, 60%, 40%)', bg: 'rgba(75, 192, 192, 0.08)', border: 'rgba(75, 192, 192, 0.25)', label: 'Normal' };
   };
@@ -311,7 +311,7 @@ export const Estoque: React.FC<EstoqueProps> = ({ styles }) => {
     const st = statusOf(product);
     const margin = marginOf(product);
     return (
-      <tr key={product.id} style={{ borderTop: `1px solid ${styles.borderColor}`, opacity: product.quantity === 0 ? 0.8 : 1 }}>
+      <tr key={product.id} style={{ borderTop: `1px solid ${styles.borderColor}`, opacity: product.quantity <= 0 ? 0.8 : 1 }}>
         <td style={{ padding: '8px 10px', minWidth: 0 }}>
           <div style={{ fontWeight: 700, color: styles.textMain, overflowWrap: 'anywhere' }}>{product.name}</div>
           <div style={{ fontSize: '0.72rem', color: styles.sidebarWidgetText?.color, overflowWrap: 'anywhere' }}>
@@ -731,7 +731,7 @@ export const Estoque: React.FC<EstoqueProps> = ({ styles }) => {
           marginTop: '20px',
         }}>
           {pagedProducts.map((product) => {
-            const isOut = product.quantity === 0;
+            const isOut = product.quantity <= 0;
             const isLow = product.quantity > 0 && product.quantity <= product.min_stock;
             
             let statusBadge = { bg: 'rgba(75, 192, 192, 0.08)', text: 'hsl(142, 60%, 40%)', border: 'rgba(75, 192, 192, 0.25)', label: 'Normal' };

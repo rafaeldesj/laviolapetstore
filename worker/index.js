@@ -242,7 +242,7 @@ export default {
             if (!valid || !['sale', 'void', 'undo'].includes(mode)) return json({ mensagem: 'Requisição inválida.' }, 400);
             const r = await sb(env, '/rpc/adjust_stock', {
               method: 'POST',
-              body: JSON.stringify({ items: items.map((i) => ({ id: i.id, delta: Number(i.delta) })), enforce: mode === 'sale', ignore_missing: mode !== 'sale' }),
+              body: JSON.stringify({ items: items.map((i) => ({ id: i.id, delta: Number(i.delta) })), enforce: false, ignore_missing: mode !== 'sale' }),
             });
             if (!r.ok) return fail('Erro ao ajustar o estoque.', r);
             return json(r.body, r.body.ok ? 200 : 409);

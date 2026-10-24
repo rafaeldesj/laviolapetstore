@@ -29,7 +29,8 @@ export const QuantityDialog: React.FC<QuantityDialogProps> = ({ styles, product,
   const available = product.quantity === undefined ? Infinity : roundQty(product.quantity - (mode === 'add' ? alreadyInCart : 0));
   const valid = Number.isFinite(qty) && qty > 0;
   const overStock = valid && qty > available;
-  const canConfirm = valid && !overStock;
+  // Com fila de clientes não dá para travar a venda: vende mesmo sem estoque (o estoque fica negativo e é acertado depois).
+  const canConfirm = valid;
 
   const quick = by === 'peso'
     ? [{ label: `0,250 ${short}`, v: '0,25' }, { label: `0,500 ${short}`, v: '0,5' }, { label: `1 ${short}`, v: '1' }, { label: `2 ${short}`, v: '2' }]
@@ -92,14 +93,17 @@ export const QuantityDialog: React.FC<QuantityDialogProps> = ({ styles, product,
         {valid && (
           <div role="status" style={{
             padding: '10px 12px', borderRadius: '8px', fontSize: '0.9rem', fontWeight: 700,
-            backgroundColor: overStock ? 'hsl(0,75%,55%,0.08)' : 'hsl(142,60%,45%,0.1)',
-            color: overStock ? 'hsl(0,75%,42%)' : 'hsl(142,60%,25%)',
+            backgroundColor: 'hsl(142,60%,45%,0.1)', color: 'hsl(142,60%,25%)',
           }}>
-            {overStock
-              ? `Só há ${formatQty(Math.max(0, available), product.unit)} disponíveis em estoque.`
-              : by === 'peso'
-                ? `${formatQty(qty, product.unit)} = ${brl(lineTotal(product.price, qty))}`
-                : `${brl(lineTotal(product.price, qty))} = ${formatQty(qty, product.unit)}`}
+            {by === 'peso'
+              ? `${formatQty(qty, product.unit)} = ${brl(lineTotal(product.price, qty))}`
+              : `${brl(lineTotal(product.price, qty))} = ${formatQty(qty, product.unit)}`}
+          </div>
+        )}
+
+        {overStock && (
+          <div role="alert" style={{ padding: '8px 12px', borderRadius: '8px', fontSize: '0.82rem', fontWeight: 600, backgroundColor: 'hsl(36,95%,45%,0.12)', color: 'hsl(30,90%,26%)' }}>
+            Atenção: o sistema mostra {formatQty(Math.max(0, available), product.unit)} em estoque. A venda acontece normalmente e o estoque fica negativo até ser acertado.
           </div>
         )}
 

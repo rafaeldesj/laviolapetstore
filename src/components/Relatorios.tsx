@@ -67,7 +67,7 @@ export const Relatorios: React.FC<RelatoriosProps> = ({ styles }) => {
         const { data } = await mockSupabaseDb.getProducts();
         if (data) loadedProducts = data;
       }
-      totalStockItems = loadedProducts.reduce((acc, p) => acc + (p.quantity || 0), 0);
+      totalStockItems = loadedProducts.reduce((acc, p) => acc + Math.max(0, p.quantity || 0), 0);
       setStockTotal(Math.round(totalStockItems * 1000) / 1000);
 
       // 4. Calculate Revenue & Payment/Category Stats from Sales
