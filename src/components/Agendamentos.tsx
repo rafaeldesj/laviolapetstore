@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { CalendarDays, Clock, PlusCircle, Trash2, Check, Play, X, User, PawPrint, Save, Upload, Download, ChevronLeft, ChevronRight, ChevronUp, AlertCircle, Info } from 'lucide-react';
 import { supabase, mockSupabaseDb, isSupabaseConfigured, roleHierarchy, logAction } from '../supabaseClient';
 import type { Appointment } from '../supabaseClient';
@@ -59,10 +60,32 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
   const isStaffMode = hasRealStaffRole || (simulateStaff && !isSupabaseConfigured);
 
   // Calendar states
+  // "Visão completa": mostra todos os atendimentos do dia na grade do mês, sem o "Mais".
+  // "Visão ampla": a agenda ocupa a largura toda (do menu até o horário de funcionamento), logo abaixo da barra de controles.
+  const [fullView, setFullView] = useState<boolean>(false);
+  const [wideView, setWideView] = useState<boolean>(false);
+  const toolbarRef = useRef<HTMLDivElement>(null);
+  const [widePos, setWidePos] = useState<{ top: number; left: number; width: number } | null>(null);
+
+  const measureWide = () => {
+    const bar = toolbarRef.current;
+    const grid = document.getElementById('main-content')?.parentElement; // a grade da página: menu | conteúdo | avisos
+    if (!bar || !grid) return;
+    const b = bar.getBoundingClientRect();
+    const g = grid.getBoundingClientRect();
+    setWidePos({ top: b.bottom + window.scrollY + 10, left: g.left + window.scrollX, width: g.width });
+  };
+
   // Dias do mês com a lista completa aberta (clicou em "Mais")
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
   const toggleDay = (key: string) => setExpandedDays(prev => { const n = new Set(prev); if (n.has(key)) n.delete(key); else n.add(key); return n; });
   const [viewMode, setViewMode] = useState<'list' | 'week' | 'day' | 'month'>('list');
+  useLayoutEffect(() => {
+    if (!wideView) return;
+    measureWide();
+    window.addEventListener('resize', measureWide);
+    return () => window.removeEventListener('resize', measureWide);
+  }, [wideView, viewMode, errorMsg, fullView]);
   const [currentDate, setCurrentDate] = useState<Date>(new Date());
   const [selectedCalendarApp, setSelectedCalendarApp] = useState<Appointment | null>(null);
   
@@ -779,7 +802,7 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
       )}
 
       {/* Filter and View mode Toolbar */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '15px', marginTop: '25px', borderBottom: `1px solid ${styles.borderColor}`, paddingBottom: '12px' }}>
+      <div ref={toolbarRef} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '15px', marginTop: '25px', borderBottom: `1px solid ${styles.borderColor}`, paddingBottom: '12px' }}>
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
           <div style={{ display: 'flex', gap: '4px', marginRight: '10px' }}>
             <button
@@ -936,6 +959,7 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
         </div>
 
         {isStaffMode && (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '8px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span style={{ fontSize: '0.82rem', color: styles.sidebarWidgetText?.color, fontWeight: 600 }}>Filtrar Status:</span>
             <select
@@ -950,11 +974,22 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
               <option value="Cancelado">Cancelados</option>
             </select>
           </div>
+          {viewMode === 'month' && (
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.82rem', fontWeight: 600, color: styles.textMain, cursor: 'pointer' }}>
+              <input type="checkbox" checked={fullView} onChange={(e) => setFullView(e.target.checked)} style={{ cursor: 'pointer' }} />
+              Visão completa
+            </label>
+          )}
+          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.82rem', fontWeight: 600, color: styles.textMain, cursor: 'pointer' }}>
+            <input type="checkbox" checked={wideView} onChange={(e) => setWideView(e.target.checked)} style={{ cursor: 'pointer' }} />
+            Ver visão ampla
+          </label>
+          </div>
         )}
       </div>
 
       {/* Render Main Content based on viewMode */}
-      {viewMode === 'list' ? (
+      {(() => { const content = (viewMode === 'list' ? (
         isLoading && filteredAppointments.length === 0 ? (
           <p style={{ color: styles.sidebarWidgetText?.color, marginTop: '20px' }}>Carregando agendamentos...</p>
         ) : filteredAppointments.length === 0 ? (
@@ -1124,7 +1159,7 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
                 const dayApps = getAppointmentsForDay(day);
                 const MAX = 3;
                 const dayKey = `${day.getFullYear()}-${day.getMonth()}-${day.getDate()}`;
-                const expanded = expandedDays.has(dayKey);
+                const expanded = fullView || expandedDays.has(dayKey);
                 const shown = expanded ? dayApps : dayApps.slice(0, MAX);
                 const more = dayApps.length - Math.min(dayApps.length, MAX);
                 return (
@@ -1193,7 +1228,7 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
                         Mais {more}
                       </button>
                     )}
-                    {more > 0 && expanded && (
+                    {more > 0 && expanded && !fullView && (
                       <button
                         type="button"
                         onClick={(e) => { e.stopPropagation(); toggleDay(dayKey); }}
@@ -1403,7 +1438,26 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
             })}
           </div>
         </div>
-      )}
+      ));
+        if (!wideView || !widePos) return content;
+        // "Balão" que cobre a página, da largura do menu até o horário de funcionamento, começando abaixo da barra de controles.
+        return createPortal(
+          <div
+            role="region"
+            aria-label="Agenda em visão ampla"
+            style={{
+              position: 'absolute', top: widePos.top, left: widePos.left, width: widePos.width,
+              minHeight: `calc(100vh - ${Math.max(0, widePos.top - window.scrollY)}px)`,
+              zIndex: 40, boxSizing: 'border-box', padding: '16px',
+              backgroundColor: styles.cardBg || styles.background, border: `1px solid ${styles.borderColor}`,
+              borderRadius: '14px', boxShadow: '0 12px 40px rgba(0,0,0,0.18)',
+            }}
+          >
+            {content}
+          </div>,
+          document.body
+        );
+      })()}
 
       {/* Booking Dialog Modal */}
       {isAdding && (
