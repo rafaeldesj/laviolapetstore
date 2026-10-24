@@ -1,62 +1,20 @@
-import { collection, query, where, getDocs } from 'firebase/firestore';
-import { db } from '../firebaseClient';
+import { workerCallPublic } from './workerApi';
 
-export const checkEmailExists = async (email: string, excludeId?: string): Promise<boolean> => {
-  if (!db) return false;
-  const q = query(collection(db, 'profiles'), where('email', '==', email.trim()));
-  const snap = await getDocs(q);
-  if (snap.empty) return false;
-  if (excludeId) {
-    return snap.docs.some(doc => doc.id !== excludeId);
-  }
-  return true;
-};
+/**
+ * Confere duplicidade de e-mail/celular/apelido no cadastro. Antes isso consultava o Firestore direto do navegador,
+ * o que exigia deixar o cadastro de TODO MUNDO com leitura pública. Agora quem consulta é o Worker, que só devolve
+ * "existe ou não" — nunca a lista de usuários.
+ */
+const check = (field: 'email' | 'phone' | 'username', value: string, excludeId?: string): Promise<boolean> =>
+  workerCallPublic<{ exists: boolean }>(`/auth/check?field=${field}&value=${encodeURIComponent(value.trim())}${excludeId ? `&excludeId=${encodeURIComponent(excludeId)}` : ''}`)
+    .then(r => r.exists)
+    .catch(() => false); // serviço fora do ar: não trava o cadastro por isso (o Firestore ainda recusa duplicado na escrita)
 
-export const checkPhoneExists = async (phone: string, excludeId?: string): Promise<boolean> => {
-  if (!db) return false;
-  const q = query(collection(db, 'profiles'), where('phone', '==', phone.trim()));
-  const snap = await getDocs(q);
-  if (snap.empty) return false;
-  if (excludeId) {
-    return snap.docs.some(doc => doc.id !== excludeId);
-  }
-  return true;
-};
+export const checkEmailExists = (email: string, excludeId?: string): Promise<boolean> => check('email', email, excludeId);
+export const checkPhoneExists = (phone: string, excludeId?: string): Promise<boolean> => check('phone', phone, excludeId);
+export const checkUsernameExists = (username: string, excludeId?: string): Promise<boolean> => check('username', username, excludeId);
 
-export const checkUsernameExists = async (username: string, excludeId?: string): Promise<boolean> => {
-  if (!db) return false;
-  const q = query(collection(db, 'profiles'), where('username', '==', username.trim()));
-  const snap = await getDocs(q);
-  if (snap.empty) return false;
-  if (excludeId) {
-    return snap.docs.some(doc => doc.id !== excludeId);
-  }
-  return true;
-};
-
-export const generateUsernameSuggestions = async (baseUsername: string): Promise<string[]> => {
-  const suggestions: string[] = [];
-  const base = baseUsername.trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
-  
-  if (!base) return [];
-
-  const candidates = [
-    `${base}1`,
-    `${base}123`,
-    `${base}_pet`,
-    `${base}_oficial`,
-    `${base}br`,
-    `${base}2026`,
-    `${base}_${Math.floor(Math.random() * 999)}`
-  ];
-
-  for (const candidate of candidates) {
-    if (suggestions.length >= 3) break;
-    const exists = await checkUsernameExists(candidate);
-    if (!exists) {
-      suggestions.push(candidate);
-    }
-  }
-
-  return suggestions;
-};
+export const generateUsernameSuggestions = (baseUsername: string): Promise<string[]> =>
+  workerCallPublic<{ suggestions: string[] }>(`/auth/suggest-username?base=${encodeURIComponent(baseUsername.trim())}`)
+    .then(r => r.suggestions)
+    .catch((): string[] => []);

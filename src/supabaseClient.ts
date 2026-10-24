@@ -43,6 +43,8 @@ export interface UserProfile {
   pagbank_card_last_digits?: string;
   phoneNumber?: string;
   cpf?: string;
+  /** A senha foi definida por outra pessoa (staff), não pelo dono da conta: ele é obrigado a trocá-la no primeiro login. */
+  must_change_password?: boolean;
 }
 
 export interface PermissionKey {

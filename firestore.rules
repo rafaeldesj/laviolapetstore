@@ -64,7 +64,15 @@ service cloud.firestore {
     //  - ninguém altera o próprio cargo, exceto o desenvolvedor;
     //  - a equipe só mexe em cargos ABAIXO do seu (e só atribui cargos abaixo do seu).
     match /profiles/{userId} {
-      allow read: if true; // Aberto para permitir resolução de Username/Telefone na tela de login
+      // Antes era "if true" (qualquer um lia o cadastro de todo mundo, para resolver Username/Telefone no login).
+      // Agora essa resolução é feita pelo Worker (uma credencial própria, só de leitura), e aqui só é permitido:
+      // o próprio perfil; toda a equipe lê todo mundo; e uma reparação pontual (perfil antigo de migração com o
+      // mesmo e-mail do token de quem está logado), usada uma única vez por conta recém-migrada.
+      allow read: if isAuth() && (
+        request.auth.uid == userId
+        || isStaff()
+        || resource.data.get('email', '') == request.auth.token.get('email', '')
+      );
 
       allow create: if
         (isAuth() && request.auth.uid == userId

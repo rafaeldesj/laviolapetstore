@@ -25,6 +25,17 @@ async function workerBase(): Promise<string> {
   return baseMemo;
 }
 
+/**
+ * Como workerCall, mas para as rotas que precisam funcionar ANTES do login (achar o e-mail pelo apelido/celular,
+ * conferir duplicidade no cadastro). Não manda o token do Firebase, porque a pessoa ainda não está logada.
+ */
+export async function workerCallPublic<T = any>(path: string): Promise<T> {
+  const res = await fetch(`${await workerBase()}${path}`);
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new WorkerError(body.mensagem || `Erro ${res.status} ao falar com o servidor.`, res.status, body);
+  return body as T;
+}
+
 export async function workerCall<T = any>(path: string, init: RequestInit = {}): Promise<T> {
   const token = await auth?.currentUser?.getIdToken();
   if (!token) throw new WorkerError('Você precisa estar logado.');

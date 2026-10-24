@@ -4,6 +4,7 @@ import { signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebas
 import { doc, getDoc, collection, query, where, getDocs, setDoc, deleteDoc } from 'firebase/firestore';
 import { logAction } from '../supabaseClient'; // We'll keep logAction in supabaseClient for now, but it will use Firebase
 import type { UserProfile } from '../supabaseClient'; // Types will stay in supabaseClient or be moved
+import { workerCallPublic } from '../utils/workerApi';
 
 export interface AuthUser {
   id: string;
@@ -111,34 +112,17 @@ export const useAuth = () => {
     return () => unsubscribe();
   }, []);
 
+  // Acha o e-mail pelo apelido/celular digitado no login. Isso passa pelo Worker (não consulta mais o Firestore
+  // direto do navegador), porque achar o e-mail de qualquer pessoa exigiria deixar o cadastro de todo mundo
+  // com leitura pública. O Worker devolve só o e-mail correspondente, nunca a lista de usuários.
   const lookupEmailByIdentifier = async (identifier: string): Promise<string | null> => {
-    if (identifier.toLowerCase() === 'admin') return 'admin@laviola.com';
-    const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(identifier);
-    if (isEmail) return identifier;
-
-    const cleanInput = identifier.trim();
-    if (!db) return identifier;
-
-    const qUsername = query(collection(db, 'profiles'), where('username', '==', cleanInput));
-    const snapUser = await getDocs(qUsername);
-    if (!snapUser.empty) return snapUser.docs[0].data().email;
-    
-    // Try lowercase
-    const qUsernameLow = query(collection(db, 'profiles'), where('username', '==', cleanInput.toLowerCase()));
-    const snapUserLow = await getDocs(qUsernameLow);
-    if (!snapUserLow.empty) return snapUserLow.docs[0].data().email;
-
-    // Try uppercase
-    const qUsernameUp = query(collection(db, 'profiles'), where('username', '==', cleanInput.toUpperCase()));
-    const snapUserUp = await getDocs(qUsernameUp);
-    if (!snapUserUp.empty) return snapUserUp.docs[0].data().email;
-    
-    // Try phone
-    const qPhone = query(collection(db, 'profiles'), where('phone', '==', cleanInput));
-    const snapPhone = await getDocs(qPhone);
-    if (!snapPhone.empty) return snapPhone.docs[0].data().email;
-    
-    return null;
+    try {
+      const { email } = await workerCallPublic<{ email: string | null }>(`/auth/resolve-login?id=${encodeURIComponent(identifier.trim())}`);
+      return email;
+    } catch {
+      // Serviço fora do ar: se o que foi digitado já é um e-mail, ainda dá para tentar entrar direto com ele.
+      return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(identifier) ? identifier : null;
+    }
   };
 
   const login = async (identifier: string, password: string) => {

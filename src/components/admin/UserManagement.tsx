@@ -360,6 +360,9 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
           collaborator_category_id: newRole === 'collaborator' ? categoryId : null,
           collaborator_specialty: newRole === 'collaborator' ? newSpecialty.trim() : '',
           is_active: true,
+          // A senha foi escolhida por outra pessoa (quem está criando o usuário), não pelo dono da conta:
+          // no primeiro login, a pessoa é obrigada a trocá-la antes de usar o sistema.
+          must_change_password: true,
           created_at: new Date().toISOString()
         };
         await setDoc(doc(db, 'profiles', user.uid), profileData);

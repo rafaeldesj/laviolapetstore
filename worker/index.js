@@ -6,6 +6,10 @@
 //   npx wrangler secret put FOCUS_NFE_TOKEN_HOMOLOGACAO   (token do modo de teste da Focus NFe)
 //   npx wrangler secret put FOCUS_NFE_TOKEN_PRODUCAO      (token do modo real; só quando for valer)
 //   (se a Focus der um token único, use só: npx wrangler secret put FOCUS_NFE_TOKEN)
+//   npx wrangler secret put SUPABASE_SERVICE_ROLE          (produtos/agenda/compras, ver supabase/schema.sql)
+//   npx wrangler secret put FIRESTORE_READER_SA             (conta de serviço "worker-reader", só leitura, papel
+//                                                             roles/datastore.viewer — usada para login/cadastro
+//                                                             sem precisar deixar o Firestore de leitura pública)
 //   npx wrangler deploy
 // A URL final (https://laviola-fiscal.<sua-conta>.workers.dev) vai em Configurações > Nota Fiscal.
 
@@ -43,18 +47,90 @@ async function verifyFirebaseToken(token, projectId) {
   return payload;
 }
 
-// profiles/{uid} tem leitura aberta nas regras do Firestore, então basta a REST pública.
-async function getRole(uid, projectId) {
-  const r = await fetch(`https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/profiles/${uid}`);
+// ---- Firestore (conta de serviço "worker-reader", só leitura) ---------------------------------------------------
+// profiles/{uid} deixou de ter leitura pública (vazava nome/telefone/e-mail/cargo de todo mundo). Agora o Worker lê
+// com uma credencial própria, do tipo "roles/datastore.viewer" (só lê; não escreve nada em lugar nenhum do projeto).
+let fsToken = { value: '', exp: 0 };
+
+async function firestoreAccessToken(env) {
+  if (fsToken.value && fsToken.exp > Date.now() + 60000) return fsToken.value;
+  const sa = JSON.parse(env.FIRESTORE_READER_SA);
+  const enc = new TextEncoder();
+  const now = Math.floor(Date.now() / 1000);
+  const header = b64url(enc.encode(JSON.stringify({ alg: 'RS256', typ: 'JWT' })));
+  const claims = b64url(enc.encode(JSON.stringify({
+    iss: sa.client_email, scope: 'https://www.googleapis.com/auth/datastore', aud: 'https://oauth2.googleapis.com/token', iat: now, exp: now + 3600,
+  })));
+  const pem = sa.private_key.replace(/-----[A-Z ]+-----/g, '').replace(/\s+/g, '');
+  const key = await crypto.subtle.importKey('pkcs8', Uint8Array.from(atob(pem), (c) => c.charCodeAt(0)), { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['sign']);
+  const sig = await crypto.subtle.sign('RSASSA-PKCS1-v1_5', key, enc.encode(`${header}.${claims}`));
+  const r = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer', assertion: `${header}.${claims}.${b64url(sig)}` }),
+  });
+  const j = await r.json();
+  if (!j.access_token) throw new Error('firestore auth: ' + (j.error_description || j.error));
+  fsToken = { value: j.access_token, exp: Date.now() + (j.expires_in || 3600) * 1000 };
+  return fsToken.value;
+}
+
+async function getRole(uid, env) {
+  const token = await firestoreAccessToken(env);
+  const r = await fetch(`https://firestore.googleapis.com/v1/projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents/profiles/${uid}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
   if (r.status === 404) return null; // perfil não existe: sem cargo
   if (!r.ok) throw new Error('cargo indisponível'); // erro do Firestore (limite diário, instabilidade): não confundir com "sem cargo"
   return (await r.json()).fields?.role?.stringValue || null;
+}
+
+// Uma linha de 'profiles' que bate um campo exato (username/phone/email), já convertida pra objeto simples.
+async function firestoreFindProfile(env, field, value) {
+  const token = await firestoreAccessToken(env);
+  const r = await fetch(`https://firestore.googleapis.com/v1/projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents:runQuery`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      structuredQuery: {
+        from: [{ collectionId: 'profiles' }],
+        where: { fieldFilter: { field: { fieldPath: field }, op: 'EQUAL', value: { stringValue: value } } },
+        limit: 5,
+      },
+    }),
+  });
+  if (!r.ok) throw new Error('consulta ao cadastro indisponível');
+  const rows = await r.json();
+  return rows
+    .filter((row) => row.document)
+    .map((row) => {
+      const id = row.document.name.split('/').pop();
+      const f = row.document.fields || {};
+      const text = (k) => f[k]?.stringValue || '';
+      return { id, email: text('email'), username: text('username'), phone: text('phone') };
+    });
 }
 
 // ---- Supabase (produtos e agenda) -------------------------------------------------------------------------------
 // O navegador nunca fala com o Supabase: tudo passa por aqui. O Worker confere quem é o usuário e o cargo, e só então
 // usa a chave de serviço (segredo SUPABASE_SERVICE_ROLE), que ignora o RLS das tabelas.
 const roleCache = new Map();
+
+// Limite simples por IP nas rotas públicas de login/cadastro (dificulta varredura de usuários/celulares).
+// É por isolamento do Worker, não um limite global rígido entre todos os pontos do Cloudflare; mesmo assim barra
+// um script simples batendo repetido no mesmo lugar.
+const authCallLog = new Map();
+async function allowPublicAuthCall(request) {
+  const ip = request.headers.get('CF-Connecting-IP') || 'desconhecido';
+  const now = Date.now();
+  const windowMs = 60000;
+  const hits = (authCallLog.get(ip) || []).filter((t) => now - t < windowMs);
+  if (hits.length >= 20) return false;
+  hits.push(now);
+  authCallLog.set(ip, hits);
+  if (authCallLog.size > 5000) authCallLog.clear(); // evita crescer sem limite num Worker de vida longa
+  return true;
+}
 
 async function sb(env, path, init = {}) {
   const r = await fetch(`${env.SUPABASE_URL}/rest/v1${path}`, {
@@ -183,13 +259,69 @@ export default {
     if (!allowed.includes(origin)) return json({ mensagem: 'Origem não autorizada.' }, 403);
 
     try {
+      // ---- Login e cadastro: a pessoa ainda não está logada, então estas rotas não pedem token. -------------------
+      // Antes, o navegador buscava isso direto no Firestore, o que exigia deixar o cadastro de TODO MUNDO com leitura
+      // pública (nome, telefone, e-mail, cargo). Agora só o Worker lê o Firestore, e só devolve o mínimo necessário:
+      // "existe?" e "qual é o e-mail?" — nunca a lista nem os dados de outras pessoas.
+      const authUrl = new URL(request.url);
+      const authRoute = authUrl.pathname.replace(/\/+$/, '');
+      if (authRoute.startsWith('/auth/')) {
+        if (!(await allowPublicAuthCall(request))) return json({ mensagem: 'Muitas tentativas. Aguarde um minuto e tente de novo.' }, 429);
+
+        if (request.method === 'GET' && authRoute === '/auth/resolve-login') {
+          const id = (authUrl.searchParams.get('id') || '').trim().slice(0, 120);
+          if (!id) return json({ email: null });
+          if (id.toLowerCase() === 'admin') return json({ email: 'admin@laviola.com' });
+          if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(id)) return json({ email: id }); // já é um e-mail: usa direto, sem consultar o banco
+          try {
+            for (const [field, value] of [['username', id], ['username', id.toLowerCase()], ['username', id.toUpperCase()], ['phone', id]]) {
+              const found = await firestoreFindProfile(env, field, value);
+              if (found[0]) return json({ email: found[0].email || null });
+            }
+            return json({ email: null });
+          } catch (e) {
+            return json({ mensagem: 'Não foi possível conferir o login agora. Tente de novo em instantes.' }, 503);
+          }
+        }
+
+        if (request.method === 'GET' && authRoute === '/auth/check') {
+          const field = authUrl.searchParams.get('field');
+          const value = (authUrl.searchParams.get('value') || '').trim().slice(0, 120);
+          const excludeId = authUrl.searchParams.get('excludeId') || '';
+          if (!['email', 'phone', 'username'].includes(field) || !value) return json({ mensagem: 'Requisição inválida.' }, 400);
+          try {
+            const found = await firestoreFindProfile(env, field, value);
+            return json({ exists: found.some((p) => p.id !== excludeId) });
+          } catch (e) {
+            return json({ mensagem: 'Não foi possível conferir agora. Tente de novo em instantes.' }, 503);
+          }
+        }
+
+        if (request.method === 'GET' && authRoute === '/auth/suggest-username') {
+          const base = (authUrl.searchParams.get('base') || '').trim().toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 40);
+          if (!base) return json({ suggestions: [] });
+          const candidates = [`${base}1`, `${base}123`, `${base}_pet`, `${base}_oficial`, `${base}br`, `${base}2026`, `${base}_${Math.floor(Math.random() * 999)}`];
+          const suggestions = [];
+          try {
+            for (const c of candidates) {
+              if (suggestions.length >= 3) break;
+              const found = await firestoreFindProfile(env, 'username', c);
+              if (found.length === 0) suggestions.push(c);
+            }
+          } catch (e) { /* devolve o que já tiver achado */ }
+          return json({ suggestions });
+        }
+
+        return json({ mensagem: 'Rota não encontrada.' }, 404);
+      }
+
       const bearer = /^Bearer (.+)$/.exec(request.headers.get('Authorization') || '');
       if (!bearer) return json({ mensagem: 'Acesso negado.' }, 401);
       const user = await verifyFirebaseToken(bearer[1], env.FIREBASE_PROJECT_ID);
       let cached = roleCache.get(user.sub);
       if (!cached || cached.exp < Date.now()) {
         try {
-          cached = { role: await getRole(user.sub, env.FIREBASE_PROJECT_ID), exp: Date.now() + 5 * 60000 };
+          cached = { role: await getRole(user.sub, env), exp: Date.now() + 5 * 60000 };
           roleCache.set(user.sub, cached);
         } catch (e) {
           // Sem conseguir confirmar o cargo agora: usa o último conhecido (se houver) em vez de negar o acesso.

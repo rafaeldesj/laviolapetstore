@@ -22,6 +22,7 @@ import { Configuracoes } from './components/admin/Configuracoes';
 import { VendaAvulsa } from './components/VendaAvulsa';
 import { Delivery } from './components/Delivery';
 import { Contabilidade } from './components/Contabilidade';
+import { ForcePasswordChange } from './components/ForcePasswordChange';
 import { isDeliverySpecialty } from './utils/specialties';
 import { useAuth } from './hooks/useAuth';
 import { roleHierarchy } from './supabaseClient';
@@ -38,6 +39,11 @@ function App() {
   const [selectedProduct, setSelectedProduct] = useState<{ name: string; price: number } | null>(null);
 
   const { user, login, logout, setMockUser } = useAuth();
+  // Conta com senha definida por outra pessoa (cliente/usuário criado pela equipe): precisa trocar antes de usar o sistema.
+  const [pwdChangeDone, setPwdChangeDone] = useState<boolean>(false);
+  const mustChangePassword = !!user?.profile?.must_change_password && !pwdChangeDone;
+  // Troca feita; se essa conta sair e outra entrar (mesma aba), a próxima precisa do próprio aviso de novo.
+  useEffect(() => { setPwdChangeDone(false); }, [user?.id]);
   const userRole = user?.profile?.role;
   const userSpecialty = (user?.profile as any)?.collaborator_category?.name as string | undefined;
   const isManager = userRole ? roleHierarchy[userRole] >= roleHierarchy['manager'] : false;
@@ -136,6 +142,14 @@ function App() {
           windowWidth={windowWidth}
         />
 
+        {mustChangePassword && user ? (
+          <ForcePasswordChange
+            styles={styles}
+            user={user}
+            onDone={() => setPwdChangeDone(true)}
+            onLogout={async () => { await logout(); setActiveSection('inicio'); }}
+          />
+        ) : (
         <div style={styles.layoutGrid}>
           <Navigation
             styles={styles}
@@ -262,6 +276,7 @@ function App() {
 
           <Sidebar styles={styles} />
         </div>
+        )}
 
         <Footer styles={styles} />
       </div>

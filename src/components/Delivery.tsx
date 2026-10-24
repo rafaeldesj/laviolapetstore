@@ -21,7 +21,13 @@ import { db, secondaryAuth, isFirebaseConfigured } from '../firebaseClient';
 import { checkEmailExists, checkPhoneExists, checkUsernameExists } from '../utils/userValidation';
 
 // Senha já preenchida no cadastro de cliente; o operador pode trocar se quiser.
-const DEFAULT_CLIENT_PASSWORD = '123456';
+// Senha temporária para cliente novo: sorteada a cada cadastro (não é mais um valor fixo como "123456" que qualquer
+// um poderia tentar). O cliente é obrigado a trocá-la no primeiro login, então ela só precisa durar até lá.
+const TEMP_PASSWORD_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789'; // sem 0/O/1/I/l, pra não confundir na hora de ler
+const generateTempPassword = (): string => {
+  const bytes = crypto.getRandomValues(new Uint8Array(10));
+  return Array.from(bytes, (b) => TEMP_PASSWORD_CHARS[b % TEMP_PASSWORD_CHARS.length]).join('');
+};
 
 // Declare Leaflet global object L
 declare const L: any;
@@ -241,7 +247,7 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
   const [newClientEmail, setNewClientEmail] = useState('');
   const [newClientUsername, setNewClientUsername] = useState('');
   const [newClientPhone, setNewClientPhone] = useState('');
-  const [newClientPassword, setNewClientPassword] = useState(DEFAULT_CLIENT_PASSWORD);
+  const [newClientPassword, setNewClientPassword] = useState(generateTempPassword);
   const [showClientPassword, setShowClientPassword] = useState(false);
   const [isSavingClient, setIsSavingClient] = useState(false);
 
@@ -1178,6 +1184,8 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
           phone,
           role: 'client',
           is_active: true,
+          // A senha foi definida pela equipe, não pelo cliente: no primeiro login ele é obrigado a trocá-la.
+          must_change_password: true,
           created_at: new Date().toISOString(),
           collaborator_category_id: null,
         });
@@ -1201,7 +1209,7 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
       setNewClientEmail('');
       setNewClientUsername('');
       setNewClientPhone('');
-      setNewClientPassword(DEFAULT_CLIENT_PASSWORD);
+      setNewClientPassword(generateTempPassword());
       setShowClientPassword(false);
       alert('Cliente criado com sucesso!');
     } catch (err: any) {
@@ -2578,6 +2586,7 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
                     if (e.target.value === 'NEW_CLIENT') {
                       setIsClientModalOpen(true);
                       setFormClientId('');
+                      setNewClientPassword(generateTempPassword());
                     } else {
                       setFormClientId(e.target.value);
                     }
@@ -3495,7 +3504,7 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
                   </button>
                 </div>
                 <span style={{ fontSize: '0.75rem', color: styles.sidebarWidgetText?.color }}>
-                  Senha padrão {DEFAULT_CLIENT_PASSWORD}. Você pode trocar; avise o cliente para mudar depois.
+                  Senha temporária sorteada. Anote e avise o cliente: no primeiro login ele será obrigado a trocá-la.
                 </span>
               </div>
               <div style={styles.modalActions}>
