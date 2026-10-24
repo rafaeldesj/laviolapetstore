@@ -15,13 +15,26 @@ export class WorkerError extends Error {
   }
 }
 
+// O endereço do Worker normalmente vem de Configurações > Nota Fiscal (dá pra trocar sem alterar código, se um dia
+// o Worker for redeployado noutro endereço). Mas essa configuração mora no Firestore, e o documento só pode ser lido
+// por quem já está logado como equipe — antes do login (achar o e-mail pelo apelido, checar duplicidade no cadastro)
+// ninguém tem essa permissão ainda. Por isso existe este valor de reserva: sem ele, logar pela primeira vez num
+// aparelho novo (sem nada salvo ainda) ficava impossível. O endereço do Worker não é segredo — é a mesma URL pública
+// que todo navegador logado já chama o tempo todo.
+const FALLBACK_WORKER_BASE = 'https://laviola-fiscal.laviolapetstore.workers.dev';
+
 let baseMemo: string | null = null;
 async function workerBase(): Promise<string> {
   if (baseMemo) return baseMemo;
-  const { getFiscalSettings } = await import('./fiscal');
-  const settings = await getFiscalSettings(); // o endereço do Worker é o mesmo configurado para a nota fiscal
-  if (!settings.endpoint) throw new WorkerError('O endereço do serviço (Worker) não está configurado em Configurações > Nota Fiscal.');
-  baseMemo = settings.endpoint.replace(/\/$/, '');
+  try {
+    const { getFiscalSettings } = await import('./fiscal');
+    const settings = await getFiscalSettings(); // o endereço do Worker é o mesmo configurado para a nota fiscal
+    if (settings.endpoint) {
+      baseMemo = settings.endpoint.replace(/\/$/, '');
+      return baseMemo;
+    }
+  } catch { /* sem acesso ainda (ex.: antes do login): usa a reserva abaixo */ }
+  baseMemo = FALLBACK_WORKER_BASE;
   return baseMemo;
 }
 
