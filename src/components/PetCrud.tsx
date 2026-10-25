@@ -225,10 +225,18 @@ export const PetCrud: React.FC<PetCrudProps> = ({ currentUser, styles }) => {
     setDocError(null);
     try {
       const now = new Date();
-      const from = new Date(now.getFullYear() - 2, now.getMonth(), now.getDate());
+      // Vai até o início da agenda importada do sistema antigo (2023), pra não cortar o histórico de pets antigos.
+      const from = new Date(2023, 0, 1);
       const to = new Date(now.getFullYear() + 1, now.getMonth(), now.getDate());
       const all = await listAppointments(from, to);
-      setHistory(all.filter(a => a.pet_id === pet.id).sort((a, b) => b.scheduled_at.localeCompare(a.scheduled_at)));
+      // Agendamentos lançados pela tela de hoje já trazem o pet_id certo; os antigos (agenda importada do
+      // sistema anterior) nunca tiveram esse vínculo, só o nome — por isso cai para o nome quando não achar pelo id.
+      const petNameNorm = pet.name.trim().toLowerCase();
+      setHistory(
+        all
+          .filter(a => (a.pet_id && a.pet_id === pet.id) || (!a.pet_id && a.pet_name?.trim().toLowerCase() === petNameNorm))
+          .sort((a, b) => b.scheduled_at.localeCompare(a.scheduled_at))
+      );
     } catch (e: any) {
       setHistoryError(e.message || 'Não foi possível carregar o histórico agora.');
     }
@@ -496,15 +504,27 @@ export const PetCrud: React.FC<PetCrudProps> = ({ currentUser, styles }) => {
         <div style={{ overflowX: 'auto', border: `1px solid ${styles.borderColor}`, borderRadius: '10px', marginTop: '16px' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
             <thead>
-              <tr style={{ backgroundColor: styles.isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)' }}>
-                <th style={{ padding: '8px 10px', textAlign: 'left', fontSize: '0.72rem', fontWeight: 700, color: styles.sidebarWidgetText?.color }}></th>
-                <th style={{ padding: '8px 10px', textAlign: 'left', fontSize: '0.72rem', fontWeight: 700, color: styles.sidebarWidgetText?.color }}>Nome</th>
-                <th style={{ padding: '8px 10px', textAlign: 'left', fontSize: '0.72rem', fontWeight: 700, color: styles.sidebarWidgetText?.color }}>Espécie</th>
-                <th style={{ padding: '8px 10px', textAlign: 'left', fontSize: '0.72rem', fontWeight: 700, color: styles.sidebarWidgetText?.color }}>Raça</th>
-                <th style={{ padding: '8px 10px', textAlign: 'right', fontSize: '0.72rem', fontWeight: 700, color: styles.sidebarWidgetText?.color }}>Idade</th>
-                {showUnowned && <th style={{ padding: '8px 10px', textAlign: 'left', fontSize: '0.72rem', fontWeight: 700, color: styles.sidebarWidgetText?.color }}>Tutor (dica)</th>}
-                <th style={{ padding: '8px 10px', textAlign: 'right', fontSize: '0.72rem', fontWeight: 700, color: styles.sidebarWidgetText?.color }}>Documentos</th>
-                <th style={{ padding: '8px 10px' }}></th>
+              <tr>
+                {(() => {
+                  const thBase: React.CSSProperties = {
+                    padding: '8px 10px', fontSize: '0.72rem', fontWeight: 700, color: styles.sidebarWidgetText?.color,
+                    position: 'sticky', top: 0, zIndex: 2,
+                    backgroundColor: styles.isDark ? '#1e2130' : '#f4f5f7',
+                    boxShadow: `inset 0 -1px 0 ${styles.borderColor}`,
+                  };
+                  return (
+                    <>
+                      <th style={{ ...thBase, textAlign: 'left' }}></th>
+                      <th style={{ ...thBase, textAlign: 'left' }}>Nome</th>
+                      <th style={{ ...thBase, textAlign: 'left' }}>Espécie</th>
+                      <th style={{ ...thBase, textAlign: 'left' }}>Raça</th>
+                      <th style={{ ...thBase, textAlign: 'right' }}>Idade</th>
+                      {showUnowned && <th style={{ ...thBase, textAlign: 'left' }}>Tutor (dica)</th>}
+                      <th style={{ ...thBase, textAlign: 'right' }}>Documentos</th>
+                      <th style={thBase}></th>
+                    </>
+                  );
+                })()}
               </tr>
             </thead>
             <tbody>
@@ -705,21 +725,36 @@ export const PetCrud: React.FC<PetCrudProps> = ({ currentUser, styles }) => {
               ) : history === null ? (
                 <p style={{ fontSize: '0.82rem', color: styles.sidebarWidgetText?.color }}>Carregando...</p>
               ) : history.length === 0 ? (
-                <p style={{ fontSize: '0.82rem', color: styles.sidebarWidgetText?.color }}>Nenhum atendimento de Banho e Tosa / Clubinho registrado para {detailPet.name} ainda.</p>
+                <p style={{ fontSize: '0.82rem', color: styles.sidebarWidgetText?.color }}>Nenhum atendimento registrado para {detailPet.name} ainda.</p>
               ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '220px', overflowY: 'auto' }}>
-                  {history.map(h => (
-                    <div key={h.id} style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', padding: '7px 10px', border: `1px solid ${styles.borderColor}`, borderRadius: '8px', fontSize: '0.82rem' }}>
-                      <span style={{ color: styles.textMain, fontWeight: 600 }}>{h.service_type}</span>
-                      <span style={{ color: styles.sidebarWidgetText?.color }}>{fmtDate(h.scheduled_at)}</span>
-                      <span style={{ color: styles.textMain }}>{h.status}</span>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '320px', overflowY: 'auto' }}>
+                  {/* Agrupado por tipo de atendimento (Banho & Tosa, Vacinação, etc.) — tudo que já existe na agenda. */}
+                  {Object.entries(
+                    history.reduce<Record<string, Appointment[]>>((groups, h) => {
+                      const key = h.service_type || 'Outro';
+                      (groups[key] = groups[key] || []).push(h);
+                      return groups;
+                    }, {})
+                  ).map(([category, items]) => (
+                    <div key={category}>
+                      <h4 style={{ margin: '0 0 6px', fontSize: '0.8rem', fontWeight: 700, color: styles.primary, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        {category} <span style={{ fontWeight: 500, color: styles.sidebarWidgetText?.color }}>({items.length})</span>
+                      </h4>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        {items.map(h => (
+                          <div key={h.id} style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', padding: '7px 10px', border: `1px solid ${styles.borderColor}`, borderRadius: '8px', fontSize: '0.82rem' }}>
+                            <span style={{ color: styles.sidebarWidgetText?.color }}>{fmtDate(h.scheduled_at)}</span>
+                            <span style={{ color: styles.textMain, fontWeight: 600 }}>{h.status}</span>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   ))}
                 </div>
               )}
 
               <p style={{ fontSize: '0.74rem', color: styles.sidebarWidgetText?.color, marginTop: '10px' }}>
-                O prontuário veterinário (consultas, vacinas, prescrições) ainda está em desenvolvimento e vai aparecer aqui quando estiver pronto.
+                Isto mostra o que já está na agenda (banhos, tosas, vacinas etc.). Um prontuário veterinário completo (consultas, prescrições, exames) ainda está em desenvolvimento e vai aparecer aqui quando estiver pronto.
               </p>
             </div>
           </div>
