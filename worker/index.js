@@ -6,10 +6,7 @@
 //   npx wrangler secret put FOCUS_NFE_TOKEN_HOMOLOGACAO   (token do modo de teste da Focus NFe)
 //   npx wrangler secret put FOCUS_NFE_TOKEN_PRODUCAO      (token do modo real; só quando for valer)
 //   (se a Focus der um token único, use só: npx wrangler secret put FOCUS_NFE_TOKEN)
-//   npx wrangler secret put SUPABASE_SERVICE_ROLE          (produtos/agenda/compras, ver supabase/schema.sql)
-//   npx wrangler secret put FIRESTORE_READER_SA             (conta de serviço "worker-reader", só leitura, papel
-//                                                             roles/datastore.viewer — usada para login/cadastro
-//                                                             sem precisar deixar o Firestore de leitura pública)
+//   npx wrangler secret put SUPABASE_SERVICE_ROLE          (produtos/agenda/compras/pets/usuários, ver supabase/*.sql)
 //   npx wrangler deploy
 // A URL final (https://laviola-fiscal.<sua-conta>.workers.dev) vai em Configurações > Nota Fiscal.
 
@@ -19,6 +16,12 @@ const FOCUS_HOSTS = {
 };
 const ACCOUNTANT = ['contador', 'accountant'];
 const STAFF = ['desenvolvedor', 'proprietaria', 'gerente', 'colaborador', 'developer', 'owner', 'manager', 'collaborator'];
+// Mesma hierarquia do navegador (src/supabaseClient.ts: roleHierarchy/canManage), só que aplicada aqui também,
+// porque a chave de serviço do Supabase ignora o RLS: a regra de "quem manda em quem" tem que ser conferida à mão.
+const ROLE_RANK = { developer: 4, owner: 3, manager: 2, collaborator: 1, accountant: 0.5, client: 0 };
+const normalizeRole = (r) => ({ desenvolvedor: 'developer', proprietaria: 'owner', gerente: 'manager', colaborador: 'collaborator', cliente: 'client', contador: 'accountant' }[r] || r);
+const rank = (r) => ROLE_RANK[normalizeRole(r)] ?? -1;
+const canManage = (actorRole, targetRole) => rank(actorRole) > rank(targetRole);
 // Serviços de push aceitos (o endereço vem do navegador do entregador; só enviamos para estes).
 const PUSH_HOSTS = /^(fcm\.googleapis\.com|updates\.push\.services\.mozilla\.com|[\w-]+\.notify\.windows\.com|[\w-]+\.push\.apple\.com|web\.push\.apple\.com)$/;
 const JWKS_URL = 'https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com';
@@ -47,68 +50,22 @@ async function verifyFirebaseToken(token, projectId) {
   return payload;
 }
 
-// ---- Firestore (conta de serviço "worker-reader", só leitura) ---------------------------------------------------
-// profiles/{uid} deixou de ter leitura pública (vazava nome/telefone/e-mail/cargo de todo mundo). Agora o Worker lê
-// com uma credencial própria, do tipo "roles/datastore.viewer" (só lê; não escreve nada em lugar nenhum do projeto).
-let fsToken = { value: '', exp: 0 };
-
-async function firestoreAccessToken(env) {
-  if (fsToken.value && fsToken.exp > Date.now() + 60000) return fsToken.value;
-  const sa = JSON.parse(env.FIRESTORE_READER_SA);
-  const enc = new TextEncoder();
-  const now = Math.floor(Date.now() / 1000);
-  const header = b64url(enc.encode(JSON.stringify({ alg: 'RS256', typ: 'JWT' })));
-  const claims = b64url(enc.encode(JSON.stringify({
-    iss: sa.client_email, scope: 'https://www.googleapis.com/auth/datastore', aud: 'https://oauth2.googleapis.com/token', iat: now, exp: now + 3600,
-  })));
-  const pem = sa.private_key.replace(/-----[A-Z ]+-----/g, '').replace(/\s+/g, '');
-  const key = await crypto.subtle.importKey('pkcs8', Uint8Array.from(atob(pem), (c) => c.charCodeAt(0)), { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['sign']);
-  const sig = await crypto.subtle.sign('RSASSA-PKCS1-v1_5', key, enc.encode(`${header}.${claims}`));
-  const r = await fetch('https://oauth2.googleapis.com/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer', assertion: `${header}.${claims}.${b64url(sig)}` }),
-  });
-  const j = await r.json();
-  if (!j.access_token) throw new Error('firestore auth: ' + (j.error_description || j.error));
-  fsToken = { value: j.access_token, exp: Date.now() + (j.expires_in || 3600) * 1000 };
-  return fsToken.value;
-}
-
+// ---- Cadastro de usuários (Supabase, via chave de serviço) ---------------------------------------------------
+// profiles/{uid} deixou de ter leitura pública (vazava nome/telefone/e-mail/cargo de todo mundo) e também deixou
+// de viver no Firestore (o limite diário de leituras do plano gratuito bloqueava o sistema inteiro, já que o
+// cargo é conferido em praticamente toda chamada). Agora é uma tabela comum do Supabase, só lida/escrita por aqui.
 async function getRole(uid, env) {
-  const token = await firestoreAccessToken(env);
-  const r = await fetch(`https://firestore.googleapis.com/v1/projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents/profiles/${uid}`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (r.status === 404) return null; // perfil não existe: sem cargo
-  if (!r.ok) throw new Error('cargo indisponível'); // erro do Firestore (limite diário, instabilidade): não confundir com "sem cargo"
-  return (await r.json()).fields?.role?.stringValue || null;
+  const r = await sb(env, `/profiles?id=eq.${encodeURIComponent(uid)}&select=role`);
+  if (!r.ok) throw new Error('cargo indisponível'); // erro do Supabase: não confundir com "sem cargo"
+  return r.body[0]?.role || null;
 }
 
-// Uma linha de 'profiles' que bate um campo exato (username/phone/email), já convertida pra objeto simples.
-async function firestoreFindProfile(env, field, value) {
-  const token = await firestoreAccessToken(env);
-  const r = await fetch(`https://firestore.googleapis.com/v1/projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents:runQuery`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      structuredQuery: {
-        from: [{ collectionId: 'profiles' }],
-        where: { fieldFilter: { field: { fieldPath: field }, op: 'EQUAL', value: { stringValue: value } } },
-        limit: 5,
-      },
-    }),
-  });
+// Uma ou mais linhas de 'profiles' que batem um campo (username é case-insensitive; phone/email, exato).
+async function sbFindProfiles(env, field, value) {
+  const op = field === 'username' ? 'ilike' : 'eq';
+  const r = await sb(env, `/profiles?select=id,email,username,phone&${field}=${op}.${encodeURIComponent(value)}&limit=5`);
   if (!r.ok) throw new Error('consulta ao cadastro indisponível');
-  const rows = await r.json();
-  return rows
-    .filter((row) => row.document)
-    .map((row) => {
-      const id = row.document.name.split('/').pop();
-      const f = row.document.fields || {};
-      const text = (k) => f[k]?.stringValue || '';
-      return { id, email: text('email'), username: text('username'), phone: text('phone') };
-    });
+  return r.body;
 }
 
 // ---- Supabase (produtos e agenda) -------------------------------------------------------------------------------
@@ -277,7 +234,9 @@ export default {
       // "existe?" e "qual é o e-mail?" — nunca a lista nem os dados de outras pessoas.
       const authUrl = new URL(request.url);
       const authRoute = authUrl.pathname.replace(/\/+$/, '');
-      if (authRoute.startsWith('/auth/')) {
+      // /auth/me e /auth/register exigem login (tratadas mais abaixo, depois de validar o token); as outras
+      // rotas de /auth/ são as de pré-login e não pedem token.
+      if (authRoute.startsWith('/auth/') && authRoute !== '/auth/me' && authRoute !== '/auth/register') {
         if (!(await allowPublicAuthCall(request))) return json({ mensagem: 'Muitas tentativas. Aguarde um minuto e tente de novo.' }, 429);
 
         if (request.method === 'GET' && authRoute === '/auth/resolve-login') {
@@ -286,8 +245,8 @@ export default {
           if (id.toLowerCase() === 'admin') return json({ email: 'admin@laviola.com' });
           if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(id)) return json({ email: id }); // já é um e-mail: usa direto, sem consultar o banco
           try {
-            for (const [field, value] of [['username', id], ['username', id.toLowerCase()], ['username', id.toUpperCase()], ['phone', id]]) {
-              const found = await firestoreFindProfile(env, field, value);
+            for (const [field, value] of [['username', id], ['phone', id]]) {
+              const found = await sbFindProfiles(env, field, value);
               if (found[0]) return json({ email: found[0].email || null });
             }
             return json({ email: null });
@@ -302,7 +261,7 @@ export default {
           const excludeId = authUrl.searchParams.get('excludeId') || '';
           if (!['email', 'phone', 'username'].includes(field) || !value) return json({ mensagem: 'Requisição inválida.' }, 400);
           try {
-            const found = await firestoreFindProfile(env, field, value);
+            const found = await sbFindProfiles(env, field, value);
             return json({ exists: found.some((p) => p.id !== excludeId) });
           } catch (e) {
             return json({ mensagem: 'Não foi possível conferir agora. Tente de novo em instantes.' }, 503);
@@ -317,7 +276,7 @@ export default {
           try {
             for (const c of candidates) {
               if (suggestions.length >= 3) break;
-              const found = await firestoreFindProfile(env, 'username', c);
+              const found = await sbFindProfiles(env, 'username', c);
               if (found.length === 0) suggestions.push(c);
             }
           } catch (e) { /* devolve o que já tiver achado */ }
@@ -342,6 +301,155 @@ export default {
       }
       const role = cached.role;
       const isStaff = STAFF.includes(role);
+
+      // ---- Minha Conta (perfil do próprio usuário logado) ----
+      const meUrl = new URL(request.url);
+      const meRoute = meUrl.pathname.replace(/\/+$/, '');
+      if (meRoute === '/auth/me') {
+        if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE) return json({ mensagem: 'Banco de dados não configurado.' }, 503);
+
+        if (request.method === 'GET') {
+          let r = await sb(env, `/profiles?id=eq.${encodeURIComponent(user.sub)}&select=*`);
+          if (!r.ok) return json({ mensagem: 'Erro ao carregar o seu cadastro.' }, 502);
+          let row = r.body[0];
+          // Autocura: perfil achado por e-mail mas com outro id (ex.: troca de UID numa migração antiga).
+          if (!row && user.email) {
+            const byEmail = await sb(env, `/profiles?email=eq.${encodeURIComponent(user.email)}&select=*`);
+            if (byEmail.ok && byEmail.body[0]) {
+              const old = byEmail.body[0];
+              const moved = await sb(env, `/profiles?id=eq.${encodeURIComponent(old.id)}`, { method: 'PATCH', body: JSON.stringify({ id: user.sub }) });
+              if (moved.ok && moved.body[0]) row = moved.body[0];
+            }
+          }
+          return json({ profile: row || null });
+        }
+
+        if (request.method === 'PATCH') {
+          const input = await request.json();
+          const fields = {};
+          if (input.full_name !== undefined) fields.full_name = String(input.full_name).slice(0, 200);
+          if (input.username !== undefined) fields.username = String(input.username).slice(0, 60);
+          if (input.phone !== undefined) fields.phone = String(input.phone).slice(0, 30);
+          // Só permite desligar o aviso de troca obrigatória de senha, nunca ligar (isso é feito só na criação/redefinição).
+          if (input.must_change_password === false) fields.must_change_password = false;
+          if (Object.keys(fields).length === 0) return json({ mensagem: 'Nada para alterar.' }, 400);
+          const r = await sb(env, `/profiles?id=eq.${encodeURIComponent(user.sub)}`, { method: 'PATCH', body: JSON.stringify(fields) });
+          if (!r.ok) return json({ mensagem: 'Erro ao salvar o seu cadastro.' }, 502);
+          return r.body.length ? json({ profile: r.body[0] }) : json({ mensagem: 'Cadastro não encontrado.' }, 404);
+        }
+
+        return json({ mensagem: 'Método não permitido.' }, 405);
+      }
+
+      // Cadastro próprio (recém-criado no Firebase Auth, ainda sem linha em 'profiles'): só cria o perfil de
+      // cliente dele mesmo. Qualquer outro cargo, ou criar perfil de outra pessoa, passa por /usuarios (equipe).
+      if (request.method === 'POST' && meRoute === '/auth/register') {
+        if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE) return json({ mensagem: 'Banco de dados não configurado.' }, 503);
+        if (role) return json({ mensagem: 'Você já tem um cadastro.' }, 409); // já existe linha em profiles: não é registro novo
+        const input = await request.json();
+        const fullName = String(input.full_name || '').trim().slice(0, 200);
+        if (!fullName) return json({ mensagem: 'Informe o nome completo.' }, 400);
+        const fields = {
+          id: user.sub,
+          email: user.email || '',
+          full_name: fullName,
+          username: String(input.username || '').trim().slice(0, 60),
+          phone: String(input.phone || '').trim().slice(0, 30),
+          role: 'client',
+          is_active: true,
+          must_change_password: false,
+        };
+        const r = await sb(env, '/profiles', { method: 'POST', body: JSON.stringify(fields) });
+        if (!r.ok) return json({ mensagem: 'Erro ao concluir o cadastro.', detalhe: typeof r.body === 'object' ? r.body?.message : undefined }, 502);
+        roleCache.delete(user.sub);
+        return json({ profile: r.body[0] }, 201);
+      }
+
+      // ---- Usuários (equipe gerenciando cadastros: listar, criar, editar, excluir) ----
+      // A conta de login em si (Firebase Auth) continua sendo criada pelo navegador, com a sessão secundária
+      // (para não deslogar quem está criando). Aqui só entra a linha de 'profiles' — e a conferência de cargo:
+      // só quem tem posto estritamente mais alto que o cargo (atual ou pedido) do outro pode agir sobre ele.
+      const uUrl = new URL(request.url);
+      const uRoute = uUrl.pathname.replace(/\/+$/, '');
+      if (uRoute === '/usuarios' || uRoute.startsWith('/usuarios/')) {
+        if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE) return json({ mensagem: 'Banco de dados não configurado.' }, 503);
+        if (!isStaff) return json({ mensagem: 'Acesso negado.' }, 403);
+        const failU = (mensagem, r) => json({ mensagem, detalhe: typeof r?.body === 'object' ? r.body?.message : undefined }, 502);
+
+        if (request.method === 'GET' && uRoute === '/usuarios') {
+          const r = await sb(env, '/profiles?select=*&order=full_name.asc');
+          return r.ok ? json({ usuarios: r.body }) : failU('Erro ao listar os usuários.', r);
+        }
+
+        if (request.method === 'POST' && uRoute === '/usuarios') {
+          const input = await request.json();
+          const targetRole = normalizeRole(String(input.role || 'client'));
+          if (!(role === 'developer' || canManage(role, targetRole))) return json({ mensagem: 'Você não pode criar um usuário com esse cargo.' }, 403);
+          const uid = String(input.id || '').trim();
+          if (!uid) return json({ mensagem: 'Requisição inválida (id do login).' }, 400);
+          const fullName = String(input.full_name || '').trim().slice(0, 200);
+          if (!fullName) return json({ mensagem: 'Informe o nome completo.' }, 400);
+          const fields = {
+            id: uid,
+            email: String(input.email || '').trim().slice(0, 200),
+            full_name: fullName,
+            username: String(input.username || '').trim().slice(0, 60),
+            phone: String(input.phone || '').trim().slice(0, 30),
+            role: targetRole,
+            collaborator_specialty: targetRole === 'collaborator' ? String(input.collaborator_specialty || '').slice(0, 100) : '',
+            is_active: true,
+            // A senha foi escolhida por quem está criando a conta, não pelo dono: ele é obrigado a trocá-la no primeiro login.
+            must_change_password: true,
+          };
+          const r = await sb(env, '/profiles', { method: 'POST', body: JSON.stringify(fields) });
+          return r.ok ? json({ usuario: r.body[0] }, 201) : failU('Erro ao criar o usuário.', r);
+        }
+
+        const one = /^\/usuarios\/([\w-]+)$/.exec(uRoute);
+        if (one && (request.method === 'PATCH' || request.method === 'DELETE')) {
+          const targetId = one[1];
+          const cur = await sb(env, `/profiles?id=eq.${encodeURIComponent(targetId)}&select=role`);
+          if (!cur.ok) return failU('Erro ao buscar o usuário.', cur);
+          if (!cur.body[0]) return json({ mensagem: 'Usuário não encontrado.' }, 404);
+          const currentRole = cur.body[0].role;
+          const isSelf = targetId === user.sub;
+          const canAct = canManage(role, currentRole) || (isSelf && role === 'developer');
+          if (!canAct) return json({ mensagem: 'Acesso negado.' }, 403);
+
+          if (request.method === 'DELETE') {
+            if (isSelf) return json({ mensagem: 'Você não pode excluir seu próprio usuário.' }, 400);
+            const r = await sb(env, `/profiles?id=eq.${encodeURIComponent(targetId)}`, { method: 'DELETE' });
+            if (!r.ok) return failU('Erro ao excluir o usuário.', r);
+            roleCache.delete(targetId);
+            return json({ ok: true });
+          }
+
+          const input = await request.json();
+          const fields = {};
+          if (input.full_name !== undefined) fields.full_name = String(input.full_name).trim().slice(0, 200);
+          if (input.username !== undefined) fields.username = String(input.username).trim().slice(0, 60);
+          if (input.phone !== undefined) fields.phone = String(input.phone).trim().slice(0, 30);
+          if (input.is_active !== undefined) {
+            if (isSelf) return json({ mensagem: 'Você não pode desativar seu próprio usuário.' }, 400);
+            fields.is_active = !!input.is_active;
+          }
+          if (input.role !== undefined) {
+            const targetRole = normalizeRole(String(input.role));
+            if (!(role === 'developer' || canManage(role, targetRole) || targetRole === currentRole)) {
+              return json({ mensagem: 'Você não pode atribuir esse cargo.' }, 403);
+            }
+            fields.role = targetRole;
+            fields.collaborator_specialty = targetRole === 'collaborator' ? String(input.collaborator_specialty || '').slice(0, 100) : '';
+          }
+          if (Object.keys(fields).length === 0) return json({ mensagem: 'Nada para alterar.' }, 400);
+          const r = await sb(env, `/profiles?id=eq.${encodeURIComponent(targetId)}`, { method: 'PATCH', body: JSON.stringify(fields) });
+          if (!r.ok) return failU('Erro ao salvar o usuário.', r);
+          roleCache.delete(targetId);
+          return r.body.length ? json({ usuario: r.body[0] }) : json({ mensagem: 'Usuário não encontrado.' }, 404);
+        }
+
+        return json({ mensagem: 'Rota não encontrada.' }, 404);
+      }
 
       // ---- Pets (cadastro, foto e documentos) ----
       // Leitura: equipe vê todos; cliente só os seus. Escrita: equipe cuida de qualquer pet; o tutor cuida dos

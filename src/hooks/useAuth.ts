@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
-import { auth, db, isFirebaseConfigured } from '../firebaseClient';
+import { auth, isFirebaseConfigured } from '../firebaseClient';
 import { signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth';
-import { doc, getDoc, collection, query, where, getDocs, setDoc, deleteDoc } from 'firebase/firestore';
 import { logAction } from '../supabaseClient'; // We'll keep logAction in supabaseClient for now, but it will use Firebase
 import type { UserProfile } from '../supabaseClient'; // Types will stay in supabaseClient or be moved
 import { workerCallPublic } from '../utils/workerApi';
+import { fetchMyProfile } from '../utils/profilesService';
 
 export interface AuthUser {
   id: string;
@@ -36,31 +36,13 @@ export const useAuth = () => {
   const [error, setError] = useState<string | null>(null);
 
   const fetchProfile = async (userId: string, email: string, name: string): Promise<AuthUser> => {
-    if (!isFirebaseConfigured || !db) return { id: userId, email, name, profile: null };
-    
+    if (!isFirebaseConfigured) return { id: userId, email, name, profile: null };
+
     try {
-      const docRef = doc(db, 'profiles', userId);
-      const docSnap = await getDoc(docRef);
-      let profile = docSnap.exists() ? (docSnap.data() as UserProfile) : null;
-      
-      if (!profile && email) {
-        // Fallback: search by email to heal migration issues (Supabase UUID vs Firebase UID)
-        try {
-          const q = query(collection(db, 'profiles'), where('email', '==', email));
-          const querySnapshot = await getDocs(q);
-          if (!querySnapshot.empty) {
-            const oldProfileSnap = querySnapshot.docs[0];
-            profile = oldProfileSnap.data() as UserProfile;
-            profile.id = userId; // Update the ID to the Firebase Native UID
-            
-            await setDoc(doc(db, 'profiles', userId), profile);
-            await deleteDoc(doc(db, 'profiles', oldProfileSnap.id));
-          }
-        } catch (healError) {
-          console.error('Error during profile self-healing:', healError);
-        }
-      }
-      
+      // O cadastro (cargo, nome, etc.) mora no Supabase; só o Worker fala com ele, e a autocura por e-mail
+      // (perfis velhos com outro id) já acontece do lado de lá.
+      let profile = await fetchMyProfile();
+
       // Normalize role (from Portuguese to English) to ensure compatibility
       if (profile && profile.role) {
         if (profile.role as string === 'desenvolvedor') profile.role = 'developer';

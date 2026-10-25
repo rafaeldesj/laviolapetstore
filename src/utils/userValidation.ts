@@ -8,7 +8,7 @@ import { workerCallPublic } from './workerApi';
 const check = (field: 'email' | 'phone' | 'username', value: string, excludeId?: string): Promise<boolean> =>
   workerCallPublic<{ exists: boolean }>(`/auth/check?field=${field}&value=${encodeURIComponent(value.trim())}${excludeId ? `&excludeId=${encodeURIComponent(excludeId)}` : ''}`)
     .then(r => r.exists)
-    .catch(() => false); // serviço fora do ar: não trava o cadastro por isso (o Firestore ainda recusa duplicado na escrita)
+    .catch(() => false); // serviço fora do ar: não trava o cadastro por isso
 
 export const checkEmailExists = (email: string, excludeId?: string): Promise<boolean> => check('email', email, excludeId);
 export const checkPhoneExists = (phone: string, excludeId?: string): Promise<boolean> => check('phone', phone, excludeId);

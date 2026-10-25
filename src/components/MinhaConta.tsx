@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { UserCog, KeyRound, Eye, EyeOff, CheckCircle2 } from 'lucide-react';
 import { EmailAuthProvider, reauthenticateWithCredential, updatePassword, updateProfile as updateAuthProfile } from 'firebase/auth';
-import { doc, updateDoc } from 'firebase/firestore';
-import { auth, db } from '../firebaseClient';
+import { auth } from '../firebaseClient';
+import { updateMyProfile } from '../utils/profilesService';
 import type { AuthUser } from '../hooks/useAuth';
 import { checkPhoneExists, checkUsernameExists } from '../utils/userValidation';
 import { formatPhoneBR } from '../utils/formatters';
@@ -62,8 +62,7 @@ export const MinhaConta: React.FC<Props> = ({ styles, currentUser, onProfileUpda
         setProfileError('Este celular já está cadastrado em outra conta.');
         return;
       }
-      if (!db) throw new Error('Serviço indisponível no momento.');
-      await updateDoc(doc(db, 'profiles', currentUser.id), { full_name: name, username: user, phone: tel });
+      await updateMyProfile({ full_name: name, username: user, phone: tel });
       if (auth?.currentUser) await updateAuthProfile(auth.currentUser, { displayName: name }).catch(() => {});
 
       onProfileUpdated({

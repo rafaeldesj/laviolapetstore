@@ -14,6 +14,7 @@ import {
 import { listAppointments } from '../utils/agendaService';
 import type { Appointment } from '../supabaseClient';
 import { searchProducts } from '../utils/productSearch';
+import { listUsuarios } from '../utils/profilesService';
 
 interface PetCrudProps {
   currentUser: AuthUser;
@@ -270,12 +271,13 @@ export const PetCrud: React.FC<PetCrudProps> = ({ currentUser, styles }) => {
     setAssignError(null);
     if (clients.length === 0) {
       try {
-        const { db } = await import('../firebaseClient');
-        const { collection, getDocs, query, where } = await import('firebase/firestore');
-        if (db) {
-          const snap = await getDocs(query(collection(db, 'profiles'), where('role', 'in', ['client', 'cliente'])));
-          setClients(snap.docs.map(d => ({ id: d.id, name: d.data().full_name || d.data().name || 'Cliente', email: d.data().email || '' })));
-        }
+        const usuarios = await listUsuarios();
+        const normRole = (r: string) => (r === 'cliente' ? 'client' : r);
+        setClients(
+          usuarios
+            .filter((u: any) => normRole(u.role) === 'client')
+            .map((u: any) => ({ id: u.id, name: u.full_name || u.name || 'Cliente', email: u.email || '' }))
+        );
       } catch (e: any) {
         setAssignError('Não foi possível carregar a lista de clientes.');
       }

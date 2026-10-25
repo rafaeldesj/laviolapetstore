@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import { X, UserPlus, Eye, EyeOff } from 'lucide-react';
 import { logAction } from '../supabaseClient';
-import { auth, db, isFirebaseConfigured } from '../firebaseClient';
+import { auth, isFirebaseConfigured } from '../firebaseClient';
 import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
 import { formatPhoneBR } from '../utils/formatters';
 import { checkEmailExists, checkPhoneExists, checkUsernameExists, generateUsernameSuggestions } from '../utils/userValidation';
-import { doc, setDoc } from 'firebase/firestore';
+import { registerMyProfile } from '../utils/profilesService';
 import type { AuthUser } from '../hooks/useAuth';
 
 interface RegisterModalProps {
@@ -55,7 +55,7 @@ export const RegisterModal: React.FC<RegisterModalProps> = ({
     setIsLoading(true);
 
     try {
-      if (isFirebaseConfigured && auth && db) {
+      if (isFirebaseConfigured && auth) {
         // Validação de duplicidade
         const emailExists = await checkEmailExists(email);
         if (emailExists) {
@@ -86,23 +86,12 @@ export const RegisterModal: React.FC<RegisterModalProps> = ({
         const user = userCredential.user;
         
         await updateProfile(user, { displayName: fullName.trim() });
-        
-        const timestamp = new Date().toISOString();
-        const profileData = {
-          id: user.uid,
-          email: user.email,
+
+        const profileData = await registerMyProfile({
           full_name: fullName.trim(),
           username: username.trim(),
           phone: phone.trim(),
-          role: 'client',
-          is_active: true,
-          created_at: timestamp,
-          collaborator_category_id: null as string | null
-        };
-        
-        // Wait 1.5s to ensure the auth token propagates to the Firestore client before writing
-        await new Promise(resolve => setTimeout(resolve, 1500));
-        await setDoc(doc(db, 'profiles', user.uid), profileData);
+        });
 
         const registeredUser: AuthUser = {
           id: user.uid,

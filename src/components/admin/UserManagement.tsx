@@ -1,36 +1,19 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Users, Shield, UserCheck, UserX, Trash2, Search, Edit, Phone, Save, X, ChevronDown, PlusCircle, Key, Eye, EyeOff } from 'lucide-react';
 import type { UserProfile, UserRole } from '../../supabaseClient';
-import { supabase, roleLabels, canManage, roleHierarchy, isSupabaseConfigured, logAction } from '../../supabaseClient';
-import { db, auth, secondaryAuth, isFirebaseConfigured } from '../../firebaseClient';
-import { collection, getDocs, doc, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { supabase, roleLabels, canManage, roleHierarchy, logAction } from '../../supabaseClient';
+import { auth, secondaryAuth, isFirebaseConfigured } from '../../firebaseClient';
 import { createUserWithEmailAndPassword, updateProfile, updatePassword } from 'firebase/auth';
 import { PermissionsPanel } from './PermissionsPanel';
 import type { AuthUser } from '../../hooks/useAuth';
 import { formatPhoneBR } from '../../utils/formatters';
 import { DELIVERY_SPECIALTY } from '../../utils/specialties';
 import { checkEmailExists, checkPhoneExists, checkUsernameExists, generateUsernameSuggestions } from '../../utils/userValidation';
+import { listUsuarios, createUsuario, updateUsuario, deleteUsuario } from '../../utils/profilesService';
 
 interface UserManagementProps {
   currentUser: AuthUser;
   styles: any;
-}
-
-/** Categorias (ex.: Entregador) ainda ficam no Supabase; se ele estiver fora do ar, o cadastro não pode travar. */
-async function resolveCategoryId(name: string): Promise<string | null> {
-  try {
-    const { data: existing } = await supabase.from('collaborator_categories').select('id').eq('name', name).single();
-    if (existing) return existing.id;
-    const { data: created } = await supabase
-      .from('collaborator_categories')
-      .insert({ name, description: '', is_active: true })
-      .select('id')
-      .single();
-    return created?.id ?? null;
-  } catch (err) {
-    console.warn('Não foi possível resolver a categoria no Supabase:', err);
-    return null;
-  }
 }
 
 const roleBadgeColors: Record<UserRole, string> = {
@@ -103,18 +86,13 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
     setIsLoading(true);
     setErrorMsg(null);
     try {
-      if (!isFirebaseConfigured || !db) {
+      if (!isFirebaseConfigured) {
         const mockUsers = JSON.parse(localStorage.getItem('laviola_mock_users') || '[]');
         const profiles = mockUsers.map((u: any) => u.profile).filter(Boolean);
         setUsers(profiles);
       } else {
-        const snap = await getDocs(collection(db, 'profiles'));
-        let firestoreUsers: UserProfile[] = [];
-        snap.forEach(docSnap => {
-          firestoreUsers.push(docSnap.data() as UserProfile);
-        });
-        firestoreUsers.sort((a, b) => (a.full_name || '').localeCompare(b.full_name || ''));
-        setUsers(firestoreUsers);
+        const sbUsers = (await listUsuarios()).sort((a, b) => (a.full_name || '').localeCompare(b.full_name || ''));
+        setUsers(sbUsers);
         // Load categories from Supabase
         const { data: cats } = await supabase
           .from('collaborator_categories')
@@ -143,7 +121,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
       return;
     }
     try {
-      if (!isFirebaseConfigured || !db) {
+      if (!isFirebaseConfigured) {
         const mockUsers = JSON.parse(localStorage.getItem('laviola_mock_users') || '[]');
         const idx = mockUsers.findIndex((u: any) => u.id === user.id);
         if (idx !== -1 && mockUsers[idx].profile) {
@@ -151,7 +129,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
           localStorage.setItem('laviola_mock_users', JSON.stringify(mockUsers));
         }
       } else {
-        await updateDoc(doc(db, 'profiles', user.id), { is_active: !user.is_active });
+        await updateUsuario(user.id, { is_active: !user.is_active });
       }
       await logAction(
         currentUser.email || '',
@@ -178,12 +156,12 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
     const user = deleteTarget;
     setDeleteTarget(null);
     try {
-      if (!isFirebaseConfigured || !db) {
+      if (!isFirebaseConfigured) {
         const mockUsers = JSON.parse(localStorage.getItem('laviola_mock_users') || '[]');
         const filtered = mockUsers.filter((u: any) => u.id !== user.id);
         localStorage.setItem('laviola_mock_users', JSON.stringify(filtered));
       } else {
-        await deleteDoc(doc(db, 'profiles', user.id));
+        await deleteUsuario(user.id);
       }
       await logAction(
         currentUser.email || '',
@@ -203,7 +181,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
     setEditUsername(user.username || '');
     setEditPhone(user.phone || '');
     setEditRole(user.role);
-    setEditSpecialty((user as any).collaborator_category?.name || '');
+    setEditSpecialty((user as any).collaborator_specialty || (user as any).collaborator_category?.name || '');
     setErrorMsg(null);
   };
 
@@ -228,7 +206,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
       role: editRole,
     };
     try {
-      if (!isFirebaseConfigured || !db) {
+      if (!isFirebaseConfigured) {
         const mockUsers = JSON.parse(localStorage.getItem('laviola_mock_users') || '[]');
         const idx = mockUsers.findIndex((u: any) => u.id === user.id);
         if (idx !== -1) {
@@ -281,11 +259,9 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
           }
         }
 
-        const categoryId = specialtyName ? await resolveCategoryId(specialtyName) : null;
-        updatedData.collaborator_category_id = categoryId;
         // O nome fica direto no perfil: é ele que o módulo de Delivery usa para achar os entregadores.
         updatedData.collaborator_specialty = specialtyName;
-        await updateDoc(doc(db, 'profiles', user.id), updatedData);
+        await updateUsuario(user.id, updatedData);
       }
       await logAction(
         currentUser.email || '',
@@ -317,7 +293,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
     }
 
     try {
-      if (isFirebaseConfigured && secondaryAuth && db) {
+      if (isFirebaseConfigured && secondaryAuth) {
         // Validação de duplicidade
         const emailExists = await checkEmailExists(newEmail);
         if (emailExists) {
@@ -347,25 +323,16 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
         const userCredential = await createUserWithEmailAndPassword(secondaryAuth, newEmail.trim(), newPassword);
         const user = userCredential.user;
         await updateProfile(user, { displayName: newFullName.trim() });
-        
-        const categoryId = newRole === 'collaborator' && newSpecialty.trim() ? await resolveCategoryId(newSpecialty.trim()) : null;
 
-        const profileData = {
+        await createUsuario({
           id: user.uid,
-          email: user.email,
+          email: user.email || newEmail.trim(),
           full_name: newFullName.trim(),
           username: newUsername.trim(),
           phone: newPhone.trim(),
           role: newRole,
-          collaborator_category_id: newRole === 'collaborator' ? categoryId : null,
           collaborator_specialty: newRole === 'collaborator' ? newSpecialty.trim() : '',
-          is_active: true,
-          // A senha foi escolhida por outra pessoa (quem está criando o usuário), não pelo dono da conta:
-          // no primeiro login, a pessoa é obrigada a trocá-la antes de usar o sistema.
-          must_change_password: true,
-          created_at: new Date().toISOString()
-        };
-        await setDoc(doc(db, 'profiles', user.uid), profileData);
+        });
       } else {
         const mockUsers = JSON.parse(localStorage.getItem('laviola_mock_users') || '[]');
         const newId = Math.random().toString(36).substring(2, 9);
@@ -652,9 +619,9 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
                         whiteSpace: 'nowrap',
                       }}>
                         {roleLabels[user.role]}
-                        {(user as any).collaborator_category?.name && (
+                        {((user as any).collaborator_specialty || (user as any).collaborator_category?.name) && (
                           <span style={{ fontWeight: 500, textTransform: 'none', opacity: 0.85 }}>
-                            {' '}({(user as any).collaborator_category.name})
+                            {' '}({(user as any).collaborator_specialty || (user as any).collaborator_category?.name})
                           </span>
                         )}
                       </span>

@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { KeyRound, Eye, EyeOff, LogOut } from 'lucide-react';
 import { EmailAuthProvider, reauthenticateWithCredential, updatePassword } from 'firebase/auth';
-import { doc, updateDoc } from 'firebase/firestore';
-import { auth, db } from '../firebaseClient';
+import { auth } from '../firebaseClient';
+import { updateMyProfile } from '../utils/profilesService';
 import type { AuthUser } from '../hooks/useAuth';
 
 interface Props {
@@ -56,11 +56,11 @@ export const ForcePasswordChange: React.FC<Props> = ({ styles, user, onDone, onL
 
     setIsSaving(true);
     try {
-      if (!auth?.currentUser || !db) throw new Error('Sessão inválida. Saia e entre de novo.');
+      if (!auth?.currentUser) throw new Error('Sessão inválida. Saia e entre de novo.');
       const credential = EmailAuthProvider.credential(user.email, currentPassword);
       await reauthenticateWithCredential(auth.currentUser, credential);
       await updatePassword(auth.currentUser, newPassword);
-      await updateDoc(doc(db, 'profiles', user.id), { must_change_password: false });
+      await updateMyProfile({ must_change_password: false });
       onDone();
     } catch (err: any) {
       setErrorMsg(friendly[err?.code] || err?.message || 'Não foi possível trocar a senha. Tente de novo.');

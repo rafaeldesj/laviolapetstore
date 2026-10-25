@@ -34,6 +34,7 @@ export interface UserProfile {
   role: UserRole;
   collaborator_category_id: string | null;
   collaborator_category?: CollaboratorCategory;
+  collaborator_specialty?: string;
   is_active: boolean;
   created_at: string;
   clientAddress?: any;

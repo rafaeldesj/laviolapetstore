@@ -15,10 +15,10 @@ import { DeliveryPaymentBox } from './DeliveryPaymentBox';
 import { PAYMENT_METHODS, brl, changeToGive, parseMoney, paymentText, stripPaymentTag, usesCardMachine, validatePayment } from '../utils/deliveryPayment';
 import type { DeliveryPayment, PaymentMethod } from '../utils/deliveryPayment';
 import { subscribeDeliveries, syncDeliveries, patchDelivery } from '../utils/deliveriesService';
-import { collection, doc, getDocs, setDoc } from 'firebase/firestore';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, updateProfile } from 'firebase/auth';
-import { db, secondaryAuth, isFirebaseConfigured } from '../firebaseClient';
+import { secondaryAuth, isFirebaseConfigured } from '../firebaseClient';
 import { checkEmailExists, checkPhoneExists, checkUsernameExists } from '../utils/userValidation';
+import { listUsuarios, createUsuario } from '../utils/profilesService';
 
 // Senha já preenchida no cadastro de cliente; o operador pode trocar se quiser.
 // Senha temporária para cliente novo: sorteada a cada cadastro (não é mais um valor fixo como "123456" que qualquer
@@ -312,15 +312,13 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
 
   // Clientes e entregadores vêm dos cadastros reais, não de dados de teste guardados no navegador.
   useEffect(() => {
-    if (!db || !isStaffRole) return;
+    if (!isFirebaseConfigured || !isStaffRole) return;
     let cancelled = false;
-    getDocs(collection(db, 'profiles'))
-      .then(snap => {
+    listUsuarios()
+      .then(list => {
         if (cancelled) return;
         const normRole = (r: string) => (r === 'cliente' ? 'client' : r === 'colaborador' ? 'collaborator' : r);
-        const profiles = snap.docs
-          .map(d => ({ id: d.id, ...(d.data() as any) }))
-          .filter(p => p.is_active !== false);
+        const profiles = list.filter((p: any) => p.is_active !== false);
         const nameOf = (p: any, fallback: string) => p.full_name || p.name || p.username || fallback;
 
         setClients(profiles.filter(p => normRole(p.role) === 'client').map(p => ({ id: p.id, name: nameOf(p, 'Cliente') })));
@@ -1150,7 +1148,7 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
           setFormClientId(newClient.id);
         }
       } else {
-        if (!isFirebaseConfigured || !db || !secondaryAuth) throw new Error('Firebase não configurado.');
+        if (!isFirebaseConfigured || !secondaryAuth) throw new Error('Firebase não configurado.');
         const email = newClientEmail.trim();
         const username = newClientUsername.trim();
         const phone = newClientPhone.trim();
@@ -1176,18 +1174,13 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
           }
         }
         await updateProfile(cred.user, { displayName: newClientFullName.trim() });
-        await setDoc(doc(db, 'profiles', cred.user.uid), {
+        await createUsuario({
           id: cred.user.uid,
-          email: cred.user.email,
+          email: cred.user.email || email,
           full_name: newClientFullName.trim(),
           username,
           phone,
           role: 'client',
-          is_active: true,
-          // A senha foi definida pela equipe, não pelo cliente: no primeiro login ele é obrigado a trocá-la.
-          must_change_password: true,
-          created_at: new Date().toISOString(),
-          collaborator_category_id: null,
         });
         // A sessão secundária serviu só para criar a conta; não deve ficar aberta.
         await signOut(secondaryAuth).catch(() => {});
