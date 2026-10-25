@@ -15,6 +15,7 @@ import { listAppointments } from '../utils/agendaService';
 import type { Appointment } from '../supabaseClient';
 import { searchProducts } from '../utils/productSearch';
 import { listUsuarios } from '../utils/profilesService';
+import { BREEDS_BY_SPECIES, BREED_CUSTOM_VALUE } from '../utils/breeds';
 
 interface PetCrudProps {
   currentUser: AuthUser;
@@ -44,6 +45,7 @@ export const PetCrud: React.FC<PetCrudProps> = ({ currentUser, styles }) => {
   const [name, setName] = useState<string>('');
   const [species, setSpecies] = useState<string>('Cão');
   const [breed, setBreed] = useState<string>('');
+  const breedOptions = BREEDS_BY_SPECIES[species];
   const [age, setAge] = useState<number>(0);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formPhotoFile, setFormPhotoFile] = useState<File | null>(null);
@@ -53,9 +55,14 @@ export const PetCrud: React.FC<PetCrudProps> = ({ currentUser, styles }) => {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [hoveredBtn, setHoveredBtn] = useState<string | null>(null);
 
-  // Equipe: também vê os pets sem dono, prontos para vincular a um cliente.
-  const [showUnowned, setShowUnowned] = useState<boolean>(false);
-  const pets = showUnowned ? allPets.filter(p => !p.owner_id) : allPets.filter(p => p.owner_id === userId);
+  // Equipe: também vê os pets sem dono (prontos para vincular a um cliente) e pode ver todos de uma vez.
+  type PetFilterMode = 'meus' | 'sem-tutor' | 'todos';
+  const [filterMode, setFilterMode] = useState<PetFilterMode>('meus');
+  const showUnowned = filterMode !== 'meus'; // mostra a coluna/dica de tutor sempre que a lista pode incluir pets sem dono
+  const pets =
+    filterMode === 'sem-tutor' ? allPets.filter(p => !p.owner_id) :
+    filterMode === 'todos' ? allPets :
+    allPets.filter(p => p.owner_id === userId);
   const unownedCount = allPets.filter(p => !p.owner_id).length;
 
   const [viewMode, setViewMode] = useState<ViewMode>(readView);
@@ -377,10 +384,10 @@ export const PetCrud: React.FC<PetCrudProps> = ({ currentUser, styles }) => {
       <div style={styles.crudHeader}>
         <div>
           <h2 id="pets-heading" style={styles.sectionTitle}>
-            {showUnowned ? 'Pets sem tutor vinculado' : 'Meus Pets'}
+            {filterMode === 'sem-tutor' ? 'Pets sem tutor vinculado' : filterMode === 'todos' ? 'Todos os Pets' : 'Meus Pets'}
             <div style={styles.sectionTitleBar}></div>
           </h2>
-          {showUnowned && (
+          {filterMode === 'sem-tutor' && (
             <p style={{ fontSize: '0.85rem', color: styles.sidebarWidgetText?.color, marginTop: '5px' }}>
               Vieram da agenda antiga, sem conta de cliente vinculada ainda. O nome ao lado é uma dica de quem é o tutor.
             </p>
@@ -399,11 +406,20 @@ export const PetCrud: React.FC<PetCrudProps> = ({ currentUser, styles }) => {
         )}
       </div>
 
-      {isStaff && unownedCount > 0 && (
-        <label style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem', fontWeight: 600, color: styles.textMain, marginTop: '12px', cursor: 'pointer' }}>
-          <input type="checkbox" checked={showUnowned} onChange={(e) => setShowUnowned(e.target.checked)} />
-          Ver pets sem tutor vinculado ({unownedCount})
-        </label>
+      {isStaff && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '12px' }}>
+          <label htmlFor="pets-filter-mode" style={{ fontSize: '0.85rem', fontWeight: 600, color: styles.textMain }}>Mostrar:</label>
+          <select
+            id="pets-filter-mode"
+            value={filterMode}
+            onChange={(e) => setFilterMode(e.target.value as PetFilterMode)}
+            style={{ ...styles.formInput, width: 'auto', padding: '7px 10px', fontSize: '0.85rem' }}
+          >
+            <option value="meus">Meus Pets</option>
+            {unownedCount > 0 && <option value="sem-tutor">Pets sem tutor vinculado ({unownedCount})</option>}
+            <option value="todos">Ver todos ({allPets.length})</option>
+          </select>
+        </div>
       )}
 
       {errorMsg && (
@@ -438,7 +454,13 @@ export const PetCrud: React.FC<PetCrudProps> = ({ currentUser, styles }) => {
 
             <div style={styles.formGroup}>
               <label htmlFor="pet-form-species" style={styles.formLabel}>Espécie</label>
-              <select id="pet-form-species" value={species} onChange={(e) => setSpecies(e.target.value)} style={styles.formInput} disabled={isLoading}>
+              <select
+                id="pet-form-species"
+                value={species}
+                onChange={(e) => { setSpecies(e.target.value); setBreed(''); }}
+                style={styles.formInput}
+                disabled={isLoading}
+              >
                 <option value="Cão">Cão</option>
                 <option value="Gato">Gato</option>
                 <option value="Ave">Ave</option>
@@ -449,7 +471,34 @@ export const PetCrud: React.FC<PetCrudProps> = ({ currentUser, styles }) => {
 
             <div style={styles.formGroup}>
               <label htmlFor="pet-form-breed" style={styles.formLabel}>Raça</label>
-              <input id="pet-form-breed" type="text" value={breed} onChange={(e) => setBreed(e.target.value)} style={styles.formInput} placeholder="Ex: Golden Retriever" disabled={isLoading} />
+              {breedOptions ? (
+                <>
+                  <select
+                    id="pet-form-breed"
+                    value={breedOptions.includes(breed) ? breed : BREED_CUSTOM_VALUE}
+                    onChange={(e) => setBreed(e.target.value === BREED_CUSTOM_VALUE ? '' : e.target.value)}
+                    style={styles.formInput}
+                    disabled={isLoading}
+                  >
+                    <option value="" disabled>Selecione a raça</option>
+                    {breedOptions.map((b) => <option key={b} value={b}>{b}</option>)}
+                    <option value={BREED_CUSTOM_VALUE}>Outra (digite)</option>
+                  </select>
+                  {!breedOptions.includes(breed) && (
+                    <input
+                      id="pet-form-breed-custom"
+                      type="text"
+                      value={breed}
+                      onChange={(e) => setBreed(e.target.value)}
+                      style={{ ...styles.formInput, marginTop: '6px' }}
+                      placeholder="Digite a raça"
+                      disabled={isLoading}
+                    />
+                  )}
+                </>
+              ) : (
+                <input id="pet-form-breed" type="text" value={breed} onChange={(e) => setBreed(e.target.value)} style={styles.formInput} placeholder="Ex: Golden Retriever" disabled={isLoading} />
+              )}
             </div>
 
             <div style={styles.formGroup}>
@@ -497,7 +546,7 @@ export const PetCrud: React.FC<PetCrudProps> = ({ currentUser, styles }) => {
         <div style={{ textAlign: 'center', padding: '40px 20px', border: `1px dashed ${styles.borderColor}`, borderRadius: '12px', marginTop: '20px' }}>
           <PawPrint size={40} style={{ color: styles.secondary, margin: '0 auto 10px', display: 'block' }} />
           <p style={{ color: styles.sidebarWidgetText.color, fontWeight: 500 }}>
-            {showUnowned ? 'Nenhum pet sem tutor no momento.' : 'Nenhum pet cadastrado ainda.'}
+            {filterMode === 'sem-tutor' ? 'Nenhum pet sem tutor no momento.' : 'Nenhum pet cadastrado ainda.'}
           </p>
         </div>
       ) : viewMode === 'details' ? (
