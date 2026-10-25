@@ -56,13 +56,22 @@ export const PetCrud: React.FC<PetCrudProps> = ({ currentUser, styles }) => {
   const [hoveredBtn, setHoveredBtn] = useState<string | null>(null);
 
   // Equipe: também vê os pets sem dono (prontos para vincular a um cliente) e pode ver todos de uma vez.
+  // Para a equipe, "meus pets" não faz sentido (ela não é tutora) — vira "pets com tutor vinculado".
   type PetFilterMode = 'meus' | 'sem-tutor' | 'todos';
   const [filterMode, setFilterMode] = useState<PetFilterMode>('meus');
   const showUnowned = filterMode !== 'meus'; // mostra a coluna/dica de tutor sempre que a lista pode incluir pets sem dono
   const pets =
     filterMode === 'sem-tutor' ? allPets.filter(p => !p.owner_id) :
     filterMode === 'todos' ? allPets :
+    isStaff ? allPets.filter(p => !!p.owner_id) :
     allPets.filter(p => p.owner_id === userId);
+
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const filteredPets = (() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return pets;
+    return pets.filter(p => p.name.toLowerCase().includes(q) || (p.tutor_hint || '').toLowerCase().includes(q));
+  })();
   const unownedCount = allPets.filter(p => !p.owner_id).length;
 
   const [viewMode, setViewMode] = useState<ViewMode>(readView);
@@ -384,7 +393,7 @@ export const PetCrud: React.FC<PetCrudProps> = ({ currentUser, styles }) => {
       <div style={styles.crudHeader}>
         <div>
           <h2 id="pets-heading" style={styles.sectionTitle}>
-            {filterMode === 'sem-tutor' ? 'Pets sem tutor vinculado' : filterMode === 'todos' ? 'Todos os Pets' : 'Meus Pets'}
+            {filterMode === 'sem-tutor' ? 'Pets sem tutor vinculado' : filterMode === 'todos' ? 'Todos os Pets' : isStaff ? 'Pets com tutor vinculado' : 'Meus Pets'}
             <div style={styles.sectionTitleBar}></div>
           </h2>
           {filterMode === 'sem-tutor' && (
@@ -406,21 +415,37 @@ export const PetCrud: React.FC<PetCrudProps> = ({ currentUser, styles }) => {
         )}
       </div>
 
-      {isStaff && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '12px' }}>
-          <label htmlFor="pets-filter-mode" style={{ fontSize: '0.85rem', fontWeight: 600, color: styles.textMain }}>Mostrar:</label>
-          <select
-            id="pets-filter-mode"
-            value={filterMode}
-            onChange={(e) => setFilterMode(e.target.value as PetFilterMode)}
-            style={{ ...styles.formInput, width: 'auto', padding: '7px 10px', fontSize: '0.85rem' }}
-          >
-            <option value="meus">Meus Pets</option>
-            {unownedCount > 0 && <option value="sem-tutor">Pets sem tutor vinculado ({unownedCount})</option>}
-            <option value="todos">Ver todos ({allPets.length})</option>
-          </select>
-        </div>
-      )}
+      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '16px', marginTop: '12px' }}>
+        {isStaff && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <label htmlFor="pets-filter-mode" style={{ fontSize: '0.85rem', fontWeight: 600, color: styles.textMain }}>Mostrar:</label>
+            <select
+              id="pets-filter-mode"
+              value={filterMode}
+              onChange={(e) => setFilterMode(e.target.value as PetFilterMode)}
+              style={{ ...styles.formInput, width: 'auto', padding: '7px 10px', fontSize: '0.85rem' }}
+            >
+              <option value="meus">Pets com tutor vinculado</option>
+              {unownedCount > 0 && <option value="sem-tutor">Pets sem tutor vinculado ({unownedCount})</option>}
+              <option value="todos">Ver todos ({allPets.length})</option>
+            </select>
+          </div>
+        )}
+
+        {pets.length > 0 && (
+          <div style={{ position: 'relative', flex: '0 1 260px', minWidth: '180px' }}>
+            <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: styles.sidebarWidgetText?.color }} />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Buscar por nome do pet ou do tutor..."
+              style={{ ...styles.formInput, width: '100%', padding: '7px 10px 7px 32px', fontSize: '0.85rem' }}
+              aria-label="Buscar pet por nome ou por tutor"
+            />
+          </div>
+        )}
+      </div>
 
       {errorMsg && (
         <div style={{ color: 'hsl(0,75%,45%)', fontSize: '0.85rem', margin: '15px 0', padding: '8px 12px', backgroundColor: 'hsl(0,75%,55%,0.08)', borderRadius: '6px', border: '1px solid hsl(0,75%,55%,0.25)' }}>
@@ -542,11 +567,11 @@ export const PetCrud: React.FC<PetCrudProps> = ({ currentUser, styles }) => {
 
       {isLoading && allPets.length === 0 ? (
         <p style={{ color: styles.sidebarWidgetText.color, marginTop: '16px' }}>Carregando seus pets...</p>
-      ) : pets.length === 0 ? (
+      ) : filteredPets.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '40px 20px', border: `1px dashed ${styles.borderColor}`, borderRadius: '12px', marginTop: '20px' }}>
           <PawPrint size={40} style={{ color: styles.secondary, margin: '0 auto 10px', display: 'block' }} />
           <p style={{ color: styles.sidebarWidgetText.color, fontWeight: 500 }}>
-            {filterMode === 'sem-tutor' ? 'Nenhum pet sem tutor no momento.' : 'Nenhum pet cadastrado ainda.'}
+            {searchQuery.trim() ? 'Nenhum pet encontrado para essa busca.' : filterMode === 'sem-tutor' ? 'Nenhum pet sem tutor no momento.' : 'Nenhum pet cadastrado ainda.'}
           </p>
         </div>
       ) : viewMode === 'details' ? (
@@ -577,7 +602,7 @@ export const PetCrud: React.FC<PetCrudProps> = ({ currentUser, styles }) => {
               </tr>
             </thead>
             <tbody>
-              {pets.map(pet => (
+              {filteredPets.map(pet => (
                 <tr key={pet.id} onClick={() => openDetail(pet)} style={{ borderTop: `1px solid ${styles.borderColor}`, cursor: 'pointer' }}>
                   <td style={{ padding: '6px 10px' }}>{avatar(pet, 32)}</td>
                   <td style={{ padding: '8px 10px', fontWeight: 700, color: styles.textMain }}>{pet.name}</td>
@@ -594,7 +619,7 @@ export const PetCrud: React.FC<PetCrudProps> = ({ currentUser, styles }) => {
         </div>
       ) : viewMode === 'list' ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '16px' }}>
-          {pets.map(pet => (
+          {filteredPets.map(pet => (
             <article
               key={pet.id}
               onClick={() => openDetail(pet)}
@@ -614,7 +639,7 @@ export const PetCrud: React.FC<PetCrudProps> = ({ currentUser, styles }) => {
         </div>
       ) : viewMode === 'small-cards' ? (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '14px', marginTop: '16px' }}>
-          {pets.map(pet => (
+          {filteredPets.map(pet => (
             <article
               key={pet.id}
               onClick={() => openDetail(pet)}
@@ -629,7 +654,7 @@ export const PetCrud: React.FC<PetCrudProps> = ({ currentUser, styles }) => {
         </div>
       ) : (
         <div style={styles.crudList}>
-          {pets.map((pet) => (
+          {filteredPets.map((pet) => (
             <article key={pet.id} onClick={() => openDetail(pet)} style={{ ...styles.petCard, cursor: 'pointer' }}>
               <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '6px' }}>{avatar(pet, 84)}</div>
               <div style={styles.petHeader}>
