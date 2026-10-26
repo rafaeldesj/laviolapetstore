@@ -9,6 +9,7 @@ import { buildIcs, downloadIcs } from '../utils/icsExport';
 import { parseIcs } from '../utils/icsParse';
 import type { AgendaScope } from '../utils/agendaService';
 import { listPets } from '../utils/petsService';
+import { buildHolidayMap, toDateKey } from '../utils/holidays';
 
 interface AgendamentosProps {
   currentUser: AuthUser;
@@ -65,6 +66,7 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
   // "Visão ampla": a agenda ocupa a largura toda (do menu até o horário de funcionamento), logo abaixo da barra de controles.
   const [fullView, setFullView] = useState<boolean>(false);
   const [wideView, setWideView] = useState<boolean>(false);
+  const [showHolidays, setShowHolidays] = useState<boolean>(true);
   const toolbarRef = useRef<HTMLDivElement>(null);
   const [widePos, setWidePos] = useState<{ top: number; left: number; width: number } | null>(null);
 
@@ -266,6 +268,12 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
   };
 
   const getMonthLabel = (date: Date) => `${monthNames[date.getMonth()]} de ${date.getFullYear()}`;
+
+  // Mapa de feriados (ano atual e vizinhos, pra cobrir a grade do mês quando ela pega dias do ano anterior/seguinte).
+  const holidayMap = React.useMemo(
+    () => buildHolidayMap([currentDate.getFullYear() - 1, currentDate.getFullYear(), currentDate.getFullYear() + 1]),
+    [currentDate.getFullYear()]
+  );
 
   const handlePrevMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
   const handleNextMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
@@ -981,6 +989,12 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
               Visão completa
             </label>
           )}
+          {viewMode === 'month' && (
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.82rem', fontWeight: 600, color: styles.textMain, cursor: 'pointer' }}>
+              <input type="checkbox" checked={showHolidays} onChange={(e) => setShowHolidays(e.target.checked)} style={{ cursor: 'pointer' }} />
+              Mostrar feriados
+            </label>
+          )}
           <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.82rem', fontWeight: 600, color: styles.textMain, cursor: 'pointer' }}>
             <input type="checkbox" checked={wideView} onChange={(e) => setWideView(e.target.checked)} style={{ cursor: 'pointer' }} />
             Ver visão ampla
@@ -1163,6 +1177,7 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
                 const expanded = fullView || expandedDays.has(dayKey);
                 const shown = expanded ? dayApps : dayApps.slice(0, MAX);
                 const more = dayApps.length - Math.min(dayApps.length, MAX);
+                const holiday = showHolidays ? holidayMap.get(toDateKey(day)) : undefined;
                 return (
                   <div
                     key={day.toISOString()}
@@ -1178,7 +1193,9 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
                       flexDirection: 'column',
                       gap: '2px',
                       minWidth: 0,
-                      backgroundColor: inMonth ? 'transparent' : (styles.isDark ? 'rgba(255,255,255,0.025)' : 'rgba(0,0,0,0.025)'),
+                      backgroundColor: holiday
+                        ? (styles.isDark ? 'rgba(234,179,8,0.08)' : 'rgba(234,179,8,0.07)')
+                        : inMonth ? 'transparent' : (styles.isDark ? 'rgba(255,255,255,0.025)' : 'rgba(0,0,0,0.025)'),
                     }}
                   >
                     <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '2px' }}>
@@ -1196,6 +1213,19 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
                         {day.getDate() === 1 ? `1 ${monthNames[day.getMonth()].slice(0, 3).toLowerCase()}.` : day.getDate()}
                       </button>
                     </div>
+                    {holiday && (
+                      <div
+                        title={holiday.name}
+                        style={{
+                          fontSize: '0.68rem', fontWeight: 700, color: 'hsl(42, 85%, 38%)',
+                          backgroundColor: 'hsl(42, 85%, 50%, 0.16)', borderRadius: '4px',
+                          padding: '1px 4px', overflow: 'hidden', textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap', textAlign: 'center',
+                        }}
+                      >
+                        🎉 {holiday.name}
+                      </div>
+                    )}
                     {shown.map(app => {
                       const dot = (statusBadgeColors[app.status] || { text: '#888' }).text;
                       const time = new Date(app.scheduled_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
