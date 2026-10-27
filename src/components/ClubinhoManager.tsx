@@ -211,6 +211,20 @@ export const ClubinhoManager: React.FC<Props> = ({ styles, currentUser }) => {
     }
   };
 
+  const setPaymentFlag = async (s: ClubinhoSubscription, flag: 'a_confirmar' | 'debito' | null) => {
+    setBusyId(s.id);
+    try {
+      await updateClubinho(s.id, { paymentFlag: flag });
+      const label = flag === 'debito' ? 'Vencido/Débito' : flag === 'a_confirmar' ? 'A confirmar' : 'Automático (por data)';
+      await logAction(currentUser.email || '', currentUser.name || 'Equipe', 'Marcação de pagamento do Clubinho', `Status de "${s.pet_name}" marcado como: ${label}.`);
+      load();
+    } catch (e: any) {
+      setErrorMsg(e.message || 'Erro ao marcar o status.');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   const statusPill = (s: ClubinhoSubscription) => {
     const st = getClubinhoStatus(s);
     const color = CLUBINHO_STATUS_COLOR[st];
@@ -401,7 +415,22 @@ export const ClubinhoManager: React.FC<Props> = ({ styles, currentUser }) => {
                     <td style={{ padding: '8px 10px', color: styles.textMain, whiteSpace: 'nowrap' }}>R$ {Number(s.price).toFixed(2)}</td>
                     <td style={{ padding: '8px 10px', color: styles.sidebarWidgetText?.color, whiteSpace: 'nowrap' }}>{Number(s.taxi_dog_fee) > 0 ? `R$ ${Number(s.taxi_dog_fee).toFixed(2)}` : '—'}</td>
                     <td style={{ padding: '8px 10px', color: styles.textMain, whiteSpace: 'nowrap' }}>{fmtDate(s.renews_at)}</td>
-                    <td style={{ padding: '8px 10px' }}>{statusPill(s)}</td>
+                    <td style={{ padding: '8px 10px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                        {statusPill(s)}
+                        <select
+                          value={s.payment_flag || ''}
+                          disabled={busyId === s.id}
+                          onChange={(e) => setPaymentFlag(s, (e.target.value || null) as 'a_confirmar' | 'debito' | null)}
+                          title="Marcar manualmente (confirmado pela equipe, vale mais que a data)"
+                          style={{ fontSize: '0.7rem', padding: '2px 4px', borderRadius: '5px', border: `1px solid ${styles.borderColor}`, backgroundColor: 'transparent', color: styles.sidebarWidgetText?.color, cursor: 'pointer' }}
+                        >
+                          <option value="">Automático (por data)</option>
+                          <option value="a_confirmar">Marcar: A confirmar</option>
+                          <option value="debito">Marcar: Vencido/Débito</option>
+                        </select>
+                      </div>
+                    </td>
                     <td style={{ padding: '6px 10px', textAlign: 'right' }}>
                       <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
                         <button type="button" disabled={busyId === s.id} onClick={() => openRenew(s)} title="Renovar" className="btn-action-icon"><RefreshCw size={14} /></button>

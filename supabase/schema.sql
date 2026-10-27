@@ -49,6 +49,9 @@ create table if not exists public.appointments (
   starts_at    timestamptz not null,
   duration_min integer not null default 60,
   notes        text not null default '',
+  -- Marca uma dívida/confirmação pendente num atendimento específico (avulso ou não), independente de o pet ser
+  -- assinante do Clubinho ou não. 'a_confirmar' | 'debito' | null (null = sem marcação, nada a destacar).
+  payment_flag text,
   created_by   text not null default '',
   created_at   timestamptz not null default now(),
   updated_at   timestamptz not null default now()

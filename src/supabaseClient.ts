@@ -172,6 +172,8 @@ export interface Appointment {
   tutor_name?: string;
   recurringEventId?: string | null;
   duration_min?: number;
+  /** Marcação real de pagamento (vinda dos calendários "Confirmar"/"Débitos" ou lançada à mão): vale mais que o status. */
+  payment_flag?: 'a_confirmar' | 'debito' | null;
 }
 
 export interface MockAppointment {

@@ -27,6 +27,10 @@ const statusBadgeColors: Record<string, { bg: string; text: string; border: stri
   'Cancelado': { bg: 'rgba(255, 99, 132, 0.08)', text: 'hsl(0, 75%, 55%)', border: 'rgba(255, 99, 132, 0.25)' },
 };
 
+// Marcação real de pagamento num atendimento (avulso ou não) — mesma convenção de cor do Clubinho.
+const PAYMENT_FLAG_COLOR: Record<string, string> = { a_confirmar: 'hsl(210, 85%, 50%)', debito: 'hsl(280, 65%, 50%)' };
+const PAYMENT_FLAG_LABEL: Record<string, string> = { a_confirmar: 'A confirmar', debito: 'Vencido/Débito' };
+
 const serviceIcons: Record<string, React.ReactNode> = {
   'Banho & Tosa': <PawPrint size={18} />,
   'Consulta Veterinária': <CalendarDays size={18} />,
@@ -670,6 +674,26 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
     await handleUpdateStatus(appointmentId, 'Cancelado');
   };
 
+  // Marca "a confirmar"/"débito"/sem marcação num atendimento (avulso ou não). Quando faz parte de uma série
+  // recorrente, vale pra série toda — é assim que esse tipo de marcação normalmente funciona na prática.
+  const handleSetPaymentFlag = async (app: Appointment, flag: 'a_confirmar' | 'debito' | null) => {
+    setIsLoading(true);
+    setErrorMsg(null);
+    try {
+      await updateAppointmentApi(app.id, { paymentFlag: flag }, app.recurringEventId ? 'series' : 'this');
+      const label = flag === 'debito' ? 'Vencido/Débito' : flag === 'a_confirmar' ? 'A confirmar' : 'Sem marcação';
+      await logAction(
+        currentUser.email || '', currentUser.name || 'Usuário', 'Marcação de pagamento',
+        `Atendimento de "${app.pet_name}"${app.recurringEventId ? ' (toda a série)' : ''} marcado como: ${label}.`
+      );
+      await fetchAppointments(true);
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Erro ao marcar o pagamento.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const runDelete = async (appointmentId: string, scope: AgendaScope) => {
     setIsLoading(true);
     setErrorMsg(null);
@@ -1285,18 +1309,21 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
                       </div>
                     )}
                     {shown.map(app => {
-                      // Se o pet é assinante do Clubinho, a bolinha mostra o status de pagamento da assinatura
-                      // (o que o proprietário realmente acompanha no dia a dia); senão, o status do agendamento.
+                      // Prioridade da bolinha: 1) marcação real no próprio atendimento (a mais específica e confiável);
+                      // 2) status da assinatura do Clubinho, se o pet for assinante; 3) status do agendamento, por último.
                       const clubSub = clubinhoByPet.get(app.pet_id);
                       const clubStatus = clubSub ? getClubinhoStatus(clubSub) : null;
-                      const dot = clubStatus ? CLUBINHO_STATUS_COLOR[clubStatus] : (statusBadgeColors[app.status] || { text: '#888' }).text;
+                      const dot = app.payment_flag ? PAYMENT_FLAG_COLOR[app.payment_flag]
+                        : clubStatus ? CLUBINHO_STATUS_COLOR[clubStatus]
+                        : (statusBadgeColors[app.status] || { text: '#888' }).text;
                       const time = new Date(app.scheduled_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+                      const paymentNote = app.payment_flag ? ` · ${PAYMENT_FLAG_LABEL[app.payment_flag]}` : clubStatus ? ` · Clubinho: ${CLUBINHO_STATUS_LABEL[clubStatus]}` : '';
                       return (
                         <button
                           key={app.id}
                           type="button"
                           onClick={(e) => { e.stopPropagation(); setSelectedCalendarApp(app); }}
-                          title={`${time} · ${app.service_type} · ${app.pet_name}${app.tutor_name ? ' - ' + app.tutor_name : ''} (${app.status})${clubStatus ? ` · Clubinho: ${CLUBINHO_STATUS_LABEL[clubStatus]}` : ''}`}
+                          title={`${time} · ${app.service_type} · ${app.pet_name}${app.tutor_name ? ' - ' + app.tutor_name : ''} (${app.status})${paymentNote}`}
                           style={{
                             display: 'flex', alignItems: 'center', gap: '5px', width: '100%', minWidth: 0, textAlign: 'left',
                             background: 'none', border: 'none', borderRadius: '4px', padding: '1px 4px', cursor: 'pointer',
@@ -1764,6 +1791,21 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
                 <div style={{ fontSize: '0.85rem', color: styles.sidebarWidgetText?.color }}>
                   Status: <strong style={{ color: (statusBadgeColors[selectedCalendarApp.status] || { text: styles.textMain }).text }}>{selectedCalendarApp.status}</strong>
                 </div>
+                {isStaffMode && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem', color: styles.sidebarWidgetText?.color }}>
+                    <span>Pagamento:</span>
+                    <select
+                      value={selectedCalendarApp.payment_flag || ''}
+                      onChange={(e) => handleSetPaymentFlag(selectedCalendarApp, (e.target.value || null) as 'a_confirmar' | 'debito' | null)}
+                      style={{ ...styles.formInput, width: 'auto', padding: '4px 8px', fontSize: '0.82rem' }}
+                      title={selectedCalendarApp.recurringEventId ? 'Vale para toda a série recorrente' : undefined}
+                    >
+                      <option value="">Sem marcação</option>
+                      <option value="a_confirmar">A confirmar</option>
+                      <option value="debito">Vencido/Débito</option>
+                    </select>
+                  </div>
+                )}
                 {selectedCalendarApp.notes && (
                   <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: `1px solid ${styles.borderColor}`, fontSize: '0.88rem', color: styles.textMuted, fontStyle: 'italic' }}>
                     "{selectedCalendarApp.notes}"

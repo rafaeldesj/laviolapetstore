@@ -13,6 +13,10 @@ create table if not exists public.clubinho_subscriptions (
   taxi_dog_fee  numeric(10,2) not null default 0,
   started_at    date not null,
   renews_at     date not null,              -- próxima data de renovação/pagamento
+  -- Quando preenchido ('a_confirmar' | 'debito'), vale mais que o cálculo por data: é informação real que a
+  -- equipe confirmou (ex.: trazida dos calendários "Confirmar"/"Débitos" do Google Agenda antigo). Null = deixa
+  -- o status seguir pela data de renovação normalmente.
+  payment_flag  text,
   is_active     boolean not null default true,
   created_by    text not null default '',
   created_at    timestamptz not null default now(),

@@ -161,10 +161,12 @@ const toAppt = (row) => ({
   start: row.starts_at,
   duration_min: row.duration_min,
   notes: row.notes,
+  payment_flag: row.payment_flag || null,
   created_at: row.created_at,
 });
 
 const APPT_STATUS = ['Agendado', 'Em Andamento', 'Concluído', 'Cancelado'];
+const PAYMENT_FLAGS = ['a_confirmar', 'debito'];
 
 const b64url = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 
@@ -835,6 +837,11 @@ export default {
           if (input.petName !== undefined) common.pet_name = String(input.petName).slice(0, 120);
           if (input.tutorName !== undefined) common.tutor_name = String(input.tutorName).slice(0, 120);
           if (isStaff && input.ownerId !== undefined) common.owner_id = String(input.ownerId);
+          // Marcar "a confirmar"/"débito" num atendimento é coisa da equipe (fica visível na bolinha da agenda).
+          if (isStaff && input.paymentFlag !== undefined) {
+            if (input.paymentFlag !== null && !PAYMENT_FLAGS.includes(input.paymentFlag)) return json({ mensagem: 'Marcação de pagamento inválida.' }, 400);
+            common.payment_flag = input.paymentFlag;
+          }
 
           if (input.start) {
             const start = new Date(input.start);
@@ -926,8 +933,9 @@ export default {
           const newRenewsAt = String(input.renewsAt || '');
           if (!newRenewsAt) return json({ mensagem: 'Informe a nova data de renovação.' }, 400);
 
+          // Renovar é a própria confirmação de pagamento: limpa qualquer marcação de "a confirmar"/"débito" anterior.
           const upd = await sb(env, `/clubinho_subscriptions?id=eq.${encodeURIComponent(id)}`, {
-            method: 'PATCH', body: JSON.stringify({ renews_at: newRenewsAt, is_active: true }),
+            method: 'PATCH', body: JSON.stringify({ renews_at: newRenewsAt, is_active: true, payment_flag: null }),
           });
           if (!upd.ok) return failC('Erro ao renovar a assinatura.', upd);
 
@@ -978,6 +986,10 @@ export default {
           if (input.tutorName !== undefined) fields.tutor_name = String(input.tutorName).slice(0, 150);
           if (input.renewsAt !== undefined) fields.renews_at = String(input.renewsAt);
           if (input.isActive !== undefined) fields.is_active = !!input.isActive;
+          if (input.paymentFlag !== undefined) {
+            if (input.paymentFlag !== null && !PAYMENT_FLAGS.includes(input.paymentFlag)) return json({ mensagem: 'Marcação de pagamento inválida.' }, 400);
+            fields.payment_flag = input.paymentFlag;
+          }
           if (Object.keys(fields).length === 0) return json({ mensagem: 'Nada para alterar.' }, 400);
           const r = await sb(env, `/clubinho_subscriptions?id=eq.${encodeURIComponent(one[1])}`, { method: 'PATCH', body: JSON.stringify(fields) });
           if (!r.ok) return failC('Erro ao salvar a assinatura.', r);

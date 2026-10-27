@@ -29,6 +29,7 @@ interface AgendaRow {
   start: string;
   duration_min: number;
   notes: string;
+  payment_flag: 'a_confirmar' | 'debito' | null;
   created_at: string;
 }
 
@@ -46,6 +47,7 @@ function toAppointment(r: AgendaRow): Appointment {
     tutor_name: r.tutor_name,
     recurringEventId: r.series_id, // série semanal (vazio = atendimento avulso)
     duration_min: r.duration_min,
+    payment_flag: r.payment_flag,
   };
 }
 
@@ -93,6 +95,8 @@ export interface AppointmentPatch {
   startISO?: string;
   petName?: string;
   tutorName?: string;
+  /** 'a_confirmar' | 'debito' | null (null = remove a marcação). Só a equipe pode mudar isso. */
+  paymentFlag?: 'a_confirmar' | 'debito' | null;
 }
 
 export async function updateAppointmentApi(id: string, patch: AppointmentPatch, scope: AgendaScope = 'this'): Promise<Appointment> {
@@ -106,6 +110,7 @@ export async function updateAppointmentApi(id: string, patch: AppointmentPatch, 
   if (patch.startISO !== undefined) data.start = patch.startISO;
   if (patch.petName !== undefined) data.petName = patch.petName;
   if (patch.tutorName !== undefined) data.tutorName = patch.tutorName;
+  if (patch.paymentFlag !== undefined) data.paymentFlag = patch.paymentFlag;
   const body = await workerCall<{ event: AgendaRow }>(`/agenda/events/${encodeURIComponent(id)}?scope=${scope}`, { method: 'PATCH', body: JSON.stringify(data) });
   return toAppointment(body.event);
 }

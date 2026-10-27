@@ -13,6 +13,9 @@ export interface ClubinhoSubscription {
   started_at: string; // YYYY-MM-DD
   renews_at: string; // YYYY-MM-DD
   is_active: boolean;
+  /** Quando preenchido, é informação REAL confirmada pela equipe (ex.: trazida do calendário antigo do Google)
+   *  e vale mais que o cálculo por data. 'a_confirmar' | 'debito' | null. */
+  payment_flag: 'a_confirmar' | 'debito' | null;
   created_by: string;
   created_at: string;
   updated_at: string;
@@ -23,8 +26,10 @@ export type ClubinhoStatus = 'em-dia' | 'a-confirmar' | 'vencido' | 'inativo';
 /** Quantos dias antes da renovação já vale avisar ("a confirmar"), em vez de esperar vencer de vez. */
 const REMINDER_WINDOW_DAYS = 5;
 
-export function getClubinhoStatus(sub: Pick<ClubinhoSubscription, 'renews_at' | 'is_active'>, today: Date = new Date()): ClubinhoStatus {
+export function getClubinhoStatus(sub: Pick<ClubinhoSubscription, 'renews_at' | 'is_active' | 'payment_flag'>, today: Date = new Date()): ClubinhoStatus {
   if (!sub.is_active) return 'inativo';
+  if (sub.payment_flag === 'debito') return 'vencido';
+  if (sub.payment_flag === 'a_confirmar') return 'a-confirmar';
   const renews = new Date(sub.renews_at + 'T00:00:00');
   const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
   const diffDays = Math.round((renews.getTime() - todayStart.getTime()) / 86400000);
@@ -43,19 +48,25 @@ export const CLUBINHO_STATUS_COLOR: Record<ClubinhoStatus, string> = {
 };
 
 /** Rótulo com a contagem de dias (ex.: "Vencido há 8 dias", "A confirmar (em 3 dias)") — usado na tabela de assinaturas. */
-export function describeClubinhoStatus(sub: Pick<ClubinhoSubscription, 'renews_at' | 'is_active'>, today: Date = new Date()): string {
+export function describeClubinhoStatus(sub: Pick<ClubinhoSubscription, 'renews_at' | 'is_active' | 'payment_flag'>, today: Date = new Date()): string {
   const status = getClubinhoStatus(sub, today);
   if (status === 'inativo') return 'Inativo';
   if (status === 'em-dia') return 'Em dia (pago)';
   const renews = new Date(sub.renews_at + 'T00:00:00');
   const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
   const diffDays = Math.round((renews.getTime() - todayStart.getTime()) / 86400000);
+  // Quando a marcação veio confirmada pela equipe (não é só o cálculo por data), deixa isso claro no rótulo.
+  const tag = sub.payment_flag ? ' (confirmado)' : '';
   if (status === 'vencido') {
-    const dias = Math.abs(diffDays);
-    return `Vencido há ${dias} ${dias === 1 ? 'dia' : 'dias'}`;
+    if (diffDays < 0) {
+      const dias = Math.abs(diffDays);
+      return `Vencido${tag} há ${dias} ${dias === 1 ? 'dia' : 'dias'}`;
+    }
+    return `Vencido${tag}`;
   }
-  if (diffDays === 0) return 'Vence hoje';
-  return `A confirmar (em ${diffDays} ${diffDays === 1 ? 'dia' : 'dias'})`;
+  if (diffDays > 0) return `A confirmar${tag} (em ${diffDays} ${diffDays === 1 ? 'dia' : 'dias'})`;
+  if (diffDays === 0) return `Vence hoje${tag}`;
+  return `A confirmar${tag}`;
 }
 
 export const CLUBINHO_STATUS_LABEL: Record<ClubinhoStatus, string> = {
@@ -92,6 +103,7 @@ export const createClubinho = async (input: NewClubinhoInput): Promise<ClubinhoS
 
 export const updateClubinho = async (id: string, patch: Partial<{
   planType: string; weekday: number | null; timeOfDay: string; price: number; taxiDogFee: number; tutorName: string; renewsAt: string; isActive: boolean;
+  paymentFlag: 'a_confirmar' | 'debito' | null;
 }>): Promise<ClubinhoSubscription> => {
   const { assinatura } = await workerCall<{ assinatura: ClubinhoSubscription }>(`/clubinho/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(patch) });
   return assinatura;
