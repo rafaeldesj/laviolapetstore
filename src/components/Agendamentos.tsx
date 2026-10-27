@@ -289,16 +289,28 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
   // Assinaturas do Clubinho (equipe): pra colorir a bolinha na visão de Mês pelo status de pagamento, em vez do
   // status do agendamento — é essa a informação que o proprietário realmente usa no dia a dia.
   const [clubinhoByPet, setClubinhoByPet] = useState<Map<string, ClubinhoSubscription>>(new Map());
+  // Agendamentos antigos (importados) não têm pet_id preenchido, só o nome — então o cruzamento com a
+  // assinatura cai pro nome quando o id não bate (mesma solução já usada no histórico do pet em Meus Pets).
+  const [clubinhoByName, setClubinhoByName] = useState<Map<string, ClubinhoSubscription>>(new Map());
   useEffect(() => {
     if (!isStaffMode) return;
     listClubinho()
       .then(list => {
-        const map = new Map<string, ClubinhoSubscription>();
-        for (const s of list) if (s.is_active) map.set(s.pet_id, s);
-        setClubinhoByPet(map);
+        const byId = new Map<string, ClubinhoSubscription>();
+        const byName = new Map<string, ClubinhoSubscription>();
+        for (const s of list) {
+          if (!s.is_active) continue;
+          if (s.pet_id) byId.set(s.pet_id, s);
+          byName.set(s.pet_name.trim().toLowerCase(), s);
+        }
+        setClubinhoByPet(byId);
+        setClubinhoByName(byName);
       })
       .catch(() => {});
   }, [isStaffMode, pageTab]);
+
+  const getClubinhoSub = (app: Appointment): ClubinhoSubscription | undefined =>
+    (app.pet_id && clubinhoByPet.get(app.pet_id)) || clubinhoByName.get(app.pet_name.trim().toLowerCase());
 
   const getAppointmentsForDay = (day: Date) =>
     appointments
@@ -1070,7 +1082,7 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
             <input type="checkbox" checked={wideView} onChange={(e) => setWideView(e.target.checked)} style={{ cursor: 'pointer' }} />
             Ver visão ampla
           </label>
-          {viewMode === 'month' && clubinhoByPet.size > 0 && (
+          {viewMode === 'month' && clubinhoByName.size > 0 && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.76rem', color: styles.sidebarWidgetText?.color }}>
               <span style={{ fontWeight: 600 }}>Bolinha do Clubinho:</span>
               {(['em-dia', 'a-confirmar', 'vencido'] as const).map(st => (
@@ -1130,7 +1142,7 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', margin: '8px 0 0 0' }}>
                     <div style={{ fontSize: '0.88rem', color: styles.textMain }}>
                       Pet: <strong>{app.pet_name}</strong>{' '}
-                      <span style={{ fontSize: '0.78rem', opacity: 0.75 }}>{visitProgressLabel(clubinhoByPet.get(app.pet_id), new Date(app.scheduled_at))}</span>
+                      <span style={{ fontSize: '0.78rem', opacity: 0.75 }}>{visitProgressLabel(getClubinhoSub(app), new Date(app.scheduled_at))}</span>
                     </div>
                     {isStaffMode && app.owner_id && (
                       <div style={{ fontSize: '0.8rem', color: styles.sidebarWidgetText?.color, display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -1312,7 +1324,7 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
                     {shown.map(app => {
                       // Prioridade da bolinha: 1) marcação real no próprio atendimento (a mais específica e confiável);
                       // 2) status da assinatura do Clubinho, se o pet for assinante; 3) status do agendamento, por último.
-                      const clubSub = clubinhoByPet.get(app.pet_id);
+                      const clubSub = getClubinhoSub(app);
                       const clubStatus = clubSub ? getClubinhoStatus(clubSub) : null;
                       const dot = app.payment_flag ? PAYMENT_FLAG_COLOR[app.payment_flag]
                         : clubStatus ? CLUBINHO_STATUS_COLOR[clubStatus]
@@ -1454,13 +1466,13 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
                                     transition: 'transform 0.15s ease',
                                     overflow: 'hidden'
                                   }}
-                                  title={`${app.service_type} - Pet: ${app.pet_name} · Banho ${visitProgressLabel(clubinhoByPet.get(app.pet_id), new Date(app.scheduled_at))}`}
+                                  title={`${app.service_type} - Pet: ${app.pet_name} · Banho ${visitProgressLabel(getClubinhoSub(app), new Date(app.scheduled_at))}`}
                                 >
                                   <span style={{ fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                     {new Date(app.scheduled_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} - {app.pet_name}
                                   </span>
                                   <span style={{ fontSize: '0.68rem', opacity: 0.9, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                    {app.service_type} · {visitProgressLabel(clubinhoByPet.get(app.pet_id), new Date(app.scheduled_at))}
+                                    {app.service_type} · {visitProgressLabel(getClubinhoSub(app), new Date(app.scheduled_at))}
                                   </span>
                                 </div>
                               );
@@ -1540,7 +1552,7 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
                           >
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
                               <span style={{ fontWeight: 700, fontSize: '0.9rem' }}>
-                                {app.pet_name} <span style={{ fontWeight: 500, fontSize: '0.75rem', opacity: 0.8 }}>{visitProgressLabel(clubinhoByPet.get(app.pet_id), new Date(app.scheduled_at))}</span>
+                                {app.pet_name} <span style={{ fontWeight: 500, fontSize: '0.75rem', opacity: 0.8 }}>{visitProgressLabel(getClubinhoSub(app), new Date(app.scheduled_at))}</span>
                               </span>
                               <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '2px 6px', borderRadius: '10px', backgroundColor: 'rgba(255,255,255,0.4)' }}>{app.status}</span>
                             </div>
