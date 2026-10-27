@@ -30,6 +30,8 @@ interface AgendaRow {
   duration_min: number;
   notes: string;
   payment_flag: 'a_confirmar' | 'debito' | null;
+  clubinho_cycle_position: number | null;
+  cancel_reason: 'aviso_previo' | 'sem_aviso' | null;
   created_at: string;
 }
 
@@ -48,6 +50,8 @@ function toAppointment(r: AgendaRow): Appointment {
     recurringEventId: r.series_id, // série semanal (vazio = atendimento avulso)
     duration_min: r.duration_min,
     payment_flag: r.payment_flag,
+    clubinho_cycle_position: r.clubinho_cycle_position,
+    cancel_reason: r.cancel_reason,
   };
 }
 
@@ -97,6 +101,8 @@ export interface AppointmentPatch {
   tutorName?: string;
   /** 'a_confirmar' | 'debito' | null (null = remove a marcação). Só a equipe pode mudar isso. */
   paymentFlag?: 'a_confirmar' | 'debito' | null;
+  /** Motivo do cancelamento ('aviso_previo' | 'sem_aviso'). Só a equipe pode registrar isso. */
+  cancelReason?: 'aviso_previo' | 'sem_aviso' | null;
 }
 
 export async function updateAppointmentApi(id: string, patch: AppointmentPatch, scope: AgendaScope = 'this'): Promise<Appointment> {
@@ -111,6 +117,7 @@ export async function updateAppointmentApi(id: string, patch: AppointmentPatch, 
   if (patch.petName !== undefined) data.petName = patch.petName;
   if (patch.tutorName !== undefined) data.tutorName = patch.tutorName;
   if (patch.paymentFlag !== undefined) data.paymentFlag = patch.paymentFlag;
+  if (patch.cancelReason !== undefined) data.cancelReason = patch.cancelReason;
   const body = await workerCall<{ event: AgendaRow }>(`/agenda/events/${encodeURIComponent(id)}?scope=${scope}`, { method: 'PATCH', body: JSON.stringify(data) });
   return toAppointment(body.event);
 }

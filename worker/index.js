@@ -162,11 +162,73 @@ const toAppt = (row) => ({
   duration_min: row.duration_min,
   notes: row.notes,
   payment_flag: row.payment_flag || null,
+  clubinho_cycle_position: row.clubinho_cycle_position ?? null,
+  cancel_reason: row.cancel_reason || null,
   created_at: row.created_at,
 });
 
 const APPT_STATUS = ['Agendado', 'Em Andamento', 'Concluído', 'Cancelado'];
 const PAYMENT_FLAGS = ['a_confirmar', 'debito'];
+const CANCEL_REASONS = ['aviso_previo', 'sem_aviso'];
+const CLUBINHO_CYCLE_VISITS = { semanal: 4, quinzenal: 2 };
+
+// Mesma lógica de comparação de nomes do navegador (src/utils/clubinhoService.ts normalizeNameForMatch/
+// tutorNamesMatch) — duplicada aqui porque o Worker não importa código do app. Qualquer ajuste numa precisa
+// ser espelhado na outra.
+function normalizeNameForMatch(s) {
+  return (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+}
+function levenshteinDistance(a, b) {
+  const dp = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
+  for (let j = 0; j <= b.length; j++) dp[0][j] = j;
+  for (let i = 1; i <= a.length; i++) {
+    for (let j = 1; j <= b.length; j++) {
+      dp[i][j] = a[i - 1] === b[j - 1] ? dp[i - 1][j - 1] : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
+    }
+  }
+  return dp[a.length][b.length];
+}
+function tutorNamesMatch(a, b) {
+  const na = normalizeNameForMatch(a);
+  const nb = normalizeNameForMatch(b);
+  if (!na || !nb) return false;
+  if (na === nb) return true;
+  if (na.includes(nb) || nb.includes(na)) return true;
+  const maxDist = Math.min(na.length, nb.length) >= 7 ? 2 : 1;
+  return levenshteinDistance(na, nb) <= maxDist;
+}
+
+/** Acha a assinatura do Clubinho de um agendamento (por pet_id, senão por nome+tutor) — mesma regra do navegador. */
+async function findClubinhoSubForAppt(env, apptRow) {
+  if (apptRow.pet_id) {
+    const r = await sb(env, `/clubinho_subscriptions?pet_id=eq.${encodeURIComponent(apptRow.pet_id)}&is_active=eq.true&select=*&limit=1`);
+    if (r.ok && r.body[0]) return r.body[0];
+  }
+  const nameKey = normalizeNameForMatch(apptRow.pet_name);
+  if (!nameKey) return null;
+  const all = await sb(env, '/clubinho_subscriptions?is_active=eq.true&select=*');
+  if (!all.ok) return null;
+  const candidates = all.body.filter((s) => normalizeNameForMatch(s.pet_name) === nameKey);
+  if (candidates.length === 0) return null;
+  const apptTutor = (apptRow.tutor_name || '').trim();
+  if (!apptTutor) return candidates.length === 1 ? candidates[0] : null;
+  return candidates.find((c) => tutorNamesMatch(apptTutor, c.tutor_name)) || null;
+}
+
+/** Posição (1..N) desta data dentro do ciclo da assinatura — mesma fórmula de src/utils/clubinhoService.ts. */
+function clubinhoCyclePosition(sub, dateISO) {
+  const total = CLUBINHO_CYCLE_VISITS[sub.plan_type];
+  if (!total) return null;
+  const intervalDays = sub.plan_type === 'quinzenal' ? 14 : 7;
+  const cycleLen = intervalDays * total;
+  const started = new Date(sub.started_at + 'T00:00:00');
+  const d = new Date(dateISO);
+  const dayStart = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const diffDays = Math.round((dayStart.getTime() - started.getTime()) / 86400000);
+  let mod = diffDays % cycleLen;
+  if (mod < 0) mod += cycleLen;
+  return Math.floor(mod / intervalDays) + 1;
+}
 
 const b64url = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 
@@ -851,11 +913,27 @@ export default {
               const sh = await sb(env, '/rpc/shift_series', { method: 'POST', body: JSON.stringify({ sid: row.series_id, delta_seconds: deltaSeconds }) });
               if (!sh.ok) return fail('Erro ao reagendar a série.', sh);
             } else {
+              // Reagendamento de uma única ocorrência do Clubinho (tutor avisou com antecedência, equipe move a
+              // data): trava o número "banho X de N" na posição de ANTES de mover, pra não "pular" número quando
+              // a nova data cai numa semana diferente do calendário. Só trava uma vez (não sobrescreve se já tinha).
+              if (row.clubinho_cycle_position == null) {
+                const sub = await findClubinhoSubForAppt(env, row);
+                if (sub) {
+                  const pos = clubinhoCyclePosition(sub, row.starts_at);
+                  if (pos != null) common.clubinho_cycle_position = pos;
+                }
+              }
               common.starts_at = start.toISOString();
             }
           }
-          // Situação (Em Andamento, Concluído...) vale só para o dia escolhido
-          const single = { ...(input.status !== undefined && APPT_STATUS.includes(input.status) ? { status: input.status } : {}) };
+          if (isStaff && input.cancelReason !== undefined && input.cancelReason !== null && !CANCEL_REASONS.includes(input.cancelReason)) {
+            return json({ mensagem: 'Motivo de cancelamento inválido.' }, 400);
+          }
+          // Situação (Em Andamento, Concluído...) e motivo de cancelamento valem só para o dia escolhido
+          const single = {
+            ...(input.status !== undefined && APPT_STATUS.includes(input.status) ? { status: input.status } : {}),
+            ...(isStaff && input.cancelReason !== undefined ? { cancel_reason: input.cancelReason } : {}),
+          };
 
           if (whole && Object.keys(common).length > 0) {
             const r = await sb(env, `/appointments?${where}`, { method: 'PATCH', body: JSON.stringify(common) });

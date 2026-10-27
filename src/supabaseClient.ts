@@ -174,6 +174,10 @@ export interface Appointment {
   duration_min?: number;
   /** Marcação real de pagamento (vinda dos calendários "Confirmar"/"Débitos" ou lançada à mão): vale mais que o status. */
   payment_flag?: 'a_confirmar' | 'debito' | null;
+  /** Número "banho X de N" travado no reagendamento (tutor avisou com antecedência) — vale mais que o cálculo por data. */
+  clubinho_cycle_position?: number | null;
+  /** Motivo do cancelamento, pra equipe acompanhar quem avisa com antecedência e quem não avisa. */
+  cancel_reason?: 'aviso_previo' | 'sem_aviso' | null;
 }
 
 export interface MockAppointment {

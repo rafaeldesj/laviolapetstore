@@ -52,6 +52,13 @@ create table if not exists public.appointments (
   -- Marca uma dívida/confirmação pendente num atendimento específico (avulso ou não), independente de o pet ser
   -- assinante do Clubinho ou não. 'a_confirmar' | 'debito' | null (null = sem marcação, nada a destacar).
   payment_flag text,
+  -- Trava o número "banho X de N" (ex.: 2/4) no momento em que a equipe reagenda um atendimento do Clubinho pra
+  -- outra data (tutor avisou com antecedência) — assim mover a data não muda o número, que passa a representar
+  -- "qual banho da sequência é este" em vez de "em qual semana do calendário a data cai". null = calcula pela data.
+  clubinho_cycle_position integer,
+  -- Motivo do cancelamento, pra equipe acompanhar quem avisa com antecedência e quem não avisa (fica sem reposição).
+  -- 'aviso_previo' | 'sem_aviso' | null (null = não informado, ex.: cancelamentos antigos ou feitos pelo cliente).
+  cancel_reason text,
   created_by   text not null default '',
   created_at   timestamptz not null default now(),
   updated_at   timestamptz not null default now()

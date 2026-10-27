@@ -99,7 +99,9 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
   }, [wideView, viewMode, errorMsg, fullView]);
   const [currentDate, setCurrentDate] = useState<Date>(new Date());
   const [selectedCalendarApp, setSelectedCalendarApp] = useState<Appointment | null>(null);
-  
+  // Agendamento aguardando a equipe escolher o motivo do cancelamento (avisou com antecedência x não avisou).
+  const [cancelTarget, setCancelTarget] = useState<Appointment | null>(null);
+
   const [profilesList, setProfilesList] = useState<any[]>([]);
   // Importar / exportar arquivo do Google Agenda (.ics)
   const [isImporting, setIsImporting] = useState<boolean>(false);
@@ -703,6 +705,30 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
     await handleUpdateStatus(appointmentId, 'Cancelado');
   };
 
+  // Cancelamento pela equipe, com o motivo (avisou com antecedência x não avisou) — pra proprietária acompanhar
+  // quem avisa direitinho e quem perde o banho da semana sem avisar.
+  const handleCancelWithReason = async (reason: 'aviso_previo' | 'sem_aviso') => {
+    const app = cancelTarget;
+    if (!app) return;
+    setIsLoading(true);
+    setErrorMsg(null);
+    try {
+      await updateAppointmentApi(app.id, { status: 'Cancelado', cancelReason: reason }, 'this');
+      const label = reason === 'aviso_previo' ? 'avisou com antecedência' : 'não avisou com antecedência';
+      await logAction(
+        currentUser.email || '', currentUser.name || 'Equipe', 'Cancelamento de Agendamento',
+        `Agendamento de "${app.service_type}" do pet "${app.pet_name}" foi cancelado (tutor ${label}).`
+      );
+      setCancelTarget(null);
+      setSelectedCalendarApp(null);
+      await fetchAppointments(true);
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Erro ao cancelar o agendamento.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   // Marca "a confirmar"/"débito"/sem marcação num atendimento (avulso ou não). Quando faz parte de uma série
   // recorrente, vale pra série toda — é assim que esse tipo de marcação normalmente funciona na prática.
   const handleSetPaymentFlag = async (app: Appointment, flag: 'a_confirmar' | 'debito' | null) => {
@@ -1159,7 +1185,7 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', margin: '8px 0 0 0' }}>
                     <div style={{ fontSize: '0.88rem', color: styles.textMain }}>
                       Pet: <strong>{app.pet_name}</strong>{' '}
-                      <span style={{ fontSize: '0.78rem', opacity: 0.75 }}>{visitProgressLabel(getClubinhoSub(app), new Date(app.scheduled_at))}</span>
+                      <span style={{ fontSize: '0.78rem', opacity: 0.75 }}>{visitProgressLabel(getClubinhoSub(app), new Date(app.scheduled_at), app.clubinho_cycle_position)}</span>
                     </div>
                     {isStaffMode && app.owner_id && (
                       <div style={{ fontSize: '0.8rem', color: styles.sidebarWidgetText?.color, display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -1227,7 +1253,7 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
                         )}
                         {(isPending || isInProgress) && (
                           <button
-                            onClick={() => handleUpdateStatus(app.id, 'Cancelado')}
+                            onClick={() => setCancelTarget(app)}
                             style={{
                               display: 'flex', alignItems: 'center', gap: '4px',
                               background: 'none', border: '1px solid hsl(0, 75%, 55%)', borderRadius: '6px',
@@ -1483,13 +1509,13 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
                                     transition: 'transform 0.15s ease',
                                     overflow: 'hidden'
                                   }}
-                                  title={`${app.service_type} - Pet: ${app.pet_name} · Banho ${visitProgressLabel(getClubinhoSub(app), new Date(app.scheduled_at))}`}
+                                  title={`${app.service_type} - Pet: ${app.pet_name} · Banho ${visitProgressLabel(getClubinhoSub(app), new Date(app.scheduled_at), app.clubinho_cycle_position)}`}
                                 >
                                   <span style={{ fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                     {new Date(app.scheduled_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} - {app.pet_name}
                                   </span>
                                   <span style={{ fontSize: '0.68rem', opacity: 0.9, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                    {app.service_type} · {visitProgressLabel(getClubinhoSub(app), new Date(app.scheduled_at))}
+                                    {app.service_type} · {visitProgressLabel(getClubinhoSub(app), new Date(app.scheduled_at), app.clubinho_cycle_position)}
                                   </span>
                                 </div>
                               );
@@ -1569,7 +1595,7 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
                           >
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
                               <span style={{ fontWeight: 700, fontSize: '0.9rem' }}>
-                                {app.pet_name} <span style={{ fontWeight: 500, fontSize: '0.75rem', opacity: 0.8 }}>{visitProgressLabel(getClubinhoSub(app), new Date(app.scheduled_at))}</span>
+                                {app.pet_name} <span style={{ fontWeight: 500, fontSize: '0.75rem', opacity: 0.8 }}>{visitProgressLabel(getClubinhoSub(app), new Date(app.scheduled_at), app.clubinho_cycle_position)}</span>
                               </span>
                               <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '2px 6px', borderRadius: '10px', backgroundColor: 'rgba(255,255,255,0.4)' }}>{app.status}</span>
                             </div>
@@ -1824,6 +1850,11 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
                 </div>
                 <div style={{ fontSize: '0.85rem', color: styles.sidebarWidgetText?.color }}>
                   Status: <strong style={{ color: (statusBadgeColors[selectedCalendarApp.status] || { text: styles.textMain }).text }}>{selectedCalendarApp.status}</strong>
+                  {selectedCalendarApp.status === 'Cancelado' && selectedCalendarApp.cancel_reason && (
+                    <span style={{ opacity: 0.8 }}>
+                      {' '}— {selectedCalendarApp.cancel_reason === 'aviso_previo' ? 'tutor avisou com antecedência' : 'tutor não avisou (sem reposição)'}
+                    </span>
+                  )}
                 </div>
                 {isStaffMode && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem', color: styles.sidebarWidgetText?.color }}>
@@ -1881,10 +1912,7 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
                     )}
                     {(selectedCalendarApp.status === 'Agendado' || selectedCalendarApp.status === 'Em Andamento') && (
                       <button
-                        onClick={async () => {
-                          await handleUpdateStatus(selectedCalendarApp.id, 'Cancelado');
-                          setSelectedCalendarApp(null);
-                        }}
+                        onClick={() => setCancelTarget(selectedCalendarApp)}
                         style={{ ...styles.btnAcc(false), border: '1px solid hsl(0, 75%, 55%)', color: 'hsl(0, 75%, 55%)' }}
                       >
                         <X size={14} /> Cancelar
@@ -1920,6 +1948,38 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
                   Fechar
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Motivo do cancelamento (avisou com antecedência x não avisou) */}
+      {cancelTarget && (
+        <div style={styles.modalOverlay}>
+          <div style={{ ...styles.modalContent, maxWidth: '420px' }} role="dialog" aria-modal="true" aria-labelledby="cancel-reason-title">
+            <div style={styles.modalHeader}>
+              <h2 id="cancel-reason-title" style={styles.modalTitle}>Cancelar agendamento</h2>
+              <button onClick={() => setCancelTarget(null)} style={styles.modalCloseBtn(false)} aria-label="Fechar">✕</button>
+            </div>
+            <p style={{ fontSize: '0.9rem', color: styles.textMain, marginTop: '6px' }}>
+              Pet <strong>{cancelTarget.pet_name}</strong> — o tutor avisou com antecedência que não poderia levar/receber o pet?
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '14px' }}>
+              <button
+                onClick={() => handleCancelWithReason('aviso_previo')}
+                style={{ ...styles.formSubmitBtn(false), margin: 0 }}
+              >
+                Sim, avisou — reagendar sem custo depois
+              </button>
+              <button
+                onClick={() => handleCancelWithReason('sem_aviso')}
+                style={{ ...styles.btnAcc(false), border: '1px solid hsl(0, 75%, 55%)', color: 'hsl(0, 75%, 55%)' }}
+              >
+                Não avisou — perde o banho desta semana
+              </button>
+              <button onClick={() => setCancelTarget(null)} style={styles.btnAcc(false)}>
+                Voltar
+              </button>
             </div>
           </div>
         </div>

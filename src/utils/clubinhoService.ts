@@ -121,10 +121,16 @@ export const WEEKDAY_LABELS = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta
  */
 const CYCLE_VISITS: Record<'semanal' | 'quinzenal', number> = { semanal: 4, quinzenal: 2 };
 
-export function visitProgressLabel(sub: Pick<ClubinhoSubscription, 'started_at' | 'plan_type'> | null | undefined, date: Date): string {
+/**
+ * `lockedPosition`: quando o atendimento já foi reagendado uma vez (tutor avisou com antecedência), o Worker
+ * trava o número de antes de mover a data — aqui só exibimos esse valor travado em vez de recalcular pela nova
+ * data, senão o reagendamento faria o número "pular" de novo (o mesmo problema que motivou a trava).
+ */
+export function visitProgressLabel(sub: Pick<ClubinhoSubscription, 'started_at' | 'plan_type'> | null | undefined, date: Date, lockedPosition?: number | null): string {
   if (!sub) return '(1/1)';
-  const intervalDays = sub.plan_type === 'quinzenal' ? 14 : 7;
   const total = CYCLE_VISITS[sub.plan_type];
+  if (lockedPosition != null) return `(${lockedPosition}/${total})`;
+  const intervalDays = sub.plan_type === 'quinzenal' ? 14 : 7;
   const cycleLen = intervalDays * total;
   const started = new Date(sub.started_at + 'T00:00:00');
   const dayStart = new Date(date.getFullYear(), date.getMonth(), date.getDate());
