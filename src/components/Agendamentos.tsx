@@ -11,7 +11,7 @@ import type { AgendaScope } from '../utils/agendaService';
 import { listPets } from '../utils/petsService';
 import { buildHolidayMap, toDateKey } from '../utils/holidays';
 import { ClubinhoManager } from './ClubinhoManager';
-import { listClubinho, getClubinhoStatus, CLUBINHO_STATUS_COLOR, CLUBINHO_STATUS_LABEL } from '../utils/clubinhoService';
+import { listClubinho, getClubinhoStatus, visitProgressLabel, CLUBINHO_STATUS_COLOR, CLUBINHO_STATUS_LABEL } from '../utils/clubinhoService';
 import type { ClubinhoSubscription } from '../utils/clubinhoService';
 
 interface AgendamentosProps {
@@ -1129,7 +1129,8 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', margin: '8px 0 0 0' }}>
                     <div style={{ fontSize: '0.88rem', color: styles.textMain }}>
-                      Pet: <strong>{app.pet_name}</strong>
+                      Pet: <strong>{app.pet_name}</strong>{' '}
+                      <span style={{ fontSize: '0.78rem', opacity: 0.75 }}>{visitProgressLabel(clubinhoByPet.get(app.pet_id), new Date(app.scheduled_at))}</span>
                     </div>
                     {isStaffMode && app.owner_id && (
                       <div style={{ fontSize: '0.8rem', color: styles.sidebarWidgetText?.color, display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -1318,12 +1319,13 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
                         : (statusBadgeColors[app.status] || { text: '#888' }).text;
                       const time = new Date(app.scheduled_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
                       const paymentNote = app.payment_flag ? ` · ${PAYMENT_FLAG_LABEL[app.payment_flag]}` : clubStatus ? ` · Clubinho: ${CLUBINHO_STATUS_LABEL[clubStatus]}` : '';
+                      const visitLabel = visitProgressLabel(clubSub, new Date(app.scheduled_at));
                       return (
                         <button
                           key={app.id}
                           type="button"
                           onClick={(e) => { e.stopPropagation(); setSelectedCalendarApp(app); }}
-                          title={`${time} · ${app.service_type} · ${app.pet_name}${app.tutor_name ? ' - ' + app.tutor_name : ''} (${app.status})${paymentNote}`}
+                          title={`${time} · ${app.service_type} · ${app.pet_name}${app.tutor_name ? ' - ' + app.tutor_name : ''} (${app.status})${paymentNote} · Banho ${visitLabel}`}
                           style={{
                             display: 'flex', alignItems: 'center', gap: '5px', width: '100%', minWidth: 0, textAlign: 'left',
                             background: 'none', border: 'none', borderRadius: '4px', padding: '1px 4px', cursor: 'pointer',
@@ -1334,7 +1336,8 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
                         >
                           <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: dot, flexShrink: 0 }} />
                           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            <strong style={{ fontWeight: 600 }}>{time}</strong> {app.pet_name}{app.tutor_name ? ` - ${app.tutor_name}` : ''}
+                            <strong style={{ fontWeight: 600 }}>{time}</strong> {app.pet_name}{app.tutor_name ? ` - ${app.tutor_name}` : ''}{' '}
+                            <span style={{ opacity: 0.75, fontSize: '0.7rem' }}>{visitLabel}</span>
                           </span>
                         </button>
                       );
@@ -1451,13 +1454,13 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
                                     transition: 'transform 0.15s ease',
                                     overflow: 'hidden'
                                   }}
-                                  title={`${app.service_type} - Pet: ${app.pet_name}`}
+                                  title={`${app.service_type} - Pet: ${app.pet_name} · Banho ${visitProgressLabel(clubinhoByPet.get(app.pet_id), new Date(app.scheduled_at))}`}
                                 >
                                   <span style={{ fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                     {new Date(app.scheduled_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} - {app.pet_name}
                                   </span>
                                   <span style={{ fontSize: '0.68rem', opacity: 0.9, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                    {app.service_type}
+                                    {app.service_type} · {visitProgressLabel(clubinhoByPet.get(app.pet_id), new Date(app.scheduled_at))}
                                   </span>
                                 </div>
                               );
@@ -1536,7 +1539,9 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
                             }}
                           >
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
-                              <span style={{ fontWeight: 700, fontSize: '0.9rem' }}>{app.pet_name}</span>
+                              <span style={{ fontWeight: 700, fontSize: '0.9rem' }}>
+                                {app.pet_name} <span style={{ fontWeight: 500, fontSize: '0.75rem', opacity: 0.8 }}>{visitProgressLabel(clubinhoByPet.get(app.pet_id), new Date(app.scheduled_at))}</span>
+                              </span>
                               <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '2px 6px', borderRadius: '10px', backgroundColor: 'rgba(255,255,255,0.4)' }}>{app.status}</span>
                             </div>
                             <span style={{ fontSize: '0.8rem', fontWeight: 500, marginTop: '3px' }}>{app.service_type}</span>

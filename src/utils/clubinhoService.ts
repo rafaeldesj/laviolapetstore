@@ -78,6 +78,25 @@ export const CLUBINHO_STATUS_LABEL: Record<ClubinhoStatus, string> = {
 
 export const WEEKDAY_LABELS = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
 
+/**
+ * "Banho X de N do ciclo atual" — pra quem opera o caixa/balcão não precisar voltar semana por semana contando.
+ * N vem do próprio ciclo da assinatura (dias entre início e renovação, dividido pelo intervalo do plano — 7 dias
+ * semanal, 14 quinzenal), não é um número fixo: um ciclo de 5 semanas mostra até (5/5), não trava em (4/4).
+ * Sem assinatura (atendimento avulso) ou fora do ciclo conhecido, fica sempre (1/1).
+ */
+export function visitProgressLabel(sub: Pick<ClubinhoSubscription, 'started_at' | 'renews_at' | 'plan_type'> | null | undefined, date: Date): string {
+  if (!sub) return '(1/1)';
+  const intervalDays = sub.plan_type === 'quinzenal' ? 14 : 7;
+  const started = new Date(sub.started_at + 'T00:00:00');
+  const renews = new Date(sub.renews_at + 'T00:00:00');
+  const cycleDays = Math.round((renews.getTime() - started.getTime()) / 86400000);
+  const total = Math.max(1, Math.round(cycleDays / intervalDays));
+  const dayStart = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const diffDays = Math.round((dayStart.getTime() - started.getTime()) / 86400000);
+  const current = Math.min(Math.max(Math.floor(diffDays / intervalDays) + 1, 1), total);
+  return `(${current}/${total})`;
+}
+
 export const listClubinho = async (): Promise<ClubinhoSubscription[]> => {
   const { assinaturas } = await workerCall<{ assinaturas: ClubinhoSubscription[] }>('/clubinho');
   return assinaturas;

@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { PlusCircle, RefreshCw, Edit3, Ban, X, Save, AlertTriangle, Search, ArrowUpDown } from 'lucide-react';
 import {
   listClubinho, createClubinho, updateClubinho, renewClubinho, cancelClubinho,
-  getClubinhoStatus, describeClubinhoStatus, CLUBINHO_STATUS_COLOR, WEEKDAY_LABELS,
+  getClubinhoStatus, describeClubinhoStatus, visitProgressLabel, CLUBINHO_STATUS_COLOR, WEEKDAY_LABELS,
 } from '../utils/clubinhoService';
 import type { ClubinhoSubscription, ClubinhoStatus } from '../utils/clubinhoService';
 import { listPets } from '../utils/petsService';
@@ -409,7 +409,9 @@ export const ClubinhoManager: React.FC<Props> = ({ styles, currentUser }) => {
                 {visibleSubs.map((s, idx) => (
                   <tr key={s.id} style={{ borderTop: `1px solid ${styles.borderColor}` }}>
                     <td style={{ padding: '8px 10px', color: styles.sidebarWidgetText?.color }}>{idx + 1}</td>
-                    <td style={{ padding: '8px 10px', fontWeight: 700, color: styles.textMain }}>{s.pet_name}</td>
+                    <td style={{ padding: '8px 10px', fontWeight: 700, color: styles.textMain, whiteSpace: 'nowrap' }}>
+                      {s.pet_name} <span style={{ fontWeight: 500, fontSize: '0.78rem', color: styles.sidebarWidgetText?.color }}>{visitProgressLabel(s, new Date())}</span>
+                    </td>
                     <td style={{ padding: '8px 10px', color: styles.sidebarWidgetText?.color }}>{s.tutor_name || '—'}</td>
                     <td style={{ padding: '8px 10px', color: styles.textMain, textTransform: 'capitalize' }}>{s.plan_type}</td>
                     <td style={{ padding: '8px 10px', color: styles.textMain, whiteSpace: 'nowrap' }}>{s.weekday !== null ? `${WEEKDAY_LABELS[s.weekday]} ${s.time_of_day}` : '—'}</td>
