@@ -91,10 +91,16 @@ export function visitProgressLabel(sub: Pick<ClubinhoSubscription, 'started_at' 
   if (!sub) return '(1/1)';
   const intervalDays = sub.plan_type === 'quinzenal' ? 14 : 7;
   const total = CYCLE_VISITS[sub.plan_type];
+  const cycleLen = intervalDays * total;
   const started = new Date(sub.started_at + 'T00:00:00');
   const dayStart = new Date(date.getFullYear(), date.getMonth(), date.getDate());
   const diffDays = Math.round((dayStart.getTime() - started.getTime()) / 86400000);
-  const current = Math.min(Math.max(Math.floor(diffDays / intervalDays) + 1, 1), total);
+  // Ciclo se repete infinitamente pra frente E pra trás a partir da data de início: datas antigas (de antes
+  // do cadastro da assinatura, recuperadas da agenda histórica) também precisam cair na posição certa do
+  // ciclo, não travar em 1 só porque são anteriores ao "started_at" registrado hoje.
+  let mod = diffDays % cycleLen;
+  if (mod < 0) mod += cycleLen;
+  const current = Math.floor(mod / intervalDays) + 1;
   return `(${current}/${total})`;
 }
 
