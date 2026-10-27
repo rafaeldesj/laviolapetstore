@@ -761,6 +761,8 @@ export default {
           const petName = String(input.petName || '').trim().slice(0, 120);
           if (!petName || isNaN(start.getTime())) return json({ mensagem: 'Informe o pet, a data e a hora.' }, 400);
           const count = Math.min(Math.max(Math.floor(Number(input.repeatCount) || 1), 1), 104);
+          // Intervalo entre repetições em dias (7 = toda semana, o padrão de sempre; 14 = quinzenal, usado pelo Clubinho).
+          const intervalDays = Math.min(Math.max(Math.floor(Number(input.repeatIntervalDays) || 7), 1), 90);
           const seriesId = count > 1 ? crypto.randomUUID() : null;
           const rows = Array.from({ length: count }, (_, i) => ({
             series_id: seriesId,
@@ -770,7 +772,7 @@ export default {
             owner_id: isStaff ? String(input.ownerId || '') : user.sub, // cliente só agenda para si mesmo
             service_type: String(input.serviceType || 'Banho & Tosa').slice(0, 60),
             status: 'Agendado',
-            starts_at: new Date(start.getTime() + i * 7 * 86400000).toISOString(), // o Brasil não tem horário de verão
+            starts_at: new Date(start.getTime() + i * intervalDays * 86400000).toISOString(), // o Brasil não tem horário de verão
             duration_min: Math.min(Math.max(Math.floor(Number(input.durationMin) || 60), 5), 1440),
             notes: String(input.notes || '').slice(0, 4000),
             created_by: user.sub,
@@ -859,6 +861,133 @@ export default {
           }
           const after = await sb(env, `/appointments?id=eq.${id}&select=*`);
           return after.ok && after.body[0] ? json({ event: toAppt(after.body[0]) }) : fail('Erro ao ler o agendamento.', after);
+        }
+
+        return json({ mensagem: 'Rota não encontrada.' }, 404);
+      }
+
+      // ---- Clubinho (assinaturas recorrentes de banho e tosa) ----
+      // Só a equipe cadastra/edita/renova. O cliente (quando o pet dele já estiver vinculado à conta) só pode VER
+      // a própria assinatura — nunca criar ou renovar pelo próprio login.
+      if (dbRoute === '/clubinho' || dbRoute.startsWith('/clubinho/')) {
+        if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE) return json({ mensagem: 'Banco de dados não configurado.' }, 503);
+        const failC = (mensagem, r) => json({ mensagem, detalhe: typeof r?.body === 'object' ? r.body?.message : undefined }, 502);
+        const PLAN_TYPES = ['semanal', 'quinzenal'];
+
+        if (request.method === 'GET' && dbRoute === '/clubinho') {
+          if (isStaff) {
+            const r = await sb(env, '/clubinho_subscriptions?select=*&order=renews_at.asc');
+            return r.ok ? json({ assinaturas: r.body }) : failC('Erro ao listar as assinaturas.', r);
+          }
+          // Cliente: só as assinaturas dos pets que são dele.
+          const myPets = await sb(env, `/pets?owner_id=eq.${encodeURIComponent(user.sub)}&select=id`);
+          if (!myPets.ok) return failC('Erro ao buscar seus pets.', myPets);
+          const ids = myPets.body.map((p) => p.id);
+          if (ids.length === 0) return json({ assinaturas: [] });
+          const filter = ids.map((id) => encodeURIComponent(id)).join(',');
+          const r = await sb(env, `/clubinho_subscriptions?select=*&pet_id=in.(${filter})&order=renews_at.asc`);
+          return r.ok ? json({ assinaturas: r.body }) : failC('Erro ao listar suas assinaturas.', r);
+        }
+
+        if (!isStaff) return json({ mensagem: 'Acesso negado.' }, 403);
+
+        if (request.method === 'POST' && dbRoute === '/clubinho') {
+          const input = await request.json();
+          const petId = String(input.petId || '').trim();
+          const petName = String(input.petName || '').trim().slice(0, 150);
+          const startedAt = String(input.startedAt || '');
+          const renewsAt = String(input.renewsAt || '');
+          if (!petId || !petName || !startedAt || !renewsAt) return json({ mensagem: 'Informe o pet, a data de início e a de renovação.' }, 400);
+          const fields = {
+            pet_id: petId,
+            pet_name: petName,
+            tutor_name: String(input.tutorName || '').slice(0, 150),
+            plan_type: PLAN_TYPES.includes(input.planType) ? input.planType : 'semanal',
+            weekday: Number.isInteger(input.weekday) ? Math.min(Math.max(input.weekday, 0), 6) : null,
+            time_of_day: String(input.timeOfDay || '').slice(0, 5),
+            price: Math.max(0, Number(input.price) || 0),
+            taxi_dog_fee: Math.max(0, Number(input.taxiDogFee) || 0),
+            started_at: startedAt,
+            renews_at: renewsAt,
+            created_by: user.sub,
+          };
+          const r = await sb(env, '/clubinho_subscriptions', { method: 'POST', body: JSON.stringify(fields) });
+          return r.ok ? json({ assinatura: r.body[0] }, 201) : failC('Erro ao cadastrar a assinatura.', r);
+        }
+
+        const renewMatch = /^\/clubinho\/([\w-]+)\/renovar$/.exec(dbRoute);
+        if (request.method === 'POST' && renewMatch) {
+          const id = renewMatch[1];
+          const cur = await sb(env, `/clubinho_subscriptions?id=eq.${encodeURIComponent(id)}&select=*`);
+          if (!cur.ok) return failC('Erro ao buscar a assinatura.', cur);
+          const sub = cur.body[0];
+          if (!sub) return json({ mensagem: 'Assinatura não encontrada.' }, 404);
+          const input = await request.json();
+          const newRenewsAt = String(input.renewsAt || '');
+          if (!newRenewsAt) return json({ mensagem: 'Informe a nova data de renovação.' }, 400);
+
+          const upd = await sb(env, `/clubinho_subscriptions?id=eq.${encodeURIComponent(id)}`, {
+            method: 'PATCH', body: JSON.stringify({ renews_at: newRenewsAt, is_active: true }),
+          });
+          if (!upd.ok) return failC('Erro ao renovar a assinatura.', upd);
+
+          let created = 0;
+          if (input.createAppointments !== false && sub.weekday !== null && sub.time_of_day) {
+            const intervalDays = sub.plan_type === 'quinzenal' ? 14 : 7;
+            // Primeira ocorrência: a próxima data (a partir de amanhã) que cai no dia da semana certo.
+            const [hh, mm] = sub.time_of_day.split(':').map((n) => parseInt(n, 10) || 0);
+            const today = new Date();
+            let first = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1, hh, mm);
+            while (first.getDay() !== sub.weekday) first = new Date(first.getTime() + 86400000);
+            const end = new Date(newRenewsAt + 'T23:59:59');
+            const rows = [];
+            const seriesId = crypto.randomUUID();
+            for (let d = first; d <= end; d = new Date(d.getTime() + intervalDays * 86400000)) {
+              rows.push({
+                series_id: seriesId,
+                pet_id: sub.pet_id,
+                pet_name: sub.pet_name,
+                tutor_name: sub.tutor_name,
+                owner_id: '',
+                service_type: 'Banho & Tosa',
+                status: 'Agendado',
+                starts_at: d.toISOString(),
+                duration_min: 60,
+                notes: 'Gerado automaticamente pela renovação do Clubinho.',
+                created_by: user.sub,
+              });
+            }
+            if (rows.length > 0) {
+              const r = await sb(env, '/appointments', { method: 'POST', body: JSON.stringify(rows), headers: { Prefer: 'return=minimal' } });
+              if (r.ok) created = rows.length;
+            }
+          }
+          const after = await sb(env, `/clubinho_subscriptions?id=eq.${encodeURIComponent(id)}&select=*`);
+          return json({ assinatura: after.body?.[0] || null, agendamentos_criados: created });
+        }
+
+        const one = /^\/clubinho\/([\w-]+)$/.exec(dbRoute);
+        if (one && request.method === 'PATCH') {
+          const input = await request.json();
+          const fields = {};
+          if (input.planType !== undefined) fields.plan_type = PLAN_TYPES.includes(input.planType) ? input.planType : 'semanal';
+          if (input.weekday !== undefined) fields.weekday = Number.isInteger(input.weekday) ? Math.min(Math.max(input.weekday, 0), 6) : null;
+          if (input.timeOfDay !== undefined) fields.time_of_day = String(input.timeOfDay).slice(0, 5);
+          if (input.price !== undefined) fields.price = Math.max(0, Number(input.price) || 0);
+          if (input.taxiDogFee !== undefined) fields.taxi_dog_fee = Math.max(0, Number(input.taxiDogFee) || 0);
+          if (input.tutorName !== undefined) fields.tutor_name = String(input.tutorName).slice(0, 150);
+          if (input.renewsAt !== undefined) fields.renews_at = String(input.renewsAt);
+          if (input.isActive !== undefined) fields.is_active = !!input.isActive;
+          if (Object.keys(fields).length === 0) return json({ mensagem: 'Nada para alterar.' }, 400);
+          const r = await sb(env, `/clubinho_subscriptions?id=eq.${encodeURIComponent(one[1])}`, { method: 'PATCH', body: JSON.stringify(fields) });
+          if (!r.ok) return failC('Erro ao salvar a assinatura.', r);
+          return r.body.length ? json({ assinatura: r.body[0] }) : json({ mensagem: 'Assinatura não encontrada.' }, 404);
+        }
+
+        if (one && request.method === 'DELETE') {
+          // Não apaga o histórico: só marca como inativa (cliente cancelou o Clubinho).
+          const r = await sb(env, `/clubinho_subscriptions?id=eq.${encodeURIComponent(one[1])}`, { method: 'PATCH', body: JSON.stringify({ is_active: false }) });
+          return r.ok ? json({ ok: true }) : failC('Erro ao cancelar a assinatura.', r);
         }
 
         return json({ mensagem: 'Rota não encontrada.' }, 404);

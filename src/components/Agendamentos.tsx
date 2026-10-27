@@ -10,6 +10,9 @@ import { parseIcs } from '../utils/icsParse';
 import type { AgendaScope } from '../utils/agendaService';
 import { listPets } from '../utils/petsService';
 import { buildHolidayMap, toDateKey } from '../utils/holidays';
+import { ClubinhoManager } from './ClubinhoManager';
+import { listClubinho, getClubinhoStatus, CLUBINHO_STATUS_COLOR, CLUBINHO_STATUS_LABEL } from '../utils/clubinhoService';
+import type { ClubinhoSubscription } from '../utils/clubinhoService';
 
 interface AgendamentosProps {
   currentUser: AuthUser;
@@ -83,6 +86,7 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
   const toggleDay = (key: string) => setExpandedDays(prev => { const n = new Set(prev); if (n.has(key)) n.delete(key); else n.add(key); return n; });
   const [viewMode, setViewMode] = useState<'list' | 'week' | 'day' | 'month'>('list');
+  const [pageTab, setPageTab] = useState<'agenda' | 'clubinho'>('agenda');
   useLayoutEffect(() => {
     if (!wideView) return;
     measureWide();
@@ -277,6 +281,20 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
 
   const handlePrevMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
   const handleNextMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
+
+  // Assinaturas do Clubinho (equipe): pra colorir a bolinha na visão de Mês pelo status de pagamento, em vez do
+  // status do agendamento — é essa a informação que o proprietário realmente usa no dia a dia.
+  const [clubinhoByPet, setClubinhoByPet] = useState<Map<string, ClubinhoSubscription>>(new Map());
+  useEffect(() => {
+    if (!isStaffMode) return;
+    listClubinho()
+      .then(list => {
+        const map = new Map<string, ClubinhoSubscription>();
+        for (const s of list) if (s.is_active) map.set(s.pet_id, s);
+        setClubinhoByPet(map);
+      })
+      .catch(() => {});
+  }, [isStaffMode, pageTab]);
 
   const getAppointmentsForDay = (day: Date) =>
     appointments
@@ -759,6 +777,7 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
           )}
         </div>
 
+        {pageTab === 'agenda' && (
         <div style={{ display: 'flex', gap: '10px' }}>
           {isStaffMode && (
             <button
@@ -789,8 +808,36 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
             <PlusCircle size={16} /> Agendar Serviço
           </button>
         </div>
+        )}
       </div>
 
+      {isStaffMode && (
+        <div role="tablist" aria-label="Agenda ou Clubinho" style={{ display: 'inline-flex', border: `1px solid ${styles.borderColor}`, borderRadius: '8px', overflow: 'hidden', marginTop: '16px' }}>
+          {([['agenda', 'Agenda'], ['clubinho', 'Assinaturas do Clubinho']] as const).map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              role="tab"
+              aria-selected={pageTab === key}
+              onClick={() => setPageTab(key)}
+              style={{
+                padding: '8px 16px', border: 'none', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 700,
+                backgroundColor: pageTab === key ? styles.primary : 'transparent',
+                color: pageTab === key ? '#fff' : styles.textMain,
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {pageTab === 'clubinho' ? (
+        <div style={{ marginTop: '20px' }}>
+          <ClubinhoManager styles={styles} currentUser={currentUser} />
+        </div>
+      ) : (
+      <>
       <style>{`
         .calendar-slot-cell:hover {
           background-color: rgba(54, 162, 235, 0.05) !important;
@@ -999,6 +1046,17 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
             <input type="checkbox" checked={wideView} onChange={(e) => setWideView(e.target.checked)} style={{ cursor: 'pointer' }} />
             Ver visão ampla
           </label>
+          {viewMode === 'month' && clubinhoByPet.size > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.76rem', color: styles.sidebarWidgetText?.color }}>
+              <span style={{ fontWeight: 600 }}>Bolinha do Clubinho:</span>
+              {(['em-dia', 'a-confirmar', 'vencido'] as const).map(st => (
+                <span key={st} style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                  <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: CLUBINHO_STATUS_COLOR[st] }} />
+                  {CLUBINHO_STATUS_LABEL[st]}
+                </span>
+              ))}
+            </div>
+          )}
           </div>
         )}
       </div>
@@ -1227,14 +1285,18 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
                       </div>
                     )}
                     {shown.map(app => {
-                      const dot = (statusBadgeColors[app.status] || { text: '#888' }).text;
+                      // Se o pet é assinante do Clubinho, a bolinha mostra o status de pagamento da assinatura
+                      // (o que o proprietário realmente acompanha no dia a dia); senão, o status do agendamento.
+                      const clubSub = clubinhoByPet.get(app.pet_id);
+                      const clubStatus = clubSub ? getClubinhoStatus(clubSub) : null;
+                      const dot = clubStatus ? CLUBINHO_STATUS_COLOR[clubStatus] : (statusBadgeColors[app.status] || { text: '#888' }).text;
                       const time = new Date(app.scheduled_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
                       return (
                         <button
                           key={app.id}
                           type="button"
                           onClick={(e) => { e.stopPropagation(); setSelectedCalendarApp(app); }}
-                          title={`${time} · ${app.service_type} · ${app.pet_name}${app.tutor_name ? ' - ' + app.tutor_name : ''} (${app.status})`}
+                          title={`${time} · ${app.service_type} · ${app.pet_name}${app.tutor_name ? ' - ' + app.tutor_name : ''} (${app.status})${clubStatus ? ` · Clubinho: ${CLUBINHO_STATUS_LABEL[clubStatus]}` : ''}`}
                           style={{
                             display: 'flex', alignItems: 'center', gap: '5px', width: '100%', minWidth: 0, textAlign: 'left',
                             background: 'none', border: 'none', borderRadius: '4px', padding: '1px 4px', cursor: 'pointer',
@@ -2021,6 +2083,8 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
             </div>
           </div>
         </div>
+      )}
+      </>
       )}
     </section>
   );

@@ -1,0 +1,367 @@
+import React, { useEffect, useMemo, useState } from 'react';
+import { PlusCircle, RefreshCw, Edit3, Ban, X, Save, AlertTriangle, Search } from 'lucide-react';
+import {
+  listClubinho, createClubinho, updateClubinho, renewClubinho, cancelClubinho,
+  getClubinhoStatus, CLUBINHO_STATUS_COLOR, CLUBINHO_STATUS_LABEL, WEEKDAY_LABELS,
+} from '../utils/clubinhoService';
+import type { ClubinhoSubscription } from '../utils/clubinhoService';
+import { listPets } from '../utils/petsService';
+import type { Pet } from '../utils/petsService';
+import { logAction } from '../supabaseClient';
+import type { AuthUser } from '../hooks/useAuth';
+
+interface Props {
+  styles: any;
+  currentUser: AuthUser;
+}
+
+const fmtDate = (d: string) => {
+  if (!d) return '—';
+  const [y, m, day] = d.split('-');
+  return `${day}/${m}/${y}`;
+};
+
+const addDays = (dateStr: string, days: number): string => {
+  const d = new Date(dateStr + 'T00:00:00');
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0, 10);
+};
+
+const todayStr = (): string => new Date().toISOString().slice(0, 10);
+
+type FormState = {
+  petId: string; petName: string; tutorName: string; planType: 'semanal' | 'quinzenal';
+  weekday: number; timeOfDay: string; price: string; taxiDogFee: string; startedAt: string; renewsAt: string;
+};
+
+const emptyForm = (): FormState => ({
+  petId: '', petName: '', tutorName: '', planType: 'semanal', weekday: 3, timeOfDay: '10:00',
+  price: '', taxiDogFee: '', startedAt: todayStr(), renewsAt: addDays(todayStr(), 28),
+});
+
+export const ClubinhoManager: React.FC<Props> = ({ styles, currentUser }) => {
+  const [subs, setSubs] = useState<ClubinhoSubscription[] | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [isCreating, setIsCreating] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [form, setForm] = useState<FormState>(emptyForm());
+  const [petSearch, setPetSearch] = useState('');
+  const [petOptions, setPetOptions] = useState<Pet[]>([]);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [renewingId, setRenewingId] = useState<string | null>(null);
+  const [renewDate, setRenewDate] = useState('');
+  const [renewCreateAppts, setRenewCreateAppts] = useState(true);
+  const [cancelTarget, setCancelTarget] = useState<ClubinhoSubscription | null>(null);
+
+  const load = async () => {
+    setErrorMsg(null);
+    try {
+      setSubs(await listClubinho());
+    } catch (e: any) {
+      setErrorMsg(e.message || 'Erro ao carregar as assinaturas do Clubinho.');
+    }
+  };
+
+  useEffect(() => { load(); }, []);
+
+  useEffect(() => {
+    if (petSearch.trim().length < 2) { setPetOptions([]); return; }
+    let cancelled = false;
+    listPets().then(all => {
+      if (cancelled) return;
+      const q = petSearch.trim().toLowerCase();
+      setPetOptions(all.filter(p => p.name.toLowerCase().includes(q)).slice(0, 8));
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [petSearch]);
+
+  const activeSubs = useMemo(() => (subs || []).filter(s => s.is_active), [subs]);
+  const vencidos = useMemo(() => activeSubs.filter(s => getClubinhoStatus(s) === 'vencido'), [activeSubs]);
+  const aConfirmar = useMemo(() => activeSubs.filter(s => getClubinhoStatus(s) === 'a-confirmar'), [activeSubs]);
+
+  const resetForm = () => { setForm(emptyForm()); setPetSearch(''); setPetOptions([]); setIsCreating(false); setEditingId(null); };
+
+  const pickPet = (p: Pet) => {
+    setForm(f => ({ ...f, petId: p.id, petName: p.name, tutorName: f.tutorName || p.tutor_hint || '' }));
+    setPetSearch(p.name);
+    setPetOptions([]);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMsg(null);
+    if (!form.petId) { setErrorMsg('Escolha um pet já cadastrado na lista.'); return; }
+    if (!form.price.trim()) { setErrorMsg('Informe o valor.'); return; }
+    try {
+      const input = {
+        petId: form.petId, petName: form.petName, tutorName: form.tutorName.trim(), planType: form.planType,
+        weekday: form.weekday, timeOfDay: form.timeOfDay, price: Number(form.price) || 0,
+        taxiDogFee: Number(form.taxiDogFee) || 0, startedAt: form.startedAt, renewsAt: form.renewsAt,
+      };
+      if (editingId) {
+        await updateClubinho(editingId, input);
+        await logAction(currentUser.email || '', currentUser.name || 'Equipe', 'Edição de Assinatura do Clubinho', `Assinatura de "${form.petName}" atualizada.`);
+      } else {
+        await createClubinho(input);
+        await logAction(currentUser.email || '', currentUser.name || 'Equipe', 'Nova Assinatura do Clubinho', `Assinatura criada para "${form.petName}" (${form.planType}, R$ ${form.price}).`);
+      }
+      resetForm();
+      load();
+    } catch (e: any) {
+      setErrorMsg(e.message || 'Erro ao salvar a assinatura.');
+    }
+  };
+
+  const startEdit = (s: ClubinhoSubscription) => {
+    setEditingId(s.id);
+    setIsCreating(true);
+    setForm({
+      petId: s.pet_id, petName: s.pet_name, tutorName: s.tutor_name, planType: s.plan_type,
+      weekday: s.weekday ?? 3, timeOfDay: s.time_of_day, price: String(s.price), taxiDogFee: String(s.taxi_dog_fee),
+      startedAt: s.started_at, renewsAt: s.renews_at,
+    });
+    setPetSearch(s.pet_name);
+  };
+
+  const openRenew = (s: ClubinhoSubscription) => {
+    setRenewingId(s.id);
+    setRenewDate(addDays(s.renews_at, s.plan_type === 'quinzenal' ? 28 : 28));
+    setRenewCreateAppts(true);
+  };
+
+  const confirmRenew = async () => {
+    if (!renewingId || !renewDate) return;
+    setBusyId(renewingId);
+    try {
+      const sub = subs?.find(s => s.id === renewingId);
+      const r = await renewClubinho(renewingId, renewDate, renewCreateAppts);
+      await logAction(
+        currentUser.email || '', currentUser.name || 'Equipe', 'Renovação do Clubinho',
+        `Assinatura de "${sub?.pet_name}" renovada até ${fmtDate(renewDate)}${r.agendamentos_criados ? ` (${r.agendamentos_criados} agendamentos criados)` : ''}.`
+      );
+      setRenewingId(null);
+      load();
+    } catch (e: any) {
+      setErrorMsg(e.message || 'Erro ao renovar.');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const confirmCancel = async () => {
+    if (!cancelTarget) return;
+    setBusyId(cancelTarget.id);
+    try {
+      await cancelClubinho(cancelTarget.id);
+      await logAction(currentUser.email || '', currentUser.name || 'Equipe', 'Cancelamento do Clubinho', `Assinatura de "${cancelTarget.pet_name}" cancelada.`);
+      setCancelTarget(null);
+      load();
+    } catch (e: any) {
+      setErrorMsg(e.message || 'Erro ao cancelar.');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const statusPill = (s: ClubinhoSubscription) => {
+    const st = getClubinhoStatus(s);
+    const color = CLUBINHO_STATUS_COLOR[st];
+    return (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '0.74rem', fontWeight: 700, padding: '3px 9px', borderRadius: '20px', backgroundColor: `${color}22`, color, border: `1px solid ${color}55` }}>
+        <span style={{ width: '7px', height: '7px', borderRadius: '50%', backgroundColor: color }} /> {CLUBINHO_STATUS_LABEL[st]}
+      </span>
+    );
+  };
+
+  return (
+    <section>
+      {(vencidos.length > 0 || aConfirmar.length > 0) && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginBottom: '16px' }}>
+          {vencidos.length > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 14px', borderRadius: '8px', backgroundColor: 'hsl(280,65%,50%,0.1)', border: '1px solid hsl(280,65%,50%,0.3)', color: 'hsl(280,65%,35%)', fontSize: '0.85rem', fontWeight: 600 }}>
+              <AlertTriangle size={15} /> {vencidos.length} assinatura(s) vencida(s)
+            </div>
+          )}
+          {aConfirmar.length > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 14px', borderRadius: '8px', backgroundColor: 'hsl(210,85%,50%,0.1)', border: '1px solid hsl(210,85%,50%,0.3)', color: 'hsl(210,85%,35%)', fontSize: '0.85rem', fontWeight: 600 }}>
+              <AlertTriangle size={15} /> {aConfirmar.length} renovação/ões nos próximos dias
+            </div>
+          )}
+        </div>
+      )}
+
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '12px' }}>
+        {!isCreating && (
+          <button type="button" onClick={() => setIsCreating(true)} style={styles.btnAcc(false)}>
+            <PlusCircle size={16} /> Nova assinatura
+          </button>
+        )}
+      </div>
+
+      {errorMsg && (
+        <div style={{ color: 'hsl(0,75%,45%)', fontSize: '0.85rem', margin: '0 0 12px', padding: '8px 12px', backgroundColor: 'hsl(0,75%,55%,0.08)', borderRadius: '6px', border: '1px solid hsl(0,75%,55%,0.25)' }}>
+          {errorMsg}
+        </div>
+      )}
+
+      {isCreating && (
+        <form onSubmit={handleSubmit} style={{ ...styles.modalForm, margin: '0 0 20px', padding: '20px', border: `1px solid ${styles.borderColor}`, borderRadius: '12px' }}>
+          <h3 style={{ margin: '0 0 6px', fontSize: '1.05rem', fontWeight: 700, color: styles.primary }}>
+            {editingId ? 'Editar assinatura' : 'Nova assinatura do Clubinho'}
+          </h3>
+
+          <div style={styles.formGroup}>
+            <label style={styles.formLabel}>Pet (já cadastrado) *</label>
+            <div style={{ position: 'relative' }}>
+              <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: styles.sidebarWidgetText?.color }} />
+              <input
+                type="text" value={petSearch} disabled={!!editingId}
+                onChange={(e) => { setPetSearch(e.target.value); setForm(f => ({ ...f, petId: '', petName: '' })); }}
+                placeholder="Digite o nome do pet..." style={{ ...styles.formInput, width: '100%', paddingLeft: '32px' }}
+              />
+            </div>
+            {petOptions.length > 0 && (
+              <div style={{ border: `1px solid ${styles.borderColor}`, borderRadius: '8px', marginTop: '4px', maxHeight: '160px', overflowY: 'auto' }}>
+                {petOptions.map(p => (
+                  <button key={p.id} type="button" onClick={() => pickPet(p)} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '7px 10px', background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.85rem', color: styles.textMain }}>
+                    {p.name} {p.tutor_hint ? `— tutor: ${p.tutor_hint}` : ''}
+                  </button>
+                ))}
+              </div>
+            )}
+            {form.petId && <p style={{ fontSize: '0.78rem', color: 'hsl(142,60%,35%)', margin: '4px 0 0' }}>Selecionado: {form.petName}</p>}
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '14px' }}>
+            <div style={styles.formGroup}>
+              <label style={styles.formLabel}>Nome do tutor</label>
+              <input type="text" value={form.tutorName} onChange={(e) => setForm(f => ({ ...f, tutorName: e.target.value }))} style={styles.formInput} placeholder="Ex: Julio" />
+            </div>
+            <div style={styles.formGroup}>
+              <label style={styles.formLabel}>Plano *</label>
+              <select value={form.planType} onChange={(e) => setForm(f => ({ ...f, planType: e.target.value as 'semanal' | 'quinzenal' }))} style={styles.formInput}>
+                <option value="semanal">Semanal</option>
+                <option value="quinzenal">Quinzenal</option>
+              </select>
+            </div>
+            <div style={styles.formGroup}>
+              <label style={styles.formLabel}>Dia da semana</label>
+              <select value={form.weekday} onChange={(e) => setForm(f => ({ ...f, weekday: Number(e.target.value) }))} style={styles.formInput}>
+                {WEEKDAY_LABELS.map((w, i) => <option key={i} value={i}>{w}</option>)}
+              </select>
+            </div>
+            <div style={styles.formGroup}>
+              <label style={styles.formLabel}>Horário</label>
+              <input type="time" value={form.timeOfDay} onChange={(e) => setForm(f => ({ ...f, timeOfDay: e.target.value }))} style={styles.formInput} />
+            </div>
+            <div style={styles.formGroup}>
+              <label style={styles.formLabel}>Valor (R$) *</label>
+              <input type="number" min="0" step="0.01" value={form.price} onChange={(e) => setForm(f => ({ ...f, price: e.target.value }))} style={styles.formInput} />
+            </div>
+            <div style={styles.formGroup}>
+              <label style={styles.formLabel}>Táxi dog (R$)</label>
+              <input type="number" min="0" step="0.01" value={form.taxiDogFee} onChange={(e) => setForm(f => ({ ...f, taxiDogFee: e.target.value }))} style={styles.formInput} placeholder="0" />
+            </div>
+            <div style={styles.formGroup}>
+              <label style={styles.formLabel}>Início *</label>
+              <input type="date" value={form.startedAt} onChange={(e) => setForm(f => ({ ...f, startedAt: e.target.value }))} style={styles.formInput} />
+            </div>
+            <div style={styles.formGroup}>
+              <label style={styles.formLabel}>Renovação *</label>
+              <input type="date" value={form.renewsAt} onChange={(e) => setForm(f => ({ ...f, renewsAt: e.target.value }))} style={styles.formInput} />
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: '10px', marginTop: '6px' }}>
+            <button type="submit" className="btn-save" style={styles.btnAcc(false)}><Save size={16} /> Salvar</button>
+            <button type="button" onClick={resetForm} style={styles.btnAcc(false)}><X size={16} /> Cancelar</button>
+          </div>
+        </form>
+      )}
+
+      {subs === null ? (
+        <p style={{ color: styles.sidebarWidgetText?.color }}>Carregando...</p>
+      ) : activeSubs.length === 0 ? (
+        <p style={{ color: styles.sidebarWidgetText?.color, textAlign: 'center', padding: '30px' }}>Nenhuma assinatura do Clubinho cadastrada ainda.</p>
+      ) : (
+        <div style={{ overflowX: 'auto', border: `1px solid ${styles.borderColor}`, borderRadius: '10px' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+            <thead>
+              <tr style={{ backgroundColor: styles.isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)' }}>
+                {['Pet', 'Tutor', 'Plano', 'Dia/Horário', 'Valor', 'Táxi dog', 'Renovação', 'Status', ''].map(h => (
+                  <th key={h} style={{ padding: '8px 10px', textAlign: 'left', fontSize: '0.72rem', fontWeight: 700, color: styles.sidebarWidgetText?.color }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {activeSubs.map(s => (
+                <tr key={s.id} style={{ borderTop: `1px solid ${styles.borderColor}` }}>
+                  <td style={{ padding: '8px 10px', fontWeight: 700, color: styles.textMain }}>{s.pet_name}</td>
+                  <td style={{ padding: '8px 10px', color: styles.sidebarWidgetText?.color }}>{s.tutor_name || '—'}</td>
+                  <td style={{ padding: '8px 10px', color: styles.textMain, textTransform: 'capitalize' }}>{s.plan_type}</td>
+                  <td style={{ padding: '8px 10px', color: styles.textMain }}>{s.weekday !== null ? `${WEEKDAY_LABELS[s.weekday]} ${s.time_of_day}` : '—'}</td>
+                  <td style={{ padding: '8px 10px', color: styles.textMain }}>R$ {Number(s.price).toFixed(2)}</td>
+                  <td style={{ padding: '8px 10px', color: styles.sidebarWidgetText?.color }}>{Number(s.taxi_dog_fee) > 0 ? `R$ ${Number(s.taxi_dog_fee).toFixed(2)}` : '—'}</td>
+                  <td style={{ padding: '8px 10px', color: styles.textMain }}>{fmtDate(s.renews_at)}</td>
+                  <td style={{ padding: '8px 10px' }}>{statusPill(s)}</td>
+                  <td style={{ padding: '6px 10px', textAlign: 'right' }}>
+                    <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
+                      <button type="button" disabled={busyId === s.id} onClick={() => openRenew(s)} title="Renovar" className="btn-action-icon"><RefreshCw size={14} /></button>
+                      <button type="button" disabled={busyId === s.id} onClick={() => startEdit(s)} title="Editar" className="btn-action-icon"><Edit3 size={14} /></button>
+                      <button type="button" disabled={busyId === s.id} onClick={() => setCancelTarget(s)} title="Cancelar" className="btn-action-icon btn-action-danger"><Ban size={14} /></button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {renewingId && (
+        <div style={styles.modalOverlay}>
+          <div style={{ ...styles.modalContent, maxWidth: '380px' }} role="dialog" aria-modal="true">
+            <div style={styles.modalHeader}>
+              <h2 style={{ ...styles.modalTitle, fontSize: '1.05rem' }}>Renovar assinatura</h2>
+              <button onClick={() => setRenewingId(null)} style={styles.modalCloseBtn(false)}>✕</button>
+            </div>
+            <div style={styles.formGroup}>
+              <label style={styles.formLabel}>Nova data de renovação</label>
+              <input type="date" value={renewDate} onChange={(e) => setRenewDate(e.target.value)} style={styles.formInput} />
+            </div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem', color: styles.textMain, cursor: 'pointer', marginTop: '8px' }}>
+              <input type="checkbox" checked={renewCreateAppts} onChange={(e) => setRenewCreateAppts(e.target.checked)} />
+              Já criar os agendamentos na agenda até essa data
+            </label>
+            <div style={{ display: 'flex', gap: '10px', marginTop: '16px' }}>
+              <button type="button" disabled={busyId === renewingId} onClick={confirmRenew} className="btn-save" style={styles.btnAcc(false)}>
+                {busyId === renewingId ? 'Renovando...' : 'Confirmar renovação'}
+              </button>
+              <button type="button" onClick={() => setRenewingId(null)} style={styles.btnAcc(false)}>Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {cancelTarget && (
+        <div style={styles.modalOverlay}>
+          <div style={{ ...styles.modalContent, maxWidth: '380px' }} role="dialog" aria-modal="true">
+            <div style={styles.modalHeader}>
+              <h2 style={{ ...styles.modalTitle, fontSize: '1.05rem' }}>Cancelar assinatura?</h2>
+              <button onClick={() => setCancelTarget(null)} style={styles.modalCloseBtn(false)}>✕</button>
+            </div>
+            <p style={{ fontSize: '0.88rem', color: styles.sidebarWidgetText?.color }}>
+              A assinatura de <strong>{cancelTarget.pet_name}</strong> será marcada como inativa (o histórico fica guardado, não é apagado).
+            </p>
+            <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+              <button type="button" disabled={busyId === cancelTarget.id} onClick={confirmCancel} style={{ ...styles.btnAcc(false), backgroundColor: 'hsl(0,75%,55%)', color: '#fff' }}>
+                {busyId === cancelTarget.id ? 'Cancelando...' : 'Sim, cancelar'}
+              </button>
+              <button type="button" onClick={() => setCancelTarget(null)} style={styles.btnAcc(false)}>Voltar</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+};
