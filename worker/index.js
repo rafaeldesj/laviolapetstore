@@ -168,7 +168,8 @@ const toAppt = (row) => ({
 });
 
 const APPT_STATUS = ['Agendado', 'Em Andamento', 'Concluído', 'Cancelado'];
-const PAYMENT_FLAGS = ['a_confirmar', 'debito'];
+const PAYMENT_FLAGS = ['a_confirmar', 'debito', 'pago'];
+const PAYMENT_METHODS = ['pix', 'debito', 'credito', 'especie'];
 const CANCEL_REASONS = ['aviso_previo', 'sem_aviso'];
 const CLUBINHO_CYCLE_VISITS = { semanal: 4, quinzenal: 2 };
 
@@ -962,7 +963,12 @@ export default {
         if (request.method === 'GET' && dbRoute === '/clubinho') {
           if (isStaff) {
             const r = await sb(env, '/clubinho_subscriptions?select=*&order=renews_at.asc');
-            return r.ok ? json({ assinaturas: r.body }) : failC('Erro ao listar as assinaturas.', r);
+            if (!r.ok) return failC('Erro ao listar as assinaturas.', r);
+            // Anexa o último pagamento registrado de cada assinatura, pra não precisar de uma busca à parte na tela.
+            const pay = await sb(env, '/clubinho_payments?select=*&order=paid_date.desc,paid_time.desc');
+            const lastBySub = new Map();
+            if (pay.ok) for (const p of pay.body) if (!lastBySub.has(p.subscription_id)) lastBySub.set(p.subscription_id, p);
+            return json({ assinaturas: r.body.map((s) => ({ ...s, last_payment: lastBySub.get(s.id) || null })) });
           }
           // Cliente: só as assinaturas dos pets que são dele.
           const myPets = await sb(env, `/pets?owner_id=eq.${encodeURIComponent(user.sub)}&select=id`);
@@ -1050,6 +1056,30 @@ export default {
           }
           const after = await sb(env, `/clubinho_subscriptions?id=eq.${encodeURIComponent(id)}&select=*`);
           return json({ assinatura: after.body?.[0] || null, agendamentos_criados: created });
+        }
+
+        // Registra um pagamento (data/hora/forma/quem recebeu) e marca a assinatura como "Pagamento realizado".
+        const payMatch = /^\/clubinho\/([\w-]+)\/pagamento$/.exec(dbRoute);
+        if (request.method === 'POST' && payMatch) {
+          const id = payMatch[1];
+          const cur = await sb(env, `/clubinho_subscriptions?id=eq.${encodeURIComponent(id)}&select=id`);
+          if (!cur.ok) return failC('Erro ao buscar a assinatura.', cur);
+          if (!cur.body[0]) return json({ mensagem: 'Assinatura não encontrada.' }, 404);
+          const input = await request.json();
+          const paidDate = String(input.paidDate || '');
+          const paidTime = String(input.paidTime || '').slice(0, 5);
+          const method = String(input.paymentMethod || '');
+          const receivedBy = String(input.receivedBy || '').trim().slice(0, 150);
+          if (!paidDate || !paidTime || !receivedBy) return json({ mensagem: 'Informe a data, a hora e quem recebeu o pagamento.' }, 400);
+          if (!PAYMENT_METHODS.includes(method)) return json({ mensagem: 'Forma de pagamento inválida.' }, 400);
+          const insert = await sb(env, '/clubinho_payments', {
+            method: 'POST',
+            body: JSON.stringify({ subscription_id: id, paid_date: paidDate, paid_time: paidTime, payment_method: method, received_by: receivedBy, created_by: user.sub }),
+          });
+          if (!insert.ok) return failC('Erro ao registrar o pagamento.', insert);
+          const upd = await sb(env, `/clubinho_subscriptions?id=eq.${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ payment_flag: 'pago' }) });
+          if (!upd.ok) return failC('Erro ao marcar o pagamento na assinatura.', upd);
+          return json({ assinatura: upd.body?.[0] || null, pagamento: insert.body[0] }, 201);
         }
 
         const one = /^\/clubinho\/([\w-]+)$/.exec(dbRoute);

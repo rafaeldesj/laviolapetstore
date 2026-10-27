@@ -13,15 +13,35 @@ export interface ClubinhoSubscription {
   started_at: string; // YYYY-MM-DD
   renews_at: string; // YYYY-MM-DD
   is_active: boolean;
-  /** Quando preenchido, é informação REAL confirmada pela equipe (ex.: trazida do calendário antigo do Google)
-   *  e vale mais que o cálculo por data. 'a_confirmar' | 'debito' | null. */
-  payment_flag: 'a_confirmar' | 'debito' | null;
+  /** Quando preenchido, é informação REAL confirmada pela equipe (ex.: trazida do calendário antigo do Google,
+   *  ou um pagamento registrado à mão) e vale mais que o cálculo por data. 'a_confirmar' | 'debito' | 'pago' | null. */
+  payment_flag: 'a_confirmar' | 'debito' | 'pago' | null;
+  /** Último pagamento registrado (detalhes de data/hora/forma/quem recebeu) — vem junto na listagem, não precisa buscar à parte. */
+  last_payment?: ClubinhoPayment | null;
   created_by: string;
   created_at: string;
   updated_at: string;
 }
 
-export type ClubinhoStatus = 'em-dia' | 'a-confirmar' | 'vencido' | 'inativo';
+export interface ClubinhoPayment {
+  id: string;
+  subscription_id: string;
+  paid_date: string; // YYYY-MM-DD
+  paid_time: string; // HH:MM
+  payment_method: 'pix' | 'debito' | 'credito' | 'especie';
+  received_by: string;
+  created_by: string;
+  created_at: string;
+}
+
+export const PAYMENT_METHOD_LABELS: Record<ClubinhoPayment['payment_method'], string> = {
+  pix: 'Pix',
+  debito: 'Débito',
+  credito: 'Crédito',
+  especie: 'Espécie',
+};
+
+export type ClubinhoStatus = 'em-dia' | 'a-confirmar' | 'vencido' | 'pago' | 'inativo';
 
 /** Remove acentos, baixa pra minúsculo e tira espaços nas pontas — pra comparar nomes sem depender de digitação idêntica. */
 export function normalizeNameForMatch(s: string): string {
@@ -62,6 +82,7 @@ const REMINDER_WINDOW_DAYS = 5;
 
 export function getClubinhoStatus(sub: Pick<ClubinhoSubscription, 'renews_at' | 'is_active' | 'payment_flag'>, today: Date = new Date()): ClubinhoStatus {
   if (!sub.is_active) return 'inativo';
+  if (sub.payment_flag === 'pago') return 'pago';
   if (sub.payment_flag === 'debito') return 'vencido';
   if (sub.payment_flag === 'a_confirmar') return 'a-confirmar';
   const renews = new Date(sub.renews_at + 'T00:00:00');
@@ -78,6 +99,7 @@ export const CLUBINHO_STATUS_COLOR: Record<ClubinhoStatus, string> = {
   'em-dia': 'hsl(36, 95%, 45%)',
   'a-confirmar': 'hsl(210, 85%, 50%)',
   vencido: 'hsl(280, 65%, 50%)',
+  pago: 'hsl(142, 60%, 40%)',
   inativo: '#9aa0a6',
 };
 
@@ -85,6 +107,7 @@ export const CLUBINHO_STATUS_COLOR: Record<ClubinhoStatus, string> = {
 export function describeClubinhoStatus(sub: Pick<ClubinhoSubscription, 'renews_at' | 'is_active' | 'payment_flag'>, today: Date = new Date()): string {
   const status = getClubinhoStatus(sub, today);
   if (status === 'inativo') return 'Inativo';
+  if (status === 'pago') return 'Pagamento confirmado';
   if (status === 'em-dia') return 'Em dia (pago)';
   const renews = new Date(sub.renews_at + 'T00:00:00');
   const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
@@ -107,6 +130,7 @@ export const CLUBINHO_STATUS_LABEL: Record<ClubinhoStatus, string> = {
   'em-dia': 'Em dia (pago)',
   'a-confirmar': 'A confirmar',
   vencido: 'Vencido (débito)',
+  pago: 'Pagamento realizado',
   inativo: 'Inativo',
 };
 
@@ -169,7 +193,7 @@ export const createClubinho = async (input: NewClubinhoInput): Promise<ClubinhoS
 
 export const updateClubinho = async (id: string, patch: Partial<{
   planType: string; weekday: number | null; timeOfDay: string; price: number; taxiDogFee: number; tutorName: string; startedAt: string; renewsAt: string; isActive: boolean;
-  paymentFlag: 'a_confirmar' | 'debito' | null;
+  paymentFlag: 'a_confirmar' | 'debito' | 'pago' | null;
 }>): Promise<ClubinhoSubscription> => {
   const { assinatura } = await workerCall<{ assinatura: ClubinhoSubscription }>(`/clubinho/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(patch) });
   return assinatura;
@@ -177,6 +201,17 @@ export const updateClubinho = async (id: string, patch: Partial<{
 
 export const renewClubinho = async (id: string, renewsAt: string, createAppointments = true): Promise<{ assinatura: ClubinhoSubscription; agendamentos_criados: number }> =>
   workerCall(`/clubinho/${encodeURIComponent(id)}/renovar`, { method: 'POST', body: JSON.stringify({ renewsAt, createAppointments }) });
+
+export interface NewClubinhoPaymentInput {
+  paidDate: string; // YYYY-MM-DD
+  paidTime: string; // HH:MM
+  paymentMethod: 'pix' | 'debito' | 'credito' | 'especie';
+  receivedBy: string;
+}
+
+/** Registra um pagamento (data/hora/forma/quem recebeu) e marca a assinatura como "Pagamento realizado". */
+export const registerClubinhoPayment = async (id: string, input: NewClubinhoPaymentInput): Promise<{ assinatura: ClubinhoSubscription; pagamento: ClubinhoPayment }> =>
+  workerCall(`/clubinho/${encodeURIComponent(id)}/pagamento`, { method: 'POST', body: JSON.stringify(input) });
 
 export const cancelClubinho = async (id: string): Promise<void> => {
   await workerCall(`/clubinho/${encodeURIComponent(id)}`, { method: 'DELETE' });

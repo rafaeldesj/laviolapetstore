@@ -2,8 +2,8 @@ import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 're
 import { createPortal } from 'react-dom';
 import { PlusCircle, RefreshCw, Edit3, Ban, X, Save, AlertTriangle, Search, ArrowUpDown } from 'lucide-react';
 import {
-  listClubinho, createClubinho, updateClubinho, renewClubinho, cancelClubinho,
-  getClubinhoStatus, describeClubinhoStatus, visitProgressLabel, CLUBINHO_STATUS_COLOR, WEEKDAY_LABELS,
+  listClubinho, createClubinho, updateClubinho, renewClubinho, cancelClubinho, registerClubinhoPayment,
+  getClubinhoStatus, describeClubinhoStatus, visitProgressLabel, CLUBINHO_STATUS_COLOR, WEEKDAY_LABELS, PAYMENT_METHOD_LABELS,
 } from '../utils/clubinhoService';
 import type { ClubinhoSubscription, ClubinhoStatus } from '../utils/clubinhoService';
 import { listPets } from '../utils/petsService';
@@ -29,6 +29,12 @@ const addDays = (dateStr: string, days: number): string => {
 };
 
 const todayStr = (): string => new Date().toISOString().slice(0, 10);
+const nowHHMM = (): string => new Date().toTimeString().slice(0, 5);
+
+type PaymentFormState = { paidDate: string; paidTime: string; paymentMethod: 'pix' | 'debito' | 'credito' | 'especie'; receivedBy: string };
+const emptyPaymentForm = (defaultReceivedBy: string): PaymentFormState => ({
+  paidDate: todayStr(), paidTime: nowHHMM(), paymentMethod: 'pix', receivedBy: defaultReceivedBy,
+});
 
 type FormState = {
   petId: string; petName: string; tutorName: string; planType: 'semanal' | 'quinzenal';
@@ -53,6 +59,12 @@ export const ClubinhoManager: React.FC<Props> = ({ styles, currentUser }) => {
   const [renewDate, setRenewDate] = useState('');
   const [renewCreateAppts, setRenewCreateAppts] = useState(true);
   const [cancelTarget, setCancelTarget] = useState<ClubinhoSubscription | null>(null);
+
+  // Login compartilhado "Laviola" (usado tanto pelo André quanto pela Paloma, os dois proprietários): o sistema
+  // não sabe qual dos dois está de fato usando o login agora, então pede pra escolher ao registrar um pagamento.
+  const isSharedOwnerLogin = (currentUser.profile?.username || '').trim().toUpperCase() === 'LAVIOLA';
+  const [paymentTarget, setPaymentTarget] = useState<ClubinhoSubscription | null>(null);
+  const [paymentForm, setPaymentForm] = useState<PaymentFormState>(emptyPaymentForm(currentUser.name || ''));
 
   // Visão ampla: a tabela (com bastante coluna) fica espremida na área de conteúdo normal; isso a estica até a
   // largura toda da página, do menu até o aviso lateral — mesma ideia já usada na Agenda.
@@ -107,7 +119,7 @@ export const ClubinhoManager: React.FC<Props> = ({ styles, currentUser }) => {
   const vencidos = useMemo(() => activeSubs.filter(s => getClubinhoStatus(s) === 'vencido'), [activeSubs]);
   const aConfirmar = useMemo(() => activeSubs.filter(s => getClubinhoStatus(s) === 'a-confirmar'), [activeSubs]);
 
-  const STATUS_RANK: Record<ClubinhoStatus, number> = { vencido: 0, 'a-confirmar': 1, 'em-dia': 2, inativo: 3 };
+  const STATUS_RANK: Record<ClubinhoStatus, number> = { vencido: 0, 'a-confirmar': 1, 'em-dia': 2, pago: 3, inativo: 4 };
   const visibleSubs = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     let list = activeSubs.filter(s => {
@@ -220,6 +232,34 @@ export const ClubinhoManager: React.FC<Props> = ({ styles, currentUser }) => {
       load();
     } catch (e: any) {
       setErrorMsg(e.message || 'Erro ao marcar o status.');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const openPaymentForm = (s: ClubinhoSubscription) => {
+    setPaymentTarget(s);
+    setPaymentForm(emptyPaymentForm(isSharedOwnerLogin ? '' : (currentUser.name || '')));
+  };
+
+  const handleRegisterPayment = async () => {
+    if (!paymentTarget) return;
+    if (!paymentForm.receivedBy.trim()) { setErrorMsg('Informe quem recebeu o pagamento.'); return; }
+    setBusyId(paymentTarget.id);
+    setErrorMsg(null);
+    try {
+      await registerClubinhoPayment(paymentTarget.id, {
+        paidDate: paymentForm.paidDate, paidTime: paymentForm.paidTime,
+        paymentMethod: paymentForm.paymentMethod, receivedBy: paymentForm.receivedBy.trim(),
+      });
+      await logAction(
+        currentUser.email || '', currentUser.name || 'Equipe', 'Pagamento do Clubinho registrado',
+        `Pagamento de "${paymentTarget.pet_name}" registrado: ${PAYMENT_METHOD_LABELS[paymentForm.paymentMethod]}, em ${fmtDate(paymentForm.paidDate)} às ${paymentForm.paidTime}, recebido por ${paymentForm.receivedBy.trim()}.`
+      );
+      setPaymentTarget(null);
+      load();
+    } catch (e: any) {
+      setErrorMsg(e.message || 'Erro ao registrar o pagamento.');
     } finally {
       setBusyId(null);
     }
@@ -356,6 +396,7 @@ export const ClubinhoManager: React.FC<Props> = ({ styles, currentUser }) => {
             <option value="vencido">Vencidas</option>
             <option value="a-confirmar">A confirmar</option>
             <option value="em-dia">Em dia</option>
+            <option value="pago">Pagamento realizado</option>
           </select>
 
           <select value={filterPlan} onChange={(e) => setFilterPlan(e.target.value as any)} style={{ ...styles.formInput, width: 'auto', padding: '7px 10px', fontSize: '0.85rem' }}>
@@ -425,15 +466,25 @@ export const ClubinhoManager: React.FC<Props> = ({ styles, currentUser }) => {
                         <select
                           value={s.payment_flag || ''}
                           disabled={busyId === s.id}
-                          onChange={(e) => setPaymentFlag(s, (e.target.value || null) as 'a_confirmar' | 'debito' | null)}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            if (v === 'pago') openPaymentForm(s);
+                            else setPaymentFlag(s, (v || null) as 'a_confirmar' | 'debito' | null);
+                          }}
                           title="Marcar manualmente (confirmado pela equipe, vale mais que a data)"
                           style={{ fontSize: '0.7rem', padding: '2px 4px', borderRadius: '5px', border: `1px solid ${styles.borderColor}`, backgroundColor: 'transparent', color: styles.sidebarWidgetText?.color, cursor: 'pointer' }}
                         >
                           <option value="">Automático (por data)</option>
                           <option value="a_confirmar">Marcar: A confirmar</option>
                           <option value="debito">Marcar: Vencido/Débito</option>
+                          <option value="pago">Marcar: Pagamento realizado</option>
                         </select>
                       </div>
+                      {s.payment_flag === 'pago' && s.last_payment && (
+                        <div style={{ fontSize: '0.7rem', color: styles.sidebarWidgetText?.color, marginTop: '3px' }}>
+                          {PAYMENT_METHOD_LABELS[s.last_payment.payment_method]} em {fmtDate(s.last_payment.paid_date)} às {s.last_payment.paid_time}, recebido por {s.last_payment.received_by}
+                        </div>
+                      )}
                     </td>
                     <td style={{ padding: '6px 10px', textAlign: 'right' }}>
                       <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
@@ -486,6 +537,58 @@ export const ClubinhoManager: React.FC<Props> = ({ styles, currentUser }) => {
                 {busyId === renewingId ? 'Renovando...' : 'Confirmar renovação'}
               </button>
               <button type="button" onClick={() => setRenewingId(null)} style={styles.btnAcc(false)}>Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {paymentTarget && (
+        <div style={styles.modalOverlay}>
+          <div style={{ ...styles.modalContent, maxWidth: '400px' }} role="dialog" aria-modal="true">
+            <div style={styles.modalHeader}>
+              <h2 style={{ ...styles.modalTitle, fontSize: '1.05rem' }}>Registrar pagamento — {paymentTarget.pet_name}</h2>
+              <button onClick={() => setPaymentTarget(null)} style={styles.modalCloseBtn(false)}>✕</button>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginTop: '6px' }}>
+              <div style={styles.formGroup}>
+                <label style={styles.formLabel}>Data</label>
+                <input type="date" value={paymentForm.paidDate} onChange={(e) => setPaymentForm(f => ({ ...f, paidDate: e.target.value }))} style={styles.formInput} />
+              </div>
+              <div style={styles.formGroup}>
+                <label style={styles.formLabel}>Hora</label>
+                <input type="time" value={paymentForm.paidTime} onChange={(e) => setPaymentForm(f => ({ ...f, paidTime: e.target.value }))} style={styles.formInput} />
+              </div>
+            </div>
+            <div style={styles.formGroup}>
+              <label style={styles.formLabel}>Forma de pagamento</label>
+              <select
+                value={paymentForm.paymentMethod}
+                onChange={(e) => setPaymentForm(f => ({ ...f, paymentMethod: e.target.value as PaymentFormState['paymentMethod'] }))}
+                style={styles.formInput}
+              >
+                <option value="pix">Pix</option>
+                <option value="debito">Débito</option>
+                <option value="credito">Crédito</option>
+                <option value="especie">Espécie</option>
+              </select>
+            </div>
+            <div style={styles.formGroup}>
+              <label style={styles.formLabel}>Quem recebeu</label>
+              {isSharedOwnerLogin ? (
+                <select value={paymentForm.receivedBy} onChange={(e) => setPaymentForm(f => ({ ...f, receivedBy: e.target.value }))} style={styles.formInput}>
+                  <option value="">Selecione...</option>
+                  <option value="André">André</option>
+                  <option value="Paloma">Paloma</option>
+                </select>
+              ) : (
+                <input type="text" value={paymentForm.receivedBy} onChange={(e) => setPaymentForm(f => ({ ...f, receivedBy: e.target.value }))} style={styles.formInput} placeholder="Nome de quem recebeu" />
+              )}
+            </div>
+            <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+              <button type="button" disabled={busyId === paymentTarget.id} onClick={handleRegisterPayment} className="btn-save" style={styles.btnAcc(false)}>
+                {busyId === paymentTarget.id ? 'Salvando...' : 'Confirmar pagamento'}
+              </button>
+              <button type="button" onClick={() => setPaymentTarget(null)} style={styles.btnAcc(false)}>Cancelar</button>
             </div>
           </div>
         </div>

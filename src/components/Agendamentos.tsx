@@ -1128,7 +1128,7 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
           {viewMode === 'month' && clubinhoByNormName.size > 0 && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.76rem', color: styles.sidebarWidgetText?.color }}>
               <span style={{ fontWeight: 600 }}>Bolinha do Clubinho:</span>
-              {(['em-dia', 'a-confirmar', 'vencido'] as const).map(st => (
+              {(['em-dia', 'a-confirmar', 'vencido', 'pago'] as const).map(st => (
                 <span key={st} style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                   <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: CLUBINHO_STATUS_COLOR[st] }} />
                   {CLUBINHO_STATUS_LABEL[st]}
