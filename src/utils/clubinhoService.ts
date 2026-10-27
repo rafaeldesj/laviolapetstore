@@ -80,22 +80,18 @@ export const WEEKDAY_LABELS = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta
 
 /**
  * "Banho X de N do ciclo atual" — pra quem opera o caixa/balcão não precisar voltar semana por semana contando.
- * N vem do próprio ciclo da assinatura (dias entre início e renovação, dividido pelo intervalo do plano — 7 dias
- * semanal, 14 quinzenal), não é um número fixo: um ciclo de 5 semanas mostra até (5/5), não trava em (4/4).
- * Sem assinatura (atendimento avulso) ou fora do ciclo conhecido, fica sempre (1/1).
+ * N é fixo por regra do negócio (confirmado com o proprietário): semanal = sempre 4, quinzenal = sempre 2. Não
+ * tem "5º banho" — ao chegar no último (4/4 ou 2/2), é o sinal de lembrar o cliente de renovar. N não depende
+ * das datas de início/renovação da assinatura (essas só definem QUAL banho é o atual, não quantos existem).
+ * Sem assinatura (atendimento avulso) fica sempre (1/1).
  */
-// Um mês tem no máximo 5 ocorrências de um mesmo dia da semana (semanal) ou 3 de quinze em quinze dias
-// (quinzenal). Protege contra início/renovação com data errada (ex.: renovação nunca atualizada depois de
-// renovações reais) virando um "banho 9 de 9" sem sentido — nesse caso, no máximo o teto abaixo.
-const MAX_VISITS: Record<'semanal' | 'quinzenal', number> = { semanal: 5, quinzenal: 3 };
+const CYCLE_VISITS: Record<'semanal' | 'quinzenal', number> = { semanal: 4, quinzenal: 2 };
 
-export function visitProgressLabel(sub: Pick<ClubinhoSubscription, 'started_at' | 'renews_at' | 'plan_type'> | null | undefined, date: Date): string {
+export function visitProgressLabel(sub: Pick<ClubinhoSubscription, 'started_at' | 'plan_type'> | null | undefined, date: Date): string {
   if (!sub) return '(1/1)';
   const intervalDays = sub.plan_type === 'quinzenal' ? 14 : 7;
+  const total = CYCLE_VISITS[sub.plan_type];
   const started = new Date(sub.started_at + 'T00:00:00');
-  const renews = new Date(sub.renews_at + 'T00:00:00');
-  const cycleDays = Math.round((renews.getTime() - started.getTime()) / 86400000);
-  const total = Math.min(Math.max(1, Math.round(cycleDays / intervalDays)), MAX_VISITS[sub.plan_type]);
   const dayStart = new Date(date.getFullYear(), date.getMonth(), date.getDate());
   const diffDays = Math.round((dayStart.getTime() - started.getTime()) / 86400000);
   const current = Math.min(Math.max(Math.floor(diffDays / intervalDays) + 1, 1), total);
