@@ -1,10 +1,11 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { PlusCircle, RefreshCw, Edit3, Ban, X, Save, AlertTriangle, Search } from 'lucide-react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { PlusCircle, RefreshCw, Edit3, Ban, X, Save, AlertTriangle, Search, ArrowUpDown } from 'lucide-react';
 import {
   listClubinho, createClubinho, updateClubinho, renewClubinho, cancelClubinho,
-  getClubinhoStatus, CLUBINHO_STATUS_COLOR, CLUBINHO_STATUS_LABEL, WEEKDAY_LABELS,
+  getClubinhoStatus, describeClubinhoStatus, CLUBINHO_STATUS_COLOR, WEEKDAY_LABELS,
 } from '../utils/clubinhoService';
-import type { ClubinhoSubscription } from '../utils/clubinhoService';
+import type { ClubinhoSubscription, ClubinhoStatus } from '../utils/clubinhoService';
 import { listPets } from '../utils/petsService';
 import type { Pet } from '../utils/petsService';
 import { logAction } from '../supabaseClient';
@@ -53,6 +54,33 @@ export const ClubinhoManager: React.FC<Props> = ({ styles, currentUser }) => {
   const [renewCreateAppts, setRenewCreateAppts] = useState(true);
   const [cancelTarget, setCancelTarget] = useState<ClubinhoSubscription | null>(null);
 
+  // Visão ampla: a tabela (com bastante coluna) fica espremida na área de conteúdo normal; isso a estica até a
+  // largura toda da página, do menu até o aviso lateral — mesma ideia já usada na Agenda.
+  const [wideView, setWideView] = useState(false);
+  const toolbarRef = useRef<HTMLDivElement>(null);
+  const [widePos, setWidePos] = useState<{ top: number; left: number; width: number } | null>(null);
+  const measureWide = () => {
+    const bar = toolbarRef.current;
+    const grid = document.getElementById('main-content')?.parentElement;
+    if (!bar || !grid) return;
+    const b = bar.getBoundingClientRect();
+    const g = grid.getBoundingClientRect();
+    setWidePos({ top: b.bottom + window.scrollY + 10, left: g.left + window.scrollX, width: g.width });
+  };
+  useLayoutEffect(() => {
+    if (!wideView) return;
+    measureWide();
+    window.addEventListener('resize', measureWide);
+    return () => window.removeEventListener('resize', measureWide);
+  }, [wideView]);
+
+  // Busca, filtros e ordenação
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterStatus, setFilterStatus] = useState<'all' | ClubinhoStatus>('all');
+  const [filterPlan, setFilterPlan] = useState<'all' | 'semanal' | 'quinzenal'>('all');
+  const [sortBy, setSortBy] = useState<'renewal' | 'name' | 'price' | 'status'>('renewal');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+
   const load = async () => {
     setErrorMsg(null);
     try {
@@ -78,6 +106,26 @@ export const ClubinhoManager: React.FC<Props> = ({ styles, currentUser }) => {
   const activeSubs = useMemo(() => (subs || []).filter(s => s.is_active), [subs]);
   const vencidos = useMemo(() => activeSubs.filter(s => getClubinhoStatus(s) === 'vencido'), [activeSubs]);
   const aConfirmar = useMemo(() => activeSubs.filter(s => getClubinhoStatus(s) === 'a-confirmar'), [activeSubs]);
+
+  const STATUS_RANK: Record<ClubinhoStatus, number> = { vencido: 0, 'a-confirmar': 1, 'em-dia': 2, inativo: 3 };
+  const visibleSubs = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    let list = activeSubs.filter(s => {
+      if (filterPlan !== 'all' && s.plan_type !== filterPlan) return false;
+      if (filterStatus !== 'all' && getClubinhoStatus(s) !== filterStatus) return false;
+      if (q && !s.pet_name.toLowerCase().includes(q) && !(s.tutor_name || '').toLowerCase().includes(q)) return false;
+      return true;
+    });
+    list = [...list].sort((a, b) => {
+      let cmp = 0;
+      if (sortBy === 'renewal') cmp = a.renews_at.localeCompare(b.renews_at);
+      else if (sortBy === 'name') cmp = a.pet_name.localeCompare(b.pet_name);
+      else if (sortBy === 'price') cmp = Number(a.price) - Number(b.price);
+      else if (sortBy === 'status') cmp = STATUS_RANK[getClubinhoStatus(a)] - STATUS_RANK[getClubinhoStatus(b)];
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+    return list;
+  }, [activeSubs, searchQuery, filterStatus, filterPlan, sortBy, sortDir]);
 
   const resetForm = () => { setForm(emptyForm()); setPetSearch(''); setPetOptions([]); setIsCreating(false); setEditingId(null); };
 
@@ -167,8 +215,8 @@ export const ClubinhoManager: React.FC<Props> = ({ styles, currentUser }) => {
     const st = getClubinhoStatus(s);
     const color = CLUBINHO_STATUS_COLOR[st];
     return (
-      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '0.74rem', fontWeight: 700, padding: '3px 9px', borderRadius: '20px', backgroundColor: `${color}22`, color, border: `1px solid ${color}55` }}>
-        <span style={{ width: '7px', height: '7px', borderRadius: '50%', backgroundColor: color }} /> {CLUBINHO_STATUS_LABEL[st]}
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '0.74rem', fontWeight: 700, padding: '3px 9px', borderRadius: '20px', backgroundColor: `${color}22`, color, border: `1px solid ${color}55`, whiteSpace: 'nowrap' }}>
+        <span style={{ width: '7px', height: '7px', borderRadius: '50%', backgroundColor: color, flexShrink: 0 }} /> {describeClubinhoStatus(s)}
       </span>
     );
   };
@@ -279,44 +327,111 @@ export const ClubinhoManager: React.FC<Props> = ({ styles, currentUser }) => {
         </form>
       )}
 
+      {subs !== null && activeSubs.length > 0 && (
+        <div ref={toolbarRef} style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '12px', marginBottom: '14px', paddingBottom: '12px', borderBottom: `1px solid ${styles.borderColor}` }}>
+          <div style={{ position: 'relative', flex: '0 1 220px', minWidth: '160px' }}>
+            <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: styles.sidebarWidgetText?.color }} />
+            <input
+              type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Buscar por pet ou tutor..." style={{ ...styles.formInput, width: '100%', padding: '7px 10px 7px 32px', fontSize: '0.85rem' }}
+            />
+          </div>
+
+          <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value as any)} style={{ ...styles.formInput, width: 'auto', padding: '7px 10px', fontSize: '0.85rem' }}>
+            <option value="all">Todos os status</option>
+            <option value="vencido">Vencidas</option>
+            <option value="a-confirmar">A confirmar</option>
+            <option value="em-dia">Em dia</option>
+          </select>
+
+          <select value={filterPlan} onChange={(e) => setFilterPlan(e.target.value as any)} style={{ ...styles.formInput, width: 'auto', padding: '7px 10px', fontSize: '0.85rem' }}>
+            <option value="all">Todos os planos</option>
+            <option value="semanal">Semanal</option>
+            <option value="quinzenal">Quinzenal</option>
+          </select>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <label style={{ fontSize: '0.82rem', fontWeight: 600, color: styles.textMain }}>Ordenar por:</label>
+            <select value={sortBy} onChange={(e) => setSortBy(e.target.value as any)} style={{ ...styles.formInput, width: 'auto', padding: '7px 10px', fontSize: '0.85rem' }}>
+              <option value="renewal">Renovação</option>
+              <option value="name">Pet (A-Z)</option>
+              <option value="price">Valor</option>
+              <option value="status">Status</option>
+            </select>
+            <button
+              type="button" onClick={() => setSortDir(d => d === 'asc' ? 'desc' : 'asc')}
+              title={sortDir === 'asc' ? 'Crescente' : 'Decrescente'}
+              className="btn-action-icon"
+            >
+              <ArrowUpDown size={14} style={{ transform: sortDir === 'desc' ? 'scaleY(-1)' : undefined }} />
+            </button>
+          </div>
+
+          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.82rem', fontWeight: 600, color: styles.textMain, cursor: 'pointer', marginLeft: 'auto' }}>
+            <input type="checkbox" checked={wideView} onChange={(e) => setWideView(e.target.checked)} style={{ cursor: 'pointer' }} />
+            Visão ampla
+          </label>
+        </div>
+      )}
+
       {subs === null ? (
         <p style={{ color: styles.sidebarWidgetText?.color }}>Carregando...</p>
       ) : activeSubs.length === 0 ? (
         <p style={{ color: styles.sidebarWidgetText?.color, textAlign: 'center', padding: '30px' }}>Nenhuma assinatura do Clubinho cadastrada ainda.</p>
-      ) : (
-        <div style={{ overflowX: 'auto', border: `1px solid ${styles.borderColor}`, borderRadius: '10px' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
-            <thead>
-              <tr style={{ backgroundColor: styles.isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)' }}>
-                {['Pet', 'Tutor', 'Plano', 'Dia/Horário', 'Valor', 'Táxi dog', 'Renovação', 'Status', ''].map(h => (
-                  <th key={h} style={{ padding: '8px 10px', textAlign: 'left', fontSize: '0.72rem', fontWeight: 700, color: styles.sidebarWidgetText?.color }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {activeSubs.map(s => (
-                <tr key={s.id} style={{ borderTop: `1px solid ${styles.borderColor}` }}>
-                  <td style={{ padding: '8px 10px', fontWeight: 700, color: styles.textMain }}>{s.pet_name}</td>
-                  <td style={{ padding: '8px 10px', color: styles.sidebarWidgetText?.color }}>{s.tutor_name || '—'}</td>
-                  <td style={{ padding: '8px 10px', color: styles.textMain, textTransform: 'capitalize' }}>{s.plan_type}</td>
-                  <td style={{ padding: '8px 10px', color: styles.textMain }}>{s.weekday !== null ? `${WEEKDAY_LABELS[s.weekday]} ${s.time_of_day}` : '—'}</td>
-                  <td style={{ padding: '8px 10px', color: styles.textMain }}>R$ {Number(s.price).toFixed(2)}</td>
-                  <td style={{ padding: '8px 10px', color: styles.sidebarWidgetText?.color }}>{Number(s.taxi_dog_fee) > 0 ? `R$ ${Number(s.taxi_dog_fee).toFixed(2)}` : '—'}</td>
-                  <td style={{ padding: '8px 10px', color: styles.textMain }}>{fmtDate(s.renews_at)}</td>
-                  <td style={{ padding: '8px 10px' }}>{statusPill(s)}</td>
-                  <td style={{ padding: '6px 10px', textAlign: 'right' }}>
-                    <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
-                      <button type="button" disabled={busyId === s.id} onClick={() => openRenew(s)} title="Renovar" className="btn-action-icon"><RefreshCw size={14} /></button>
-                      <button type="button" disabled={busyId === s.id} onClick={() => startEdit(s)} title="Editar" className="btn-action-icon"><Edit3 size={14} /></button>
-                      <button type="button" disabled={busyId === s.id} onClick={() => setCancelTarget(s)} title="Cancelar" className="btn-action-icon btn-action-danger"><Ban size={14} /></button>
-                    </div>
-                  </td>
+      ) : visibleSubs.length === 0 ? (
+        <p style={{ color: styles.sidebarWidgetText?.color, textAlign: 'center', padding: '30px' }}>Nenhuma assinatura corresponde aos filtros.</p>
+      ) : (() => {
+        const table = (
+          <div style={{ overflowX: 'auto', border: `1px solid ${styles.borderColor}`, borderRadius: '10px' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+              <thead>
+                <tr style={{ backgroundColor: styles.isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)' }}>
+                  {['Pet', 'Tutor', 'Plano', 'Dia/Horário', 'Valor', 'Táxi dog', 'Renovação', 'Status', ''].map(h => (
+                    <th key={h} style={{ padding: '8px 10px', textAlign: 'left', fontSize: '0.72rem', fontWeight: 700, color: styles.sidebarWidgetText?.color, whiteSpace: 'nowrap' }}>{h}</th>
+                  ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+              </thead>
+              <tbody>
+                {visibleSubs.map(s => (
+                  <tr key={s.id} style={{ borderTop: `1px solid ${styles.borderColor}` }}>
+                    <td style={{ padding: '8px 10px', fontWeight: 700, color: styles.textMain }}>{s.pet_name}</td>
+                    <td style={{ padding: '8px 10px', color: styles.sidebarWidgetText?.color }}>{s.tutor_name || '—'}</td>
+                    <td style={{ padding: '8px 10px', color: styles.textMain, textTransform: 'capitalize' }}>{s.plan_type}</td>
+                    <td style={{ padding: '8px 10px', color: styles.textMain, whiteSpace: 'nowrap' }}>{s.weekday !== null ? `${WEEKDAY_LABELS[s.weekday]} ${s.time_of_day}` : '—'}</td>
+                    <td style={{ padding: '8px 10px', color: styles.textMain, whiteSpace: 'nowrap' }}>R$ {Number(s.price).toFixed(2)}</td>
+                    <td style={{ padding: '8px 10px', color: styles.sidebarWidgetText?.color, whiteSpace: 'nowrap' }}>{Number(s.taxi_dog_fee) > 0 ? `R$ ${Number(s.taxi_dog_fee).toFixed(2)}` : '—'}</td>
+                    <td style={{ padding: '8px 10px', color: styles.textMain, whiteSpace: 'nowrap' }}>{fmtDate(s.renews_at)}</td>
+                    <td style={{ padding: '8px 10px' }}>{statusPill(s)}</td>
+                    <td style={{ padding: '6px 10px', textAlign: 'right' }}>
+                      <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
+                        <button type="button" disabled={busyId === s.id} onClick={() => openRenew(s)} title="Renovar" className="btn-action-icon"><RefreshCw size={14} /></button>
+                        <button type="button" disabled={busyId === s.id} onClick={() => startEdit(s)} title="Editar" className="btn-action-icon"><Edit3 size={14} /></button>
+                        <button type="button" disabled={busyId === s.id} onClick={() => setCancelTarget(s)} title="Cancelar" className="btn-action-icon btn-action-danger"><Ban size={14} /></button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        );
+        if (!wideView || !widePos) return table;
+        return createPortal(
+          <div
+            role="region"
+            aria-label="Assinaturas do Clubinho em visão ampla"
+            style={{
+              position: 'absolute', top: widePos.top, left: widePos.left, width: widePos.width,
+              zIndex: 90, boxSizing: 'border-box', padding: '16px',
+              backgroundColor: styles.isDark ? '#161a26' : '#ffffff', border: `1px solid ${styles.borderColor}`,
+              borderRadius: '14px', boxShadow: '0 12px 40px rgba(0,0,0,0.18)',
+            }}
+          >
+            {table}
+          </div>,
+          document.body
+        );
+      })()}
 
       {renewingId && (
         <div style={styles.modalOverlay}>

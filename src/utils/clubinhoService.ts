@@ -42,6 +42,22 @@ export const CLUBINHO_STATUS_COLOR: Record<ClubinhoStatus, string> = {
   inativo: '#9aa0a6',
 };
 
+/** Rótulo com a contagem de dias (ex.: "Vencido há 8 dias", "A confirmar (em 3 dias)") — usado na tabela de assinaturas. */
+export function describeClubinhoStatus(sub: Pick<ClubinhoSubscription, 'renews_at' | 'is_active'>, today: Date = new Date()): string {
+  const status = getClubinhoStatus(sub, today);
+  if (status === 'inativo') return 'Inativo';
+  if (status === 'em-dia') return 'Em dia (pago)';
+  const renews = new Date(sub.renews_at + 'T00:00:00');
+  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const diffDays = Math.round((renews.getTime() - todayStart.getTime()) / 86400000);
+  if (status === 'vencido') {
+    const dias = Math.abs(diffDays);
+    return `Vencido há ${dias} ${dias === 1 ? 'dia' : 'dias'}`;
+  }
+  if (diffDays === 0) return 'Vence hoje';
+  return `A confirmar (em ${diffDays} ${diffDays === 1 ? 'dia' : 'dias'})`;
+}
+
 export const CLUBINHO_STATUS_LABEL: Record<ClubinhoStatus, string> = {
   'em-dia': 'Em dia (pago)',
   'a-confirmar': 'A confirmar',
