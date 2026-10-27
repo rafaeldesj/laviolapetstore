@@ -23,6 +23,40 @@ export interface ClubinhoSubscription {
 
 export type ClubinhoStatus = 'em-dia' | 'a-confirmar' | 'vencido' | 'inativo';
 
+/** Remove acentos, baixa pra minúsculo e tira espaços nas pontas — pra comparar nomes sem depender de digitação idêntica. */
+export function normalizeNameForMatch(s: string): string {
+  return (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+}
+
+function levenshteinDistance(a: string, b: string): number {
+  const dp: number[][] = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
+  for (let j = 0; j <= b.length; j++) dp[0][j] = j;
+  for (let i = 1; i <= a.length; i++) {
+    for (let j = 1; j <= b.length; j++) {
+      dp[i][j] = a[i - 1] === b[j - 1]
+        ? dp[i - 1][j - 1]
+        : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
+    }
+  }
+  return dp[a.length][b.length];
+}
+
+/**
+ * Dois nomes de tutor "são a mesma pessoa" pra fins de cruzamento com o Clubinho? Tolera variação de acento/grafia
+ * (ex.: "Teresinha"/"Terezinha", "Vânia"/"Vania", "Bruna"/"Bruna (Apolo)") mas rejeita nomes claramente diferentes
+ * (ex.: "Adriana" vs "Viviane") — importante porque vários pets diferentes usam o mesmo nome (ex.: dois "Pingo",
+ * dois "Zoe"), e misturar o histórico de um com a assinatura do outro bagunça a contagem de banhos.
+ */
+export function tutorNamesMatch(a: string, b: string): boolean {
+  const na = normalizeNameForMatch(a);
+  const nb = normalizeNameForMatch(b);
+  if (!na || !nb) return false;
+  if (na === nb) return true;
+  if (na.includes(nb) || nb.includes(na)) return true;
+  const maxDist = Math.min(na.length, nb.length) >= 7 ? 2 : 1;
+  return levenshteinDistance(na, nb) <= maxDist;
+}
+
 /** Quantos dias antes da renovação já vale avisar ("a confirmar"), em vez de esperar vencer de vez. */
 const REMINDER_WINDOW_DAYS = 5;
 

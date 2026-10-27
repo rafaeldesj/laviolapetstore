@@ -11,7 +11,7 @@ import type { AgendaScope } from '../utils/agendaService';
 import { listPets } from '../utils/petsService';
 import { buildHolidayMap, toDateKey } from '../utils/holidays';
 import { ClubinhoManager } from './ClubinhoManager';
-import { listClubinho, getClubinhoStatus, visitProgressLabel, CLUBINHO_STATUS_COLOR, CLUBINHO_STATUS_LABEL } from '../utils/clubinhoService';
+import { listClubinho, getClubinhoStatus, visitProgressLabel, CLUBINHO_STATUS_COLOR, CLUBINHO_STATUS_LABEL, normalizeNameForMatch, tutorNamesMatch } from '../utils/clubinhoService';
 import type { ClubinhoSubscription } from '../utils/clubinhoService';
 
 interface AgendamentosProps {
@@ -291,26 +291,43 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
   const [clubinhoByPet, setClubinhoByPet] = useState<Map<string, ClubinhoSubscription>>(new Map());
   // Agendamentos antigos (importados) não têm pet_id preenchido, só o nome — então o cruzamento com a
   // assinatura cai pro nome quando o id não bate (mesma solução já usada no histórico do pet em Meus Pets).
-  const [clubinhoByName, setClubinhoByName] = useState<Map<string, ClubinhoSubscription>>(new Map());
+  // Como vários pets diferentes podem usar o mesmo nome (ex.: dois "Pingo", dois "Zoe", de tutores diferentes),
+  // o cruzamento por nome sozinho misturaria os banhos de pets diferentes — por isso agrupa por nome e, quando o
+  // agendamento tem tutor preenchido, exige que o tutor "bata" (tolerando variação de acento/grafia via
+  // tutorNamesMatch) antes de aceitar a assinatura. Só confia no nome sozinho quando o agendamento antigo não
+  // tem tutor registrado nem id do pet — nesse caso, sem nada mais pra desambiguar, assume a única assinatura
+  // ativa com esse nome (se houver mais de uma, como "Bela", não arrisca e deixa sem assinatura).
+  const [clubinhoByNormName, setClubinhoByNormName] = useState<Map<string, ClubinhoSubscription[]>>(new Map());
   useEffect(() => {
     if (!isStaffMode) return;
     listClubinho()
       .then(list => {
         const byId = new Map<string, ClubinhoSubscription>();
-        const byName = new Map<string, ClubinhoSubscription>();
+        const byNormName = new Map<string, ClubinhoSubscription[]>();
         for (const s of list) {
           if (!s.is_active) continue;
           if (s.pet_id) byId.set(s.pet_id, s);
-          byName.set(s.pet_name.trim().toLowerCase(), s);
+          const nameKey = normalizeNameForMatch(s.pet_name);
+          const bucket = byNormName.get(nameKey);
+          if (bucket) bucket.push(s); else byNormName.set(nameKey, [s]);
         }
         setClubinhoByPet(byId);
-        setClubinhoByName(byName);
+        setClubinhoByNormName(byNormName);
       })
       .catch(() => {});
   }, [isStaffMode, pageTab]);
 
-  const getClubinhoSub = (app: Appointment): ClubinhoSubscription | undefined =>
-    (app.pet_id && clubinhoByPet.get(app.pet_id)) || clubinhoByName.get(app.pet_name.trim().toLowerCase());
+  const getClubinhoSub = (app: Appointment): ClubinhoSubscription | undefined => {
+    if (app.pet_id) {
+      const byIdMatch = clubinhoByPet.get(app.pet_id);
+      if (byIdMatch) return byIdMatch;
+    }
+    const candidates = clubinhoByNormName.get(normalizeNameForMatch(app.pet_name));
+    if (!candidates || candidates.length === 0) return undefined;
+    const apptTutor = (app.tutor_name || '').trim();
+    if (!apptTutor) return candidates.length === 1 ? candidates[0] : undefined;
+    return candidates.find(c => tutorNamesMatch(apptTutor, c.tutor_name));
+  };
 
   const getAppointmentsForDay = (day: Date) =>
     appointments
@@ -1082,7 +1099,7 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
             <input type="checkbox" checked={wideView} onChange={(e) => setWideView(e.target.checked)} style={{ cursor: 'pointer' }} />
             Ver visão ampla
           </label>
-          {viewMode === 'month' && clubinhoByName.size > 0 && (
+          {viewMode === 'month' && clubinhoByNormName.size > 0 && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.76rem', color: styles.sidebarWidgetText?.color }}>
               <span style={{ fontWeight: 600 }}>Bolinha do Clubinho:</span>
               {(['em-dia', 'a-confirmar', 'vencido'] as const).map(st => (
