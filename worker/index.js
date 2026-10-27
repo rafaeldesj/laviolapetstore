@@ -985,6 +985,7 @@ export default {
           if (input.taxiDogFee !== undefined) fields.taxi_dog_fee = Math.max(0, Number(input.taxiDogFee) || 0);
           if (input.tutorName !== undefined) fields.tutor_name = String(input.tutorName).slice(0, 150);
           if (input.renewsAt !== undefined) fields.renews_at = String(input.renewsAt);
+          if (input.startedAt !== undefined) fields.started_at = String(input.startedAt);
           if (input.isActive !== undefined) fields.is_active = !!input.isActive;
           if (input.paymentFlag !== undefined) {
             if (input.paymentFlag !== null && !PAYMENT_FLAGS.includes(input.paymentFlag)) return json({ mensagem: 'Marcação de pagamento inválida.' }, 400);
