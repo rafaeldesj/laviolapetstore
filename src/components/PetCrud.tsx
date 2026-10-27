@@ -58,8 +58,8 @@ export const PetCrud: React.FC<PetCrudProps> = ({ currentUser, styles }) => {
   // Equipe: também vê os pets sem dono (prontos para vincular a um cliente) e pode ver todos de uma vez.
   // Para a equipe, "meus pets" não faz sentido (ela não é tutora) — vira "pets com tutor vinculado".
   type PetFilterMode = 'meus' | 'sem-tutor' | 'todos';
-  const [filterMode, setFilterMode] = useState<PetFilterMode>('meus');
-  const showUnowned = filterMode !== 'meus'; // mostra a coluna/dica de tutor sempre que a lista pode incluir pets sem dono
+  const [filterMode, setFilterMode] = useState<PetFilterMode>('todos');
+  const showUnowned = isStaff && filterMode !== 'meus'; // mostra a coluna/dica de tutor sempre que a lista pode incluir pets sem dono
   const pets =
     filterMode === 'sem-tutor' ? allPets.filter(p => !p.owner_id) :
     filterMode === 'todos' ? allPets :
@@ -393,7 +393,7 @@ export const PetCrud: React.FC<PetCrudProps> = ({ currentUser, styles }) => {
       <div style={styles.crudHeader}>
         <div>
           <h2 id="pets-heading" style={styles.sectionTitle}>
-            {filterMode === 'sem-tutor' ? 'Pets sem tutor vinculado' : filterMode === 'todos' ? 'Todos os Pets' : isStaff ? 'Pets com tutor vinculado' : 'Meus Pets'}
+            {!isStaff ? 'Meus Pets' : filterMode === 'sem-tutor' ? 'Pets sem tutor vinculado' : filterMode === 'todos' ? 'Todos os Pets' : 'Pets com tutor vinculado'}
             <div style={styles.sectionTitleBar}></div>
           </h2>
           {filterMode === 'sem-tutor' && (
