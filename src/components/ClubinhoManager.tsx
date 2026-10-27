@@ -400,20 +400,22 @@ export const ClubinhoManager: React.FC<Props> = ({ styles, currentUser }) => {
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
               <thead>
                 <tr style={{ backgroundColor: styles.isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)' }}>
-                  {['Pet', 'Tutor', 'Plano', 'Dia/Horário', 'Valor', 'Táxi dog', 'Renovação', 'Status', ''].map(h => (
+                  {['#', 'Pet', 'Tutor', 'Plano', 'Dia/Horário', 'Valor', 'Táxi dog', 'Início', 'Renovação', 'Status', ''].map(h => (
                     <th key={h} style={{ padding: '8px 10px', textAlign: 'left', fontSize: '0.72rem', fontWeight: 700, color: styles.sidebarWidgetText?.color, whiteSpace: 'nowrap' }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {visibleSubs.map(s => (
+                {visibleSubs.map((s, idx) => (
                   <tr key={s.id} style={{ borderTop: `1px solid ${styles.borderColor}` }}>
+                    <td style={{ padding: '8px 10px', color: styles.sidebarWidgetText?.color }}>{idx + 1}</td>
                     <td style={{ padding: '8px 10px', fontWeight: 700, color: styles.textMain }}>{s.pet_name}</td>
                     <td style={{ padding: '8px 10px', color: styles.sidebarWidgetText?.color }}>{s.tutor_name || '—'}</td>
                     <td style={{ padding: '8px 10px', color: styles.textMain, textTransform: 'capitalize' }}>{s.plan_type}</td>
                     <td style={{ padding: '8px 10px', color: styles.textMain, whiteSpace: 'nowrap' }}>{s.weekday !== null ? `${WEEKDAY_LABELS[s.weekday]} ${s.time_of_day}` : '—'}</td>
                     <td style={{ padding: '8px 10px', color: styles.textMain, whiteSpace: 'nowrap' }}>R$ {Number(s.price).toFixed(2)}</td>
                     <td style={{ padding: '8px 10px', color: styles.sidebarWidgetText?.color, whiteSpace: 'nowrap' }}>{Number(s.taxi_dog_fee) > 0 ? `R$ ${Number(s.taxi_dog_fee).toFixed(2)}` : '—'}</td>
+                    <td style={{ padding: '8px 10px', color: styles.sidebarWidgetText?.color, whiteSpace: 'nowrap' }}>{fmtDate(s.started_at)}</td>
                     <td style={{ padding: '8px 10px', color: styles.textMain, whiteSpace: 'nowrap' }}>{fmtDate(s.renews_at)}</td>
                     <td style={{ padding: '8px 10px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
