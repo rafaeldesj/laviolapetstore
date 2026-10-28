@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { PlusCircle, RefreshCw, Edit3, Ban, X, Save, AlertTriangle, Search, ArrowUpDown } from 'lucide-react';
 import {
   listClubinho, createClubinho, updateClubinho, renewClubinho, cancelClubinho, registerClubinhoPayment,
-  getClubinhoStatus, describeClubinhoStatus, visitProgressLabel, CLUBINHO_STATUS_COLOR, CLUBINHO_STATUS_LABEL, CLUBINHO_STATUS_TOOLTIP, CLUBINHO_STATUS_DOT, WEEKDAY_LABELS, PAYMENT_METHOD_LABELS,
+  getClubinhoStatus, describeClubinhoStatus, visitProgressLabel, CLUBINHO_STATUS_COLOR, CLUBINHO_STATUS_LABEL, CLUBINHO_STATUS_TOOLTIP, CLUBINHO_STATUS_DOT, CLUBINHO_STATUS_ICON, WEEKDAY_LABELS, PAYMENT_METHOD_LABELS,
 } from '../utils/clubinhoService';
 import type { ClubinhoSubscription, ClubinhoStatus } from '../utils/clubinhoService';
 import { listPets } from '../utils/petsService';
@@ -119,7 +119,7 @@ export const ClubinhoManager: React.FC<Props> = ({ styles, currentUser }) => {
   const vencidos = useMemo(() => activeSubs.filter(s => getClubinhoStatus(s) === 'vencido'), [activeSubs]);
   const aConfirmar = useMemo(() => activeSubs.filter(s => getClubinhoStatus(s) === 'a-confirmar'), [activeSubs]);
 
-  const STATUS_RANK: Record<ClubinhoStatus, number> = { inadimplente: 0, vencido: 1, 'a-confirmar': 2, 'em-dia': 3, pago: 4, inativo: 5 };
+  const STATUS_RANK: Record<ClubinhoStatus, number> = { inadimplente: 0, vencido: 1, 'a-confirmar': 2, 'sem-marcacao': 3, congelada: 4, pago: 5, inativo: 6 };
   const visibleSubs = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     let list = activeSubs.filter(s => {
@@ -223,11 +223,11 @@ export const ClubinhoManager: React.FC<Props> = ({ styles, currentUser }) => {
     }
   };
 
-  const setPaymentFlag = async (s: ClubinhoSubscription, flag: 'a_confirmar' | 'debito' | 'inadimplente' | null) => {
+  const setPaymentFlag = async (s: ClubinhoSubscription, flag: 'a_confirmar' | 'debito' | 'inadimplente' | 'congelada' | null) => {
     setBusyId(s.id);
     try {
       await updateClubinho(s.id, { paymentFlag: flag });
-      const label = flag === 'debito' ? 'Vencido/Débito' : flag === 'a_confirmar' ? 'A confirmar' : flag === 'inadimplente' ? 'Inadimplente (Suspenso)' : 'Automático (por data)';
+      const label = flag === 'debito' ? 'Vencido/Débito' : flag === 'a_confirmar' ? 'A confirmar' : flag === 'inadimplente' ? 'Inadimplente (Suspenso)' : flag === 'congelada' ? 'Congelada' : 'Sem marcação';
       await logAction(currentUser.email || '', currentUser.name || 'Equipe', 'Marcação de pagamento do Clubinho', `Status de "${s.pet_name}" marcado como: ${label}.`);
       load();
     } catch (e: any) {
@@ -268,9 +268,10 @@ export const ClubinhoManager: React.FC<Props> = ({ styles, currentUser }) => {
   const statusPill = (s: ClubinhoSubscription) => {
     const st = getClubinhoStatus(s);
     const color = CLUBINHO_STATUS_COLOR[st];
+    const icon = CLUBINHO_STATUS_ICON[st];
     return (
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '0.74rem', fontWeight: 700, padding: '3px 9px', borderRadius: '20px', backgroundColor: `${color}22`, color, border: `1px solid ${color}55`, whiteSpace: 'nowrap' }}>
-        <span style={{ width: '7px', height: '7px', borderRadius: '50%', backgroundColor: color, flexShrink: 0 }} /> {describeClubinhoStatus(s)}
+        {icon ? <span style={{ fontSize: '9px' }}>{icon}</span> : <span style={{ width: '7px', height: '7px', borderRadius: '50%', backgroundColor: color, flexShrink: 0 }} />} {describeClubinhoStatus(s)}
       </span>
     );
   };
@@ -384,9 +385,13 @@ export const ClubinhoManager: React.FC<Props> = ({ styles, currentUser }) => {
       {subs !== null && activeSubs.length > 0 && (
         <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '10px', marginBottom: '12px', fontSize: '0.76rem', color: styles.sidebarWidgetText?.color }}>
           <span style={{ fontWeight: 600 }}>Status:</span>
-          {(['em-dia', 'a-confirmar', 'vencido', 'pago', 'inadimplente'] as const).map(st => (
+          {(['a-confirmar', 'vencido', 'pago', 'inadimplente', 'congelada', 'sem-marcacao'] as const).map(st => (
             <span key={st} title={CLUBINHO_STATUS_TOOLTIP[st]} style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', cursor: 'help' }}>
-              <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: CLUBINHO_STATUS_COLOR[st] }} />
+              {CLUBINHO_STATUS_ICON[st] ? (
+                <span style={{ fontSize: '9px' }}>{CLUBINHO_STATUS_ICON[st]}</span>
+              ) : (
+                <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: CLUBINHO_STATUS_COLOR[st] }} />
+              )}
               {CLUBINHO_STATUS_LABEL[st]}
             </span>
           ))}
@@ -407,9 +412,10 @@ export const ClubinhoManager: React.FC<Props> = ({ styles, currentUser }) => {
             <option value="all">Todos os status</option>
             <option value="vencido">Vencidas</option>
             <option value="a-confirmar">A confirmar</option>
-            <option value="em-dia">Em dia</option>
             <option value="pago">Pagamento realizado</option>
             <option value="inadimplente">Inadimplente (Suspenso)</option>
+            <option value="congelada">Congelada</option>
+            <option value="sem-marcacao">Sem marcação</option>
           </select>
 
           <select value={filterPlan} onChange={(e) => setFilterPlan(e.target.value as any)} style={{ ...styles.formInput, width: 'auto', padding: '7px 10px', fontSize: '0.85rem' }}>
@@ -482,16 +488,17 @@ export const ClubinhoManager: React.FC<Props> = ({ styles, currentUser }) => {
                           onChange={(e) => {
                             const v = e.target.value;
                             if (v === 'pago') openPaymentForm(s);
-                            else setPaymentFlag(s, (v || null) as 'a_confirmar' | 'debito' | 'inadimplente' | null);
+                            else setPaymentFlag(s, v as 'a_confirmar' | 'debito' | 'inadimplente' | 'congelada');
                           }}
-                          title="Marcar manualmente (confirmado pela equipe, vale mais que a data)"
+                          title="Marcação da equipe (não há mais cálculo automático)"
                           style={{ fontSize: '0.7rem', padding: '2px 4px', borderRadius: '5px', border: `1px solid ${styles.borderColor}`, backgroundColor: 'transparent', color: styles.sidebarWidgetText?.color, cursor: 'pointer' }}
                         >
-                          <option value="">Automático (por data)</option>
+                          {!s.payment_flag && <option value="" disabled>Selecione um status...</option>}
                           <option value="a_confirmar">{CLUBINHO_STATUS_DOT['a-confirmar']} Marcar: A confirmar</option>
                           <option value="debito">{CLUBINHO_STATUS_DOT.vencido} Marcar: Vencido/Débito</option>
                           <option value="pago">{CLUBINHO_STATUS_DOT.pago} Marcar: Pagamento realizado</option>
                           <option value="inadimplente">{CLUBINHO_STATUS_DOT.inadimplente} Marcar: Inadimplente (Suspenso)</option>
+                          <option value="congelada">{CLUBINHO_STATUS_DOT.congelada} Marcar: Congelada</option>
                         </select>
                       </div>
                       {s.payment_flag === 'pago' && s.last_payment && (

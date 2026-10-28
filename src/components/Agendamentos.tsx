@@ -11,7 +11,7 @@ import type { AgendaScope } from '../utils/agendaService';
 import { listPets } from '../utils/petsService';
 import { buildHolidayMap, toDateKey } from '../utils/holidays';
 import { ClubinhoManager } from './ClubinhoManager';
-import { listClubinho, getClubinhoStatus, visitProgressLabel, CLUBINHO_STATUS_COLOR, CLUBINHO_STATUS_LABEL, CLUBINHO_STATUS_TOOLTIP, normalizeNameForMatch, tutorNamesMatch } from '../utils/clubinhoService';
+import { listClubinho, getClubinhoStatus, visitProgressLabel, CLUBINHO_STATUS_COLOR, CLUBINHO_STATUS_LABEL, CLUBINHO_STATUS_TOOLTIP, CLUBINHO_STATUS_ICON, normalizeNameForMatch, tutorNamesMatch } from '../utils/clubinhoService';
 import type { ClubinhoSubscription } from '../utils/clubinhoService';
 
 interface AgendamentosProps {
@@ -1134,9 +1134,13 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
           {viewMode === 'month' && clubinhoByNormName.size > 0 && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.76rem', color: styles.sidebarWidgetText?.color }}>
               <span style={{ fontWeight: 600 }}>Bolinha do Clubinho:</span>
-              {(['em-dia', 'a-confirmar', 'vencido', 'pago', 'inadimplente'] as const).map(st => (
+              {(['a-confirmar', 'vencido', 'pago', 'inadimplente', 'congelada', 'sem-marcacao'] as const).map(st => (
                 <span key={st} title={CLUBINHO_STATUS_TOOLTIP[st]} style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', cursor: 'help' }}>
-                  <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: CLUBINHO_STATUS_COLOR[st] }} />
+                  {CLUBINHO_STATUS_ICON[st] ? (
+                    <span style={{ fontSize: '9px' }}>{CLUBINHO_STATUS_ICON[st]}</span>
+                  ) : (
+                    <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: CLUBINHO_STATUS_COLOR[st] }} />
+                  )}
                   {CLUBINHO_STATUS_LABEL[st]}
                 </span>
               ))}
@@ -1378,6 +1382,8 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
                       const dot = app.payment_flag ? PAYMENT_FLAG_COLOR[app.payment_flag]
                         : clubStatus ? CLUBINHO_STATUS_COLOR[clubStatus]
                         : (statusBadgeColors[app.status] || { text: '#888' }).text;
+                      // "Congelada" mostra ❄️ em vez de bolinha colorida (não é marcação do atendimento, só da assinatura).
+                      const dotIcon = !app.payment_flag && clubStatus ? CLUBINHO_STATUS_ICON[clubStatus] : undefined;
                       const time = new Date(app.scheduled_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
                       const paymentNote = app.payment_flag ? ` · ${PAYMENT_FLAG_LABEL[app.payment_flag]}` : clubStatus ? ` · Clubinho: ${CLUBINHO_STATUS_LABEL[clubStatus]}` : '';
                       const visitLabel = visitProgressLabel(clubSub, new Date(app.scheduled_at));
@@ -1395,7 +1401,11 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
                             opacity: app.status === 'Cancelado' ? 0.6 : (inMonth ? 1 : 0.7),
                           }}
                         >
-                          <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: dot, flexShrink: 0 }} />
+                          {dotIcon ? (
+                            <span style={{ fontSize: '9px', lineHeight: 1, flexShrink: 0 }}>{dotIcon}</span>
+                          ) : (
+                            <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: dot, flexShrink: 0 }} />
+                          )}
                           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                             <strong style={{ fontWeight: 600 }}>{time}</strong> {app.pet_name}{app.tutor_name ? ` - ${app.tutor_name}` : ''}{' '}
                             <span style={{ opacity: 0.75, fontSize: '0.7rem' }}>{visitLabel}</span>

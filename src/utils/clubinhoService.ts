@@ -13,10 +13,10 @@ export interface ClubinhoSubscription {
   started_at: string; // YYYY-MM-DD
   renews_at: string; // YYYY-MM-DD
   is_active: boolean;
-  /** Quando preenchido, é informação REAL confirmada pela equipe (ex.: trazida do calendário antigo do Google,
-   *  ou um pagamento registrado à mão) e vale mais que o cálculo por data.
-   *  'a_confirmar' | 'debito' | 'pago' | 'inadimplente' | null. */
-  payment_flag: 'a_confirmar' | 'debito' | 'pago' | 'inadimplente' | null;
+  /** Marcação feita pela equipe — não há mais cálculo automático por data, toda assinatura ativa precisa de uma
+   *  marcação explícita. 'a_confirmar' | 'debito' | 'pago' | 'inadimplente' | 'congelada' | null (null = ainda
+   *  não marcada, ex.: assinatura recém-criada). */
+  payment_flag: 'a_confirmar' | 'debito' | 'pago' | 'inadimplente' | 'congelada' | null;
   /** Último pagamento registrado (detalhes de data/hora/forma/quem recebeu) — vem junto na listagem, não precisa buscar à parte. */
   last_payment?: ClubinhoPayment | null;
   created_by: string;
@@ -42,7 +42,7 @@ export const PAYMENT_METHOD_LABELS: Record<ClubinhoPayment['payment_method'], st
   especie: 'Espécie',
 };
 
-export type ClubinhoStatus = 'em-dia' | 'a-confirmar' | 'vencido' | 'pago' | 'inadimplente' | 'inativo';
+export type ClubinhoStatus = 'sem-marcacao' | 'a-confirmar' | 'vencido' | 'pago' | 'inadimplente' | 'congelada' | 'inativo';
 
 /** Remove acentos, baixa pra minúsculo e tira espaços nas pontas — pra comparar nomes sem depender de digitação idêntica. */
 export function normalizeNameForMatch(s: string): string {
@@ -78,90 +78,94 @@ export function tutorNamesMatch(a: string, b: string): boolean {
   return levenshteinDistance(na, nb) <= maxDist;
 }
 
-/** Quantos dias antes da renovação já vale avisar ("a confirmar"), em vez de esperar vencer de vez — "falta uma semana". */
-const REMINDER_WINDOW_DAYS = 7;
-
 /**
- * Azul ("a confirmar") não é mais só "falta pouco pra vencer": a proprietária pediu que só vire azul quem
- * já teve um pagamento CONFIRMADO de verdade (via "Marcar: Pagamento realizado", com data/hora/forma/quem
- * recebeu) alguma vez — não basta o cálculo automático por data achar que "deve estar em dia". Quem nunca teve
- * um pagamento confirmado permanece laranja até vencer de vez (ou até a equipe marcar manualmente).
+ * Não existe mais cálculo automático por data (decisão da proprietária/Paloma, 2026-10-28: a equipe confia mais
+ * na própria avaliação de cada cliente do que numa conta por data). Toda assinatura ativa precisa de uma
+ * marcação explícita da equipe; sem marcação, mostra "sem-marcacao" (neutro) até alguém decidir.
  */
-export function getClubinhoStatus(sub: Pick<ClubinhoSubscription, 'renews_at' | 'is_active' | 'payment_flag' | 'last_payment'>, today: Date = new Date()): ClubinhoStatus {
+export function getClubinhoStatus(sub: Pick<ClubinhoSubscription, 'is_active' | 'payment_flag'>): ClubinhoStatus {
   if (!sub.is_active) return 'inativo';
   if (sub.payment_flag === 'pago') return 'pago';
   if (sub.payment_flag === 'inadimplente') return 'inadimplente';
+  if (sub.payment_flag === 'congelada') return 'congelada';
   if (sub.payment_flag === 'debito') return 'vencido';
   if (sub.payment_flag === 'a_confirmar') return 'a-confirmar';
-  const renews = new Date(sub.renews_at + 'T00:00:00');
-  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-  const diffDays = Math.round((renews.getTime() - todayStart.getTime()) / 86400000);
-  if (diffDays < 0) return 'vencido';
-  if (diffDays <= REMINDER_WINDOW_DAYS && sub.last_payment) return 'a-confirmar';
-  return 'em-dia';
+  return 'sem-marcacao';
 }
 
-// Cores conforme a convenção que o próprio proprietário já usava: laranja = pago/em dia, roxo = débito/vencido,
-// azul = a confirmar. Mantemos essa convenção dele, mesmo não sendo o padrão "verde = bom, vermelho = ruim".
+// Cores conforme a convenção que o próprio proprietário já usava: roxo = débito/vencido, azul = a confirmar,
+// verde = pago. Mantemos essa convenção dele, mesmo não sendo o padrão "verde = bom, vermelho = ruim".
 export const CLUBINHO_STATUS_COLOR: Record<ClubinhoStatus, string> = {
-  'em-dia': 'hsl(36, 95%, 45%)',
+  'sem-marcacao': '#c3c7cf',
   'a-confirmar': 'hsl(210, 85%, 50%)',
   vencido: 'hsl(280, 65%, 50%)',
   pago: 'hsl(142, 60%, 40%)',
   inadimplente: 'hsl(0, 75%, 50%)',
+  congelada: 'hsl(200, 70%, 60%)',
   inativo: '#9aa0a6',
 };
 
-/** Bolinha colorida em texto (emoji), pra usar dentro de <option> — essas tags não aceitam elementos/estilo, só texto. */
+/**
+ * Pra "congelada", mostra um ❄️ no lugar da bolinha colorida (ideia da Paloma): não é nem "bom" nem "ruim", é
+ * uma assinatura pausada — o ciclo pago terminou e o cliente não avisou se quer renovar ou não, sem dever nada.
+ */
+export const CLUBINHO_STATUS_ICON: Partial<Record<ClubinhoStatus, string>> = {
+  congelada: '❄️',
+};
+
+/** Bolinha/ícone em texto (emoji), pra usar dentro de <option> — essas tags não aceitam elementos/estilo, só texto. */
 export const CLUBINHO_STATUS_DOT: Record<ClubinhoStatus, string> = {
-  'em-dia': '🟠',
+  'sem-marcacao': '⚪',
   'a-confirmar': '🔵',
   vencido: '🟣',
   pago: '🟢',
   inadimplente: '🔴',
-  inativo: '⚪',
+  congelada: '❄️',
+  inativo: '⚫',
 };
 
-/** Texto explicativo de cada cor — usado como `title` (tooltip) na legenda da Agenda e das Assinaturas. */
+/** Texto explicativo de cada status — usado como `title` (tooltip) na legenda da Agenda e das Assinaturas. */
 export const CLUBINHO_STATUS_TOOLTIP: Record<ClubinhoStatus, string> = {
-  'em-dia': 'Dentro do prazo normal, sem pendência.',
-  'a-confirmar': 'Falta cerca de uma semana pra renovar e o último pagamento já foi confirmado pela equipe — hora de lembrar o cliente.',
-  vencido: 'Passou da data de renovação, ou a equipe marcou como débito.',
+  'sem-marcacao': 'A equipe ainda não marcou a situação dessa assinatura.',
+  'a-confirmar': 'A equipe marcou como "a confirmar" — fica de olho, renovação por vir.',
+  vencido: 'A equipe marcou como vencido/débito — está devendo.',
   pago: 'Pagamento confirmado pela equipe, com data, hora, forma de pagamento e quem recebeu.',
   inadimplente: 'Cliente não responde após várias tentativas de contato, ou já avisou que não vai renovar.',
+  congelada: 'Cliente completou o ciclo pago e não renovou, sem avisar — não deve nada, só decidiu (ou ainda não decidiu) não continuar.',
   inativo: 'Assinatura cancelada.',
 };
 
 /** Rótulo com a contagem de dias (ex.: "Vencido há 8 dias", "A confirmar (em 3 dias)") — usado na tabela de assinaturas. */
-export function describeClubinhoStatus(sub: Pick<ClubinhoSubscription, 'renews_at' | 'is_active' | 'payment_flag' | 'last_payment'>, today: Date = new Date()): string {
-  const status = getClubinhoStatus(sub, today);
+export function describeClubinhoStatus(sub: Pick<ClubinhoSubscription, 'renews_at' | 'is_active' | 'payment_flag'>, today: Date = new Date()): string {
+  const status = getClubinhoStatus(sub);
   if (status === 'inativo') return 'Inativo';
   if (status === 'pago') return 'Pagamento confirmado';
   if (status === 'inadimplente') return 'Inadimplente (Suspenso)';
-  if (status === 'em-dia') return 'Em dia (pago)';
+  if (status === 'congelada') return 'Congelada';
+  if (status === 'sem-marcacao') return 'Sem marcação';
   const renews = new Date(sub.renews_at + 'T00:00:00');
   const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
   const diffDays = Math.round((renews.getTime() - todayStart.getTime()) / 86400000);
-  // Quando a marcação veio confirmada pela equipe (não é só o cálculo por data), deixa isso claro no rótulo.
-  const tag = sub.payment_flag ? ' (confirmado)' : '';
+  // Chegou aqui só por marcação manual da equipe (não existe mais cálculo automático).
   if (status === 'vencido') {
     if (diffDays < 0) {
       const dias = Math.abs(diffDays);
-      return `Vencido${tag} há ${dias} ${dias === 1 ? 'dia' : 'dias'}`;
+      return `Vencido há ${dias} ${dias === 1 ? 'dia' : 'dias'}`;
     }
-    return `Vencido${tag}`;
+    return 'Vencido';
   }
-  if (diffDays > 0) return `A confirmar${tag} (em ${diffDays} ${diffDays === 1 ? 'dia' : 'dias'})`;
-  if (diffDays === 0) return `Vence hoje${tag}`;
-  return `A confirmar${tag}`;
+  if (diffDays > 0) return `A confirmar (em ${diffDays} ${diffDays === 1 ? 'dia' : 'dias'})`;
+  if (diffDays === 0) return 'Vence hoje';
+  return 'A confirmar';
 }
 
 export const CLUBINHO_STATUS_LABEL: Record<ClubinhoStatus, string> = {
-  'em-dia': 'Em dia (pago)',
+  'sem-marcacao': 'Sem marcação',
   'a-confirmar': 'A confirmar',
   vencido: 'Vencido (débito)',
   pago: 'Pagamento realizado',
   inadimplente: 'Inadimplente (Suspenso)',
+  congelada: 'Congelada',
   inativo: 'Inativo',
 };
 
@@ -224,7 +228,7 @@ export const createClubinho = async (input: NewClubinhoInput): Promise<ClubinhoS
 
 export const updateClubinho = async (id: string, patch: Partial<{
   planType: string; weekday: number | null; timeOfDay: string; price: number; taxiDogFee: number; tutorName: string; startedAt: string; renewsAt: string; isActive: boolean;
-  paymentFlag: 'a_confirmar' | 'debito' | 'pago' | 'inadimplente' | null;
+  paymentFlag: 'a_confirmar' | 'debito' | 'pago' | 'inadimplente' | 'congelada' | null;
 }>): Promise<ClubinhoSubscription> => {
   const { assinatura } = await workerCall<{ assinatura: ClubinhoSubscription }>(`/clubinho/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(patch) });
   return assinatura;

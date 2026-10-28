@@ -168,7 +168,7 @@ const toAppt = (row) => ({
 });
 
 const APPT_STATUS = ['Agendado', 'Em Andamento', 'Concluído', 'Cancelado'];
-const PAYMENT_FLAGS = ['a_confirmar', 'debito', 'pago', 'inadimplente'];
+const PAYMENT_FLAGS = ['a_confirmar', 'debito', 'pago', 'inadimplente', 'congelada'];
 const PAYMENT_METHODS = ['pix', 'debito', 'credito', 'especie'];
 const CANCEL_REASONS = ['aviso_previo', 'sem_aviso'];
 const CLUBINHO_CYCLE_VISITS = { semanal: 4, quinzenal: 2 };
