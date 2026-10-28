@@ -23,6 +23,8 @@ export interface Pet {
   owner_id: string;
   /** Nome do tutor (texto solto, não é conta) — ajuda a equipe a achar quem vincular. */
   tutor_hint?: string;
+  /** Observações livres (alergia a medicamento, cuidados especiais etc.). */
+  notes?: string;
   imported_from_agenda?: boolean;
   documents?: PetDocument[];
   created_at: string;
@@ -42,6 +44,7 @@ export interface NewPetInput {
   /** Só a equipe pode indicar o dono; o cliente sempre cadastra para si mesmo. */
   owner_id?: string;
   tutor_hint?: string;
+  notes?: string;
 }
 
 export async function createPet(input: NewPetInput): Promise<Pet> {
@@ -55,6 +58,7 @@ export interface PetPatch {
   breed?: string;
   age?: number;
   tutor_hint?: string;
+  notes?: string;
   /** Só a equipe pode mudar o dono (vincular um pet "sem dono" ao cliente certo). */
   owner_id?: string;
 }

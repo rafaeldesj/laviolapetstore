@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { PlusCircle, RefreshCw, Edit3, Ban, X, Save, AlertTriangle, Search, ArrowUpDown } from 'lucide-react';
 import {
   listClubinho, createClubinho, updateClubinho, renewClubinho, cancelClubinho, registerClubinhoPayment,
-  getClubinhoStatus, describeClubinhoStatus, visitProgressLabel, CLUBINHO_STATUS_COLOR, WEEKDAY_LABELS, PAYMENT_METHOD_LABELS,
+  getClubinhoStatus, describeClubinhoStatus, visitProgressLabel, CLUBINHO_STATUS_COLOR, CLUBINHO_STATUS_LABEL, CLUBINHO_STATUS_TOOLTIP, WEEKDAY_LABELS, PAYMENT_METHOD_LABELS,
 } from '../utils/clubinhoService';
 import type { ClubinhoSubscription, ClubinhoStatus } from '../utils/clubinhoService';
 import { listPets } from '../utils/petsService';
@@ -119,7 +119,7 @@ export const ClubinhoManager: React.FC<Props> = ({ styles, currentUser }) => {
   const vencidos = useMemo(() => activeSubs.filter(s => getClubinhoStatus(s) === 'vencido'), [activeSubs]);
   const aConfirmar = useMemo(() => activeSubs.filter(s => getClubinhoStatus(s) === 'a-confirmar'), [activeSubs]);
 
-  const STATUS_RANK: Record<ClubinhoStatus, number> = { vencido: 0, 'a-confirmar': 1, 'em-dia': 2, pago: 3, inativo: 4 };
+  const STATUS_RANK: Record<ClubinhoStatus, number> = { inadimplente: 0, vencido: 1, 'a-confirmar': 2, 'em-dia': 3, pago: 4, inativo: 5 };
   const visibleSubs = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     let list = activeSubs.filter(s => {
@@ -223,11 +223,11 @@ export const ClubinhoManager: React.FC<Props> = ({ styles, currentUser }) => {
     }
   };
 
-  const setPaymentFlag = async (s: ClubinhoSubscription, flag: 'a_confirmar' | 'debito' | null) => {
+  const setPaymentFlag = async (s: ClubinhoSubscription, flag: 'a_confirmar' | 'debito' | 'inadimplente' | null) => {
     setBusyId(s.id);
     try {
       await updateClubinho(s.id, { paymentFlag: flag });
-      const label = flag === 'debito' ? 'Vencido/Débito' : flag === 'a_confirmar' ? 'A confirmar' : 'Automático (por data)';
+      const label = flag === 'debito' ? 'Vencido/Débito' : flag === 'a_confirmar' ? 'A confirmar' : flag === 'inadimplente' ? 'Inadimplente' : 'Automático (por data)';
       await logAction(currentUser.email || '', currentUser.name || 'Equipe', 'Marcação de pagamento do Clubinho', `Status de "${s.pet_name}" marcado como: ${label}.`);
       load();
     } catch (e: any) {
@@ -382,6 +382,18 @@ export const ClubinhoManager: React.FC<Props> = ({ styles, currentUser }) => {
       )}
 
       {subs !== null && activeSubs.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '10px', marginBottom: '12px', fontSize: '0.76rem', color: styles.sidebarWidgetText?.color }}>
+          <span style={{ fontWeight: 600 }}>Status:</span>
+          {(['em-dia', 'a-confirmar', 'vencido', 'pago', 'inadimplente'] as const).map(st => (
+            <span key={st} title={CLUBINHO_STATUS_TOOLTIP[st]} style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', cursor: 'help' }}>
+              <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: CLUBINHO_STATUS_COLOR[st] }} />
+              {CLUBINHO_STATUS_LABEL[st]}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {subs !== null && activeSubs.length > 0 && (
         <div ref={toolbarRef} style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '12px', marginBottom: '14px', paddingBottom: '12px', borderBottom: `1px solid ${styles.borderColor}` }}>
           <div style={{ position: 'relative', flex: '0 1 220px', minWidth: '160px' }}>
             <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: styles.sidebarWidgetText?.color }} />
@@ -397,6 +409,7 @@ export const ClubinhoManager: React.FC<Props> = ({ styles, currentUser }) => {
             <option value="a-confirmar">A confirmar</option>
             <option value="em-dia">Em dia</option>
             <option value="pago">Pagamento realizado</option>
+            <option value="inadimplente">Inadimplente</option>
           </select>
 
           <select value={filterPlan} onChange={(e) => setFilterPlan(e.target.value as any)} style={{ ...styles.formInput, width: 'auto', padding: '7px 10px', fontSize: '0.85rem' }}>
@@ -469,7 +482,7 @@ export const ClubinhoManager: React.FC<Props> = ({ styles, currentUser }) => {
                           onChange={(e) => {
                             const v = e.target.value;
                             if (v === 'pago') openPaymentForm(s);
-                            else setPaymentFlag(s, (v || null) as 'a_confirmar' | 'debito' | null);
+                            else setPaymentFlag(s, (v || null) as 'a_confirmar' | 'debito' | 'inadimplente' | null);
                           }}
                           title="Marcar manualmente (confirmado pela equipe, vale mais que a data)"
                           style={{ fontSize: '0.7rem', padding: '2px 4px', borderRadius: '5px', border: `1px solid ${styles.borderColor}`, backgroundColor: 'transparent', color: styles.sidebarWidgetText?.color, cursor: 'pointer' }}
@@ -478,6 +491,7 @@ export const ClubinhoManager: React.FC<Props> = ({ styles, currentUser }) => {
                           <option value="a_confirmar">Marcar: A confirmar</option>
                           <option value="debito">Marcar: Vencido/Débito</option>
                           <option value="pago">Marcar: Pagamento realizado</option>
+                          <option value="inadimplente">Marcar: Inadimplente</option>
                         </select>
                       </div>
                       {s.payment_flag === 'pago' && s.last_payment && (

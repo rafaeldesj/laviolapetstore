@@ -47,6 +47,7 @@ export const PetCrud: React.FC<PetCrudProps> = ({ currentUser, styles }) => {
   const [breed, setBreed] = useState<string>('');
   const breedOptions = BREEDS_BY_SPECIES[species];
   const [age, setAge] = useState<number>(0);
+  const [notes, setNotes] = useState<string>('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formPhotoFile, setFormPhotoFile] = useState<File | null>(null);
 
@@ -137,7 +138,7 @@ export const PetCrud: React.FC<PetCrudProps> = ({ currentUser, styles }) => {
     setErrorMsg(null);
 
     try {
-      const pet = await createPet({ name, species, breed, age });
+      const pet = await createPet({ name, species, breed, age, notes });
       if (formPhotoFile) {
         try { await uploadPetPhoto(pet.id, formPhotoFile); } catch (e: any) { setErrorMsg(`Pet cadastrado, mas a foto não foi salva: ${e.message || e}`); }
       }
@@ -151,6 +152,7 @@ export const PetCrud: React.FC<PetCrudProps> = ({ currentUser, styles }) => {
       setSpecies('Cão');
       setBreed('');
       setAge(0);
+      setNotes('');
       setFormPhotoFile(null);
       setIsAdding(false);
       fetchPets();
@@ -169,7 +171,7 @@ export const PetCrud: React.FC<PetCrudProps> = ({ currentUser, styles }) => {
     setErrorMsg(null);
 
     try {
-      await updatePet(petId, { name, species, breed, age });
+      await updatePet(petId, { name, species, breed, age, notes });
       if (formPhotoFile) {
         try { await uploadPetPhoto(petId, formPhotoFile); } catch (e: any) { setErrorMsg(`Dados salvos, mas a foto não foi atualizada: ${e.message || e}`); }
       }
@@ -184,6 +186,7 @@ export const PetCrud: React.FC<PetCrudProps> = ({ currentUser, styles }) => {
       setSpecies('Cão');
       setBreed('');
       setAge(0);
+      setNotes('');
       setFormPhotoFile(null);
       fetchPets();
     } catch (err: any) {
@@ -220,6 +223,7 @@ export const PetCrud: React.FC<PetCrudProps> = ({ currentUser, styles }) => {
     setSpecies(pet.species || 'Outro');
     setBreed(pet.breed || '');
     setAge(pet.age || 0);
+    setNotes(pet.notes || '');
     setFormPhotoFile(null);
     setIsAdding(false);
   };
@@ -230,6 +234,7 @@ export const PetCrud: React.FC<PetCrudProps> = ({ currentUser, styles }) => {
     setSpecies('Cão');
     setBreed('');
     setAge(0);
+    setNotes('');
     setFormPhotoFile(null);
   };
 
@@ -453,108 +458,142 @@ export const PetCrud: React.FC<PetCrudProps> = ({ currentUser, styles }) => {
         </div>
       )}
 
-      {(isAdding || editingId) && (
-        <form onSubmit={isAdding ? handleAddPet : (e) => { e.preventDefault(); handleUpdatePet(editingId!); }} style={{ ...styles.modalForm, margin: '20px 0', padding: '20px', border: `1px solid ${styles.borderColor}`, borderRadius: '12px' }}>
-          <h3 style={{ fontSize: '1.1rem', fontWeight: 700, margin: '0 0 10px 0', color: styles.primary }}>
-            {isAdding ? 'Novo Pet' : 'Editar Pet'}
-          </h3>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-            {editingId ? avatar(allPets.find(p => p.id === editingId) || ({} as Pet), 64) : (
-              <div style={{ width: 64, height: 64, borderRadius: '50%', backgroundColor: styles.isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: styles.secondary }}>
-                <PawPrint size={30} />
-              </div>
-            )}
-            <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '8px 12px', borderRadius: '8px', border: `1px solid ${styles.borderColor}`, cursor: 'pointer', fontSize: '0.82rem', fontWeight: 600, color: styles.textMain }}>
-              <Camera size={15} /> {formPhotoFile ? formPhotoFile.name : 'Escolher foto'}
-              <input type="file" accept="image/jpeg,image/png" style={{ display: 'none' }} onChange={(e) => setFormPhotoFile(e.target.files?.[0] || null)} />
-            </label>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px' }}>
-            <div style={styles.formGroup}>
-              <label htmlFor="pet-form-name" style={styles.formLabel}>Nome do Pet</label>
-              <input id="pet-form-name" type="text" value={name} onChange={(e) => setName(e.target.value)} style={styles.formInput} placeholder="Ex: Rex" disabled={isLoading} />
-            </div>
-
-            <div style={styles.formGroup}>
-              <label htmlFor="pet-form-species" style={styles.formLabel}>Espécie</label>
-              <select
-                id="pet-form-species"
-                value={species}
-                onChange={(e) => { setSpecies(e.target.value); setBreed(''); }}
-                style={styles.formInput}
-                disabled={isLoading}
-              >
-                <option value="Cão">Cão</option>
-                <option value="Gato">Gato</option>
-                <option value="Ave">Ave</option>
-                <option value="Roedor">Roedor</option>
-                <option value="Outro">Outro</option>
-              </select>
-            </div>
-
-            <div style={styles.formGroup}>
-              <label htmlFor="pet-form-breed" style={styles.formLabel}>Raça</label>
-              {breedOptions ? (
-                <>
-                  <select
-                    id="pet-form-breed"
-                    value={breedOptions.includes(breed) ? breed : BREED_CUSTOM_VALUE}
-                    onChange={(e) => setBreed(e.target.value === BREED_CUSTOM_VALUE ? '' : e.target.value)}
-                    style={styles.formInput}
-                    disabled={isLoading}
-                  >
-                    <option value="" disabled>Selecione a raça</option>
-                    {breedOptions.map((b) => <option key={b} value={b}>{b}</option>)}
-                    <option value={BREED_CUSTOM_VALUE}>Outra (digite)</option>
-                  </select>
-                  {!breedOptions.includes(breed) && (
-                    <input
-                      id="pet-form-breed-custom"
-                      type="text"
-                      value={breed}
-                      onChange={(e) => setBreed(e.target.value)}
-                      style={{ ...styles.formInput, marginTop: '6px' }}
-                      placeholder="Digite a raça"
-                      disabled={isLoading}
-                    />
-                  )}
-                </>
-              ) : (
-                <input id="pet-form-breed" type="text" value={breed} onChange={(e) => setBreed(e.target.value)} style={styles.formInput} placeholder="Ex: Golden Retriever" disabled={isLoading} />
+      {(() => {
+        if (!isAdding && !editingId) return null;
+        const fields = (
+          <>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+              {editingId ? avatar(allPets.find(p => p.id === editingId) || ({} as Pet), 64) : (
+                <div style={{ width: 64, height: 64, borderRadius: '50%', backgroundColor: styles.isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: styles.secondary }}>
+                  <PawPrint size={30} />
+                </div>
               )}
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '8px 12px', borderRadius: '8px', border: `1px solid ${styles.borderColor}`, cursor: 'pointer', fontSize: '0.82rem', fontWeight: 600, color: styles.textMain }}>
+                <Camera size={15} /> {formPhotoFile ? formPhotoFile.name : 'Escolher foto'}
+                <input type="file" accept="image/jpeg,image/png" style={{ display: 'none' }} onChange={(e) => setFormPhotoFile(e.target.files?.[0] || null)} />
+              </label>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px' }}>
+              <div style={styles.formGroup}>
+                <label htmlFor="pet-form-name" style={styles.formLabel}>Nome do Pet</label>
+                <input id="pet-form-name" type="text" value={name} onChange={(e) => setName(e.target.value)} style={styles.formInput} placeholder="Ex: Rex" disabled={isLoading} />
+              </div>
+
+              <div style={styles.formGroup}>
+                <label htmlFor="pet-form-species" style={styles.formLabel}>Espécie</label>
+                <select
+                  id="pet-form-species"
+                  value={species}
+                  onChange={(e) => { setSpecies(e.target.value); setBreed(''); }}
+                  style={styles.formInput}
+                  disabled={isLoading}
+                >
+                  <option value="Cão">Cão</option>
+                  <option value="Gato">Gato</option>
+                  <option value="Ave">Ave</option>
+                  <option value="Roedor">Roedor</option>
+                  <option value="Outro">Outro</option>
+                </select>
+              </div>
+
+              <div style={styles.formGroup}>
+                <label htmlFor="pet-form-breed" style={styles.formLabel}>Raça</label>
+                {breedOptions ? (
+                  <>
+                    <select
+                      id="pet-form-breed"
+                      value={breedOptions.includes(breed) ? breed : BREED_CUSTOM_VALUE}
+                      onChange={(e) => setBreed(e.target.value === BREED_CUSTOM_VALUE ? '' : e.target.value)}
+                      style={styles.formInput}
+                      disabled={isLoading}
+                    >
+                      <option value="" disabled>Selecione a raça</option>
+                      {breedOptions.map((b) => <option key={b} value={b}>{b}</option>)}
+                      <option value={BREED_CUSTOM_VALUE}>Outra (digite)</option>
+                    </select>
+                    {!breedOptions.includes(breed) && (
+                      <input
+                        id="pet-form-breed-custom"
+                        type="text"
+                        value={breed}
+                        onChange={(e) => setBreed(e.target.value)}
+                        style={{ ...styles.formInput, marginTop: '6px' }}
+                        placeholder="Digite a raça"
+                        disabled={isLoading}
+                      />
+                    )}
+                  </>
+                ) : (
+                  <input id="pet-form-breed" type="text" value={breed} onChange={(e) => setBreed(e.target.value)} style={styles.formInput} placeholder="Ex: Golden Retriever" disabled={isLoading} />
+                )}
+              </div>
+
+              <div style={styles.formGroup}>
+                <label htmlFor="pet-form-age" style={styles.formLabel}>Idade (Anos)</label>
+                <input id="pet-form-age" type="number" value={age} onChange={(e) => setAge(parseInt(e.target.value) || 0)} style={styles.formInput} min="0" disabled={isLoading} />
+              </div>
             </div>
 
             <div style={styles.formGroup}>
-              <label htmlFor="pet-form-age" style={styles.formLabel}>Idade (Anos)</label>
-              <input id="pet-form-age" type="number" value={age} onChange={(e) => setAge(parseInt(e.target.value) || 0)} style={styles.formInput} min="0" disabled={isLoading} />
+              <label htmlFor="pet-form-notes" style={styles.formLabel}>Observações</label>
+              <textarea
+                id="pet-form-notes" value={notes} onChange={(e) => setNotes(e.target.value)}
+                style={{ ...styles.formInput, minHeight: '70px', resize: 'vertical', fontFamily: 'inherit' }}
+                placeholder="Ex: alergia a determinado medicamento, cuidado especial com manuseio, etc."
+                disabled={isLoading} maxLength={2000}
+              />
+            </div>
+
+            <div style={{ display: 'flex', gap: '10px', marginTop: '15px' }}>
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="btn-save"
+                style={{ ...styles.btnAcc(hoveredBtn === 'save-pet'), backgroundColor: undefined, borderColor: undefined }}
+                onMouseEnter={() => setHoveredBtn('save-pet')}
+                onMouseLeave={() => setHoveredBtn(null)}
+              >
+                <Save size={16} /> Salvar
+              </button>
+              <button
+                type="button"
+                onClick={isAdding ? () => { setIsAdding(false); setFormPhotoFile(null); } : cancelEdit}
+                style={styles.btnAcc(hoveredBtn === 'cancel-pet')}
+                onMouseEnter={() => setHoveredBtn('cancel-pet')}
+                onMouseLeave={() => setHoveredBtn(null)}
+              >
+                <X size={16} /> Cancelar
+              </button>
+            </div>
+          </>
+        );
+        const onSubmit = isAdding ? handleAddPet : (e: React.FormEvent) => { e.preventDefault(); handleUpdatePet(editingId!); };
+
+        // Cadastrar continua inline (não "pula" nada, já que o botão que abre fica no topo mesmo). Editar vira
+        // popup: a proprietária pediu pra não perder a posição de rolagem da lista ao clicar em "Editar".
+        if (isAdding) {
+          return (
+            <form onSubmit={onSubmit} style={{ ...styles.modalForm, margin: '20px 0', padding: '20px', border: `1px solid ${styles.borderColor}`, borderRadius: '12px' }}>
+              <h3 style={{ fontSize: '1.1rem', fontWeight: 700, margin: '0 0 10px 0', color: styles.primary }}>Novo Pet</h3>
+              {fields}
+            </form>
+          );
+        }
+        return (
+          <div style={styles.modalOverlay}>
+            <div style={{ ...styles.modalContent, maxWidth: '620px' }} role="dialog" aria-modal="true" aria-labelledby="edit-pet-title">
+              <div style={styles.modalHeader}>
+                <h2 id="edit-pet-title" style={{ ...styles.modalTitle, fontSize: '1.1rem' }}>Editar Pet</h2>
+                <button onClick={cancelEdit} style={styles.modalCloseBtn(false)} aria-label="Fechar">✕</button>
+              </div>
+              <form onSubmit={onSubmit} style={styles.modalForm}>
+                {fields}
+              </form>
             </div>
           </div>
-
-          <div style={{ display: 'flex', gap: '10px', marginTop: '15px' }}>
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="btn-save"
-              style={{ ...styles.btnAcc(hoveredBtn === 'save-pet'), backgroundColor: undefined, borderColor: undefined }}
-              onMouseEnter={() => setHoveredBtn('save-pet')}
-              onMouseLeave={() => setHoveredBtn(null)}
-            >
-              <Save size={16} /> Salvar
-            </button>
-            <button
-              type="button"
-              onClick={isAdding ? () => { setIsAdding(false); setFormPhotoFile(null); } : cancelEdit}
-              style={styles.btnAcc(hoveredBtn === 'cancel-pet')}
-              onMouseEnter={() => setHoveredBtn('cancel-pet')}
-              onMouseLeave={() => setHoveredBtn(null)}
-            >
-              <X size={16} /> Cancelar
-            </button>
-          </div>
-        </form>
-      )}
+        );
+      })()}
 
       {pets.length > 0 && (
         <div role="group" aria-label="Forma de visualização" style={{ display: 'inline-flex', border: `1px solid ${styles.borderColor}`, borderRadius: '8px', overflow: 'hidden', marginTop: '16px' }}>

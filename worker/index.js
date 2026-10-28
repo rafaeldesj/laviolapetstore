@@ -168,7 +168,7 @@ const toAppt = (row) => ({
 });
 
 const APPT_STATUS = ['Agendado', 'Em Andamento', 'Concluído', 'Cancelado'];
-const PAYMENT_FLAGS = ['a_confirmar', 'debito', 'pago'];
+const PAYMENT_FLAGS = ['a_confirmar', 'debito', 'pago', 'inadimplente'];
 const PAYMENT_METHODS = ['pix', 'debito', 'credito', 'especie'];
 const CANCEL_REASONS = ['aviso_previo', 'sem_aviso'];
 const CLUBINHO_CYCLE_VISITS = { semanal: 4, quinzenal: 2 };
@@ -530,6 +530,8 @@ export default {
         const pickPet = (input, { allowOwner }) => {
           const out = {};
           for (const k of PET_TEXT) if (input[k] !== undefined) out[k] = String(input[k]).slice(0, 200);
+          // Observações (alergias, cuidados especiais etc.) — texto livre, mais longo que os outros campos.
+          if (input.notes !== undefined) out.notes = String(input.notes).slice(0, 2000);
           if (input.age !== undefined) {
             const n = Math.floor(Number(input.age));
             if (!Number.isFinite(n) || n < 0 || n > 100) throw new Error('idade inválida');

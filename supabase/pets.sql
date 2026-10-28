@@ -14,6 +14,8 @@ create table if not exists public.pets (
   owner_id    text not null default '',
   -- Nome do tutor (texto solto, não é uma conta) — ajuda a equipe a achar quem vincular quando o cliente se cadastrar.
   tutor_hint  text not null default '',
+  -- Observações livres sobre o pet (alergia a medicamento, cuidados especiais etc.), visível pra equipe e pro tutor.
+  notes       text not null default '',
   imported_from_agenda boolean not null default false,
   -- [{ id, label, content_type, uploaded_at }] — pedigree, documento de identidade, carteira de vacinação etc.
   documents   jsonb not null default '[]'::jsonb,

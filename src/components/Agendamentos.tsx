@@ -11,7 +11,7 @@ import type { AgendaScope } from '../utils/agendaService';
 import { listPets } from '../utils/petsService';
 import { buildHolidayMap, toDateKey } from '../utils/holidays';
 import { ClubinhoManager } from './ClubinhoManager';
-import { listClubinho, getClubinhoStatus, visitProgressLabel, CLUBINHO_STATUS_COLOR, CLUBINHO_STATUS_LABEL, normalizeNameForMatch, tutorNamesMatch } from '../utils/clubinhoService';
+import { listClubinho, getClubinhoStatus, visitProgressLabel, CLUBINHO_STATUS_COLOR, CLUBINHO_STATUS_LABEL, CLUBINHO_STATUS_TOOLTIP, normalizeNameForMatch, tutorNamesMatch } from '../utils/clubinhoService';
 import type { ClubinhoSubscription } from '../utils/clubinhoService';
 
 interface AgendamentosProps {
@@ -91,6 +91,7 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
   const toggleDay = (key: string) => setExpandedDays(prev => { const n = new Set(prev); if (n.has(key)) n.delete(key); else n.add(key); return n; });
   const [viewMode, setViewMode] = useState<'list' | 'week' | 'day' | 'month'>('list');
   const [pageTab, setPageTab] = useState<'agenda' | 'clubinho'>('agenda');
+  const [hoveredTab, setHoveredTab] = useState<'agenda' | 'clubinho' | null>(null);
   useLayoutEffect(() => {
     if (!wideView) return;
     measureWide();
@@ -899,9 +900,14 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
               role="tab"
               aria-selected={pageTab === key}
               onClick={() => setPageTab(key)}
+              onMouseEnter={() => setHoveredTab(key)}
+              onMouseLeave={() => setHoveredTab(null)}
+              // O efeito global de hover (transform: scale) estica o botão pra fora do container (que tem
+              // overflow: hidden pra manter a borda arredondada), cortando o texto. Aqui o hover é só uma cor.
+              className="no-global-hover"
               style={{
                 padding: '8px 16px', border: 'none', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 700,
-                backgroundColor: pageTab === key ? styles.primary : 'transparent',
+                backgroundColor: pageTab === key ? styles.primary : hoveredTab === key ? (styles.isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)') : 'transparent',
                 color: pageTab === key ? '#fff' : styles.textMain,
               }}
             >
@@ -1128,8 +1134,8 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
           {viewMode === 'month' && clubinhoByNormName.size > 0 && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.76rem', color: styles.sidebarWidgetText?.color }}>
               <span style={{ fontWeight: 600 }}>Bolinha do Clubinho:</span>
-              {(['em-dia', 'a-confirmar', 'vencido', 'pago'] as const).map(st => (
-                <span key={st} style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+              {(['em-dia', 'a-confirmar', 'vencido', 'pago', 'inadimplente'] as const).map(st => (
+                <span key={st} title={CLUBINHO_STATUS_TOOLTIP[st]} style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', cursor: 'help' }}>
                   <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: CLUBINHO_STATUS_COLOR[st] }} />
                   {CLUBINHO_STATUS_LABEL[st]}
                 </span>
