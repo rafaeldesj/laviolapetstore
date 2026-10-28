@@ -92,6 +92,9 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
   const [viewMode, setViewMode] = useState<'list' | 'week' | 'day' | 'month'>('list');
   const [pageTab, setPageTab] = useState<'agenda' | 'clubinho'>('agenda');
   const [hoveredTab, setHoveredTab] = useState<'agenda' | 'clubinho' | null>(null);
+  // Estado do botão "hoje" no calendário de Mês, controlado à mão (sem o filtro de brilho global) pra garantir
+  // contraste forte em qualquer estado — o filtro genérico deixava a bolinha clara demais e o texto branco sumia.
+  const [todayBtnState, setTodayBtnState] = useState<'idle' | 'hover' | 'active'>('idle');
   useLayoutEffect(() => {
     if (!wideView) return;
     measureWide();
@@ -1350,12 +1353,20 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
                       <button
                         type="button"
                         onClick={(e) => { e.stopPropagation(); setCurrentDate(day); setViewMode('day'); }}
+                        onMouseEnter={() => today && setTodayBtnState('hover')}
+                        onMouseLeave={() => today && setTodayBtnState('idle')}
+                        onMouseDown={() => today && setTodayBtnState('active')}
+                        onMouseUp={() => today && setTodayBtnState('hover')}
                         title="Ver este dia"
+                        className="no-global-hover"
                         style={{
                           minWidth: '26px', height: '26px', padding: '0 6px', borderRadius: '13px', border: 'none', cursor: 'pointer',
                           fontSize: '0.78rem', fontWeight: today ? 700 : 600,
-                          backgroundColor: today ? styles.primary : 'transparent',
+                          backgroundColor: today
+                            ? (todayBtnState === 'active' ? 'hsl(210, 90%, 24%)' : todayBtnState === 'hover' ? 'hsl(210, 90%, 32%)' : 'hsl(210, 90%, 38%)')
+                            : 'transparent',
                           color: today ? '#fff' : (inMonth ? styles.textMain : styles.sidebarWidgetText?.color),
+                          transition: 'background-color 0.15s ease',
                         }}
                       >
                         {day.getDate() === 1 ? `1 ${monthNames[day.getMonth()].slice(0, 3).toLowerCase()}.` : day.getDate()}
