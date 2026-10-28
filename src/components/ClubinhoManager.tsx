@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { PlusCircle, RefreshCw, Edit3, Ban, X, Save, AlertTriangle, Search, ArrowUpDown } from 'lucide-react';
 import {
   listClubinho, createClubinho, updateClubinho, renewClubinho, cancelClubinho, registerClubinhoPayment,
-  getClubinhoStatus, describeClubinhoStatus, visitProgressLabel, CLUBINHO_STATUS_COLOR, CLUBINHO_STATUS_LABEL, CLUBINHO_STATUS_TOOLTIP, WEEKDAY_LABELS, PAYMENT_METHOD_LABELS,
+  getClubinhoStatus, describeClubinhoStatus, visitProgressLabel, CLUBINHO_STATUS_COLOR, CLUBINHO_STATUS_LABEL, CLUBINHO_STATUS_TOOLTIP, CLUBINHO_STATUS_DOT, WEEKDAY_LABELS, PAYMENT_METHOD_LABELS,
 } from '../utils/clubinhoService';
 import type { ClubinhoSubscription, ClubinhoStatus } from '../utils/clubinhoService';
 import { listPets } from '../utils/petsService';
@@ -227,7 +227,7 @@ export const ClubinhoManager: React.FC<Props> = ({ styles, currentUser }) => {
     setBusyId(s.id);
     try {
       await updateClubinho(s.id, { paymentFlag: flag });
-      const label = flag === 'debito' ? 'Vencido/Débito' : flag === 'a_confirmar' ? 'A confirmar' : flag === 'inadimplente' ? 'Inadimplente' : 'Automático (por data)';
+      const label = flag === 'debito' ? 'Vencido/Débito' : flag === 'a_confirmar' ? 'A confirmar' : flag === 'inadimplente' ? 'Inadimplente (Suspenso)' : 'Automático (por data)';
       await logAction(currentUser.email || '', currentUser.name || 'Equipe', 'Marcação de pagamento do Clubinho', `Status de "${s.pet_name}" marcado como: ${label}.`);
       load();
     } catch (e: any) {
@@ -409,7 +409,7 @@ export const ClubinhoManager: React.FC<Props> = ({ styles, currentUser }) => {
             <option value="a-confirmar">A confirmar</option>
             <option value="em-dia">Em dia</option>
             <option value="pago">Pagamento realizado</option>
-            <option value="inadimplente">Inadimplente</option>
+            <option value="inadimplente">Inadimplente (Suspenso)</option>
           </select>
 
           <select value={filterPlan} onChange={(e) => setFilterPlan(e.target.value as any)} style={{ ...styles.formInput, width: 'auto', padding: '7px 10px', fontSize: '0.85rem' }}>
@@ -488,10 +488,10 @@ export const ClubinhoManager: React.FC<Props> = ({ styles, currentUser }) => {
                           style={{ fontSize: '0.7rem', padding: '2px 4px', borderRadius: '5px', border: `1px solid ${styles.borderColor}`, backgroundColor: 'transparent', color: styles.sidebarWidgetText?.color, cursor: 'pointer' }}
                         >
                           <option value="">Automático (por data)</option>
-                          <option value="a_confirmar">Marcar: A confirmar</option>
-                          <option value="debito">Marcar: Vencido/Débito</option>
-                          <option value="pago">Marcar: Pagamento realizado</option>
-                          <option value="inadimplente">Marcar: Inadimplente</option>
+                          <option value="a_confirmar">{CLUBINHO_STATUS_DOT['a-confirmar']} Marcar: A confirmar</option>
+                          <option value="debito">{CLUBINHO_STATUS_DOT.vencido} Marcar: Vencido/Débito</option>
+                          <option value="pago">{CLUBINHO_STATUS_DOT.pago} Marcar: Pagamento realizado</option>
+                          <option value="inadimplente">{CLUBINHO_STATUS_DOT.inadimplente} Marcar: Inadimplente (Suspenso)</option>
                         </select>
                       </div>
                       {s.payment_flag === 'pago' && s.last_payment && (

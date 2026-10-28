@@ -112,6 +112,16 @@ export const CLUBINHO_STATUS_COLOR: Record<ClubinhoStatus, string> = {
   inativo: '#9aa0a6',
 };
 
+/** Bolinha colorida em texto (emoji), pra usar dentro de <option> — essas tags não aceitam elementos/estilo, só texto. */
+export const CLUBINHO_STATUS_DOT: Record<ClubinhoStatus, string> = {
+  'em-dia': '🟠',
+  'a-confirmar': '🔵',
+  vencido: '🟣',
+  pago: '🟢',
+  inadimplente: '🔴',
+  inativo: '⚪',
+};
+
 /** Texto explicativo de cada cor — usado como `title` (tooltip) na legenda da Agenda e das Assinaturas. */
 export const CLUBINHO_STATUS_TOOLTIP: Record<ClubinhoStatus, string> = {
   'em-dia': 'Dentro do prazo normal, sem pendência.',
@@ -127,7 +137,7 @@ export function describeClubinhoStatus(sub: Pick<ClubinhoSubscription, 'renews_a
   const status = getClubinhoStatus(sub, today);
   if (status === 'inativo') return 'Inativo';
   if (status === 'pago') return 'Pagamento confirmado';
-  if (status === 'inadimplente') return 'Inadimplente';
+  if (status === 'inadimplente') return 'Inadimplente (Suspenso)';
   if (status === 'em-dia') return 'Em dia (pago)';
   const renews = new Date(sub.renews_at + 'T00:00:00');
   const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
@@ -151,7 +161,7 @@ export const CLUBINHO_STATUS_LABEL: Record<ClubinhoStatus, string> = {
   'a-confirmar': 'A confirmar',
   vencido: 'Vencido (débito)',
   pago: 'Pagamento realizado',
-  inadimplente: 'Inadimplente',
+  inadimplente: 'Inadimplente (Suspenso)',
   inativo: 'Inativo',
 };
 
