@@ -37,7 +37,7 @@ const emptyPaymentForm = (defaultReceivedBy: string): PaymentFormState => ({
 });
 
 type FormState = {
-  petId: string; petName: string; tutorName: string; planType: 'semanal' | 'quinzenal';
+  petId: string; petName: string; tutorName: string; planType: 'semanal' | 'quinzenal' | 'avulso';
   weekday: number; timeOfDay: string; price: string; taxiDogFee: string; startedAt: string; renewsAt: string;
 };
 
@@ -89,7 +89,7 @@ export const ClubinhoManager: React.FC<Props> = ({ styles, currentUser }) => {
   // Busca, filtros e ordenação
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | ClubinhoStatus>('all');
-  const [filterPlan, setFilterPlan] = useState<'all' | 'semanal' | 'quinzenal'>('all');
+  const [filterPlan, setFilterPlan] = useState<'all' | 'semanal' | 'quinzenal' | 'avulso'>('all');
   const [sortBy, setSortBy] = useState<'renewal' | 'name' | 'price' | 'status'>('renewal');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
 
@@ -156,7 +156,10 @@ export const ClubinhoManager: React.FC<Props> = ({ styles, currentUser }) => {
       const input = {
         petId: form.petId, petName: form.petName, tutorName: form.tutorName.trim(), planType: form.planType,
         weekday: form.weekday, timeOfDay: form.timeOfDay, price: Number(form.price) || 0,
-        taxiDogFee: Number(form.taxiDogFee) || 0, startedAt: form.startedAt, renewsAt: form.renewsAt,
+        taxiDogFee: Number(form.taxiDogFee) || 0, startedAt: form.startedAt,
+        // Avulso não tem renovação de verdade: trava sempre igual à data, mesmo que o campo (desabilitado) tenha
+        // ficado com outro valor por algum motivo.
+        renewsAt: form.planType === 'avulso' ? form.startedAt : form.renewsAt,
       };
       if (editingId) {
         await updateClubinho(editingId, input);
@@ -308,78 +311,105 @@ export const ClubinhoManager: React.FC<Props> = ({ styles, currentUser }) => {
       )}
 
       {isCreating && (
-        <form onSubmit={handleSubmit} style={{ ...styles.modalForm, margin: '0 0 20px', padding: '20px', border: `1px solid ${styles.borderColor}`, borderRadius: '12px' }}>
-          <h3 style={{ margin: '0 0 6px', fontSize: '1.05rem', fontWeight: 700, color: styles.primary }}>
-            {editingId ? 'Editar assinatura' : 'Nova assinatura do Clubinho'}
-          </h3>
-
-          <div style={styles.formGroup}>
-            <label style={styles.formLabel}>Pet (já cadastrado) *</label>
-            <div style={{ position: 'relative' }}>
-              <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: styles.sidebarWidgetText?.color }} />
-              <input
-                type="text" value={petSearch} disabled={!!editingId}
-                onChange={(e) => { setPetSearch(e.target.value); setForm(f => ({ ...f, petId: '', petName: '' })); }}
-                placeholder="Digite o nome do pet..." style={{ ...styles.formInput, width: '100%', paddingLeft: '32px' }}
-              />
+        <div style={styles.modalOverlay}>
+          <div style={{ ...styles.modalContent, maxWidth: '640px' }} role="dialog" aria-modal="true" aria-labelledby="clubinho-form-title">
+            <div style={styles.modalHeader}>
+              <h2 id="clubinho-form-title" style={{ ...styles.modalTitle, fontSize: '1.05rem' }}>
+                {editingId ? 'Editar assinatura' : 'Nova assinatura do Clubinho'}
+              </h2>
+              <button onClick={resetForm} style={styles.modalCloseBtn(false)} aria-label="Fechar">✕</button>
             </div>
-            {petOptions.length > 0 && (
-              <div style={{ border: `1px solid ${styles.borderColor}`, borderRadius: '8px', marginTop: '4px', maxHeight: '160px', overflowY: 'auto' }}>
-                {petOptions.map(p => (
-                  <button key={p.id} type="button" onClick={() => pickPet(p)} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '7px 10px', background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.85rem', color: styles.textMain }}>
-                    {p.name} {p.tutor_hint ? `— tutor: ${p.tutor_hint}` : ''}
-                  </button>
-                ))}
+            <form onSubmit={handleSubmit} style={styles.modalForm}>
+              <div style={styles.formGroup}>
+                <label style={styles.formLabel}>Pet (já cadastrado) *</label>
+                <div style={{ position: 'relative' }}>
+                  <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: styles.sidebarWidgetText?.color }} />
+                  <input
+                    type="text" value={petSearch} disabled={!!editingId}
+                    onChange={(e) => { setPetSearch(e.target.value); setForm(f => ({ ...f, petId: '', petName: '' })); }}
+                    placeholder="Digite o nome do pet..." style={{ ...styles.formInput, width: '100%', paddingLeft: '32px' }}
+                  />
+                </div>
+                {petOptions.length > 0 && (
+                  <div style={{ border: `1px solid ${styles.borderColor}`, borderRadius: '8px', marginTop: '4px', maxHeight: '160px', overflowY: 'auto' }}>
+                    {petOptions.map(p => (
+                      <button key={p.id} type="button" onClick={() => pickPet(p)} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '7px 10px', background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.85rem', color: styles.textMain }}>
+                        {p.name} {p.tutor_hint ? `— tutor: ${p.tutor_hint}` : ''}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {form.petId && <p style={{ fontSize: '0.78rem', color: 'hsl(142,60%,35%)', margin: '4px 0 0' }}>Selecionado: {form.petName}</p>}
               </div>
-            )}
-            {form.petId && <p style={{ fontSize: '0.78rem', color: 'hsl(142,60%,35%)', margin: '4px 0 0' }}>Selecionado: {form.petName}</p>}
-          </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '14px' }}>
-            <div style={styles.formGroup}>
-              <label style={styles.formLabel}>Nome do tutor</label>
-              <input type="text" value={form.tutorName} onChange={(e) => setForm(f => ({ ...f, tutorName: e.target.value }))} style={styles.formInput} placeholder="Ex: Julio" />
-            </div>
-            <div style={styles.formGroup}>
-              <label style={styles.formLabel}>Plano *</label>
-              <select value={form.planType} onChange={(e) => setForm(f => ({ ...f, planType: e.target.value as 'semanal' | 'quinzenal' }))} style={styles.formInput}>
-                <option value="semanal">Semanal</option>
-                <option value="quinzenal">Quinzenal</option>
-              </select>
-            </div>
-            <div style={styles.formGroup}>
-              <label style={styles.formLabel}>Dia da semana</label>
-              <select value={form.weekday} onChange={(e) => setForm(f => ({ ...f, weekday: Number(e.target.value) }))} style={styles.formInput}>
-                {WEEKDAY_LABELS.map((w, i) => <option key={i} value={i}>{w}</option>)}
-              </select>
-            </div>
-            <div style={styles.formGroup}>
-              <label style={styles.formLabel}>Horário</label>
-              <input type="time" value={form.timeOfDay} onChange={(e) => setForm(f => ({ ...f, timeOfDay: e.target.value }))} style={styles.formInput} />
-            </div>
-            <div style={styles.formGroup}>
-              <label style={styles.formLabel}>Valor (R$) *</label>
-              <input type="number" min="0" step="0.01" value={form.price} onChange={(e) => setForm(f => ({ ...f, price: e.target.value }))} style={styles.formInput} />
-            </div>
-            <div style={styles.formGroup}>
-              <label style={styles.formLabel}>Táxi dog (R$)</label>
-              <input type="number" min="0" step="0.01" value={form.taxiDogFee} onChange={(e) => setForm(f => ({ ...f, taxiDogFee: e.target.value }))} style={styles.formInput} placeholder="0" />
-            </div>
-            <div style={styles.formGroup}>
-              <label style={styles.formLabel}>Início *</label>
-              <input type="date" value={form.startedAt} onChange={(e) => setForm(f => ({ ...f, startedAt: e.target.value }))} style={styles.formInput} />
-            </div>
-            <div style={styles.formGroup}>
-              <label style={styles.formLabel}>Renovação *</label>
-              <input type="date" value={form.renewsAt} onChange={(e) => setForm(f => ({ ...f, renewsAt: e.target.value }))} style={styles.formInput} />
-            </div>
-          </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '14px' }}>
+                <div style={styles.formGroup}>
+                  <label style={styles.formLabel}>Nome do tutor</label>
+                  <input type="text" value={form.tutorName} onChange={(e) => setForm(f => ({ ...f, tutorName: e.target.value }))} style={styles.formInput} placeholder="Ex: Julio" />
+                </div>
+                <div style={styles.formGroup}>
+                  <label style={styles.formLabel}>Plano *</label>
+                  <select
+                    value={form.planType}
+                    onChange={(e) => {
+                      const planType = e.target.value as 'semanal' | 'quinzenal' | 'avulso';
+                      setForm(f => ({
+                        ...f, planType,
+                        // Avulso não renova: trava a Renovação igual à data. Saindo do avulso, devolve um prazo normal.
+                        renewsAt: planType === 'avulso' ? f.startedAt : (f.planType === 'avulso' ? addDays(f.startedAt, 28) : f.renewsAt),
+                      }));
+                    }}
+                    style={styles.formInput}
+                  >
+                    <option value="semanal">Semanal</option>
+                    <option value="quinzenal">Quinzenal</option>
+                    <option value="avulso">Avulso (atendimento único)</option>
+                  </select>
+                </div>
+                <div style={styles.formGroup}>
+                  <label style={styles.formLabel}>Dia da semana</label>
+                  <select value={form.weekday} onChange={(e) => setForm(f => ({ ...f, weekday: Number(e.target.value) }))} style={styles.formInput}>
+                    {WEEKDAY_LABELS.map((w, i) => <option key={i} value={i}>{w}</option>)}
+                  </select>
+                </div>
+                <div style={styles.formGroup}>
+                  <label style={styles.formLabel}>Horário</label>
+                  <input type="time" value={form.timeOfDay} onChange={(e) => setForm(f => ({ ...f, timeOfDay: e.target.value }))} style={styles.formInput} />
+                </div>
+                <div style={styles.formGroup}>
+                  <label style={styles.formLabel}>Valor (R$) *</label>
+                  <input type="number" min="0" step="0.01" value={form.price} onChange={(e) => setForm(f => ({ ...f, price: e.target.value }))} style={styles.formInput} />
+                </div>
+                <div style={styles.formGroup}>
+                  <label style={styles.formLabel}>Táxi dog (R$)</label>
+                  <input type="number" min="0" step="0.01" value={form.taxiDogFee} onChange={(e) => setForm(f => ({ ...f, taxiDogFee: e.target.value }))} style={styles.formInput} placeholder="0" />
+                </div>
+                <div style={styles.formGroup}>
+                  <label style={styles.formLabel}>{form.planType === 'avulso' ? 'Data *' : 'Início *'}</label>
+                  <input
+                    type="date" value={form.startedAt}
+                    onChange={(e) => setForm(f => ({ ...f, startedAt: e.target.value, renewsAt: f.planType === 'avulso' ? e.target.value : f.renewsAt }))}
+                    style={styles.formInput}
+                  />
+                </div>
+                <div style={styles.formGroup}>
+                  <label style={styles.formLabel}>Renovação {form.planType !== 'avulso' && '*'}</label>
+                  <input
+                    type="date" value={form.planType === 'avulso' ? form.startedAt : form.renewsAt} disabled={form.planType === 'avulso'}
+                    onChange={(e) => setForm(f => ({ ...f, renewsAt: e.target.value }))}
+                    title={form.planType === 'avulso' ? 'Atendimento avulso não tem renovação.' : undefined}
+                    style={{ ...styles.formInput, ...(form.planType === 'avulso' ? { opacity: 0.6, cursor: 'not-allowed' } : {}) }}
+                  />
+                </div>
+              </div>
 
-          <div style={{ display: 'flex', gap: '10px', marginTop: '6px' }}>
-            <button type="submit" className="btn-save" style={styles.btnAcc(false)}><Save size={16} /> Salvar</button>
-            <button type="button" onClick={resetForm} style={styles.btnAcc(false)}><X size={16} /> Cancelar</button>
+              <div style={{ display: 'flex', gap: '10px', marginTop: '6px' }}>
+                <button type="submit" className="btn-save" style={styles.btnAcc(false)}><Save size={16} /> Salvar</button>
+                <button type="button" onClick={resetForm} style={styles.btnAcc(false)}><X size={16} /> Cancelar</button>
+              </div>
+            </form>
           </div>
-        </form>
+        </div>
       )}
 
       {subs !== null && activeSubs.length > 0 && (
@@ -422,6 +452,7 @@ export const ClubinhoManager: React.FC<Props> = ({ styles, currentUser }) => {
             <option value="all">Todos os planos</option>
             <option value="semanal">Semanal</option>
             <option value="quinzenal">Quinzenal</option>
+            <option value="avulso">Avulso</option>
           </select>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -509,7 +540,11 @@ export const ClubinhoManager: React.FC<Props> = ({ styles, currentUser }) => {
                     </td>
                     <td style={{ padding: '6px 10px', textAlign: 'right' }}>
                       <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
-                        <button type="button" disabled={busyId === s.id} onClick={() => openRenew(s)} title="Renovar" className="btn-action-icon"><RefreshCw size={14} /></button>
+                        <button
+                          type="button" disabled={busyId === s.id || s.plan_type === 'avulso'} onClick={() => openRenew(s)}
+                          title={s.plan_type === 'avulso' ? 'Atendimento avulso não tem renovação' : 'Renovar'}
+                          className="btn-action-icon"
+                        ><RefreshCw size={14} /></button>
                         <button type="button" disabled={busyId === s.id} onClick={() => startEdit(s)} title="Editar" className="btn-action-icon"><Edit3 size={14} /></button>
                         <button type="button" disabled={busyId === s.id} onClick={() => setCancelTarget(s)} title="Cancelar" className="btn-action-icon btn-action-danger"><Ban size={14} /></button>
                       </div>

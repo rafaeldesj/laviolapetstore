@@ -960,7 +960,7 @@ export default {
       if (dbRoute === '/clubinho' || dbRoute.startsWith('/clubinho/')) {
         if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE) return json({ mensagem: 'Banco de dados não configurado.' }, 503);
         const failC = (mensagem, r) => json({ mensagem, detalhe: typeof r?.body === 'object' ? r.body?.message : undefined }, 502);
-        const PLAN_TYPES = ['semanal', 'quinzenal'];
+        const PLAN_TYPES = ['semanal', 'quinzenal', 'avulso'];
 
         if (request.method === 'GET' && dbRoute === '/clubinho') {
           if (isStaff) {

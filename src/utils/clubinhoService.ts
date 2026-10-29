@@ -5,7 +5,8 @@ export interface ClubinhoSubscription {
   pet_id: string;
   pet_name: string;
   tutor_name: string;
-  plan_type: 'semanal' | 'quinzenal';
+  /** 'avulso' = atendimento único, sem lógica de renovação (ex.: cliente de passagem cujo status a equipe quer acompanhar). */
+  plan_type: 'semanal' | 'quinzenal' | 'avulso';
   weekday: number | null; // 0=domingo .. 6=sábado
   time_of_day: string; // 'HH:MM'
   price: number;
@@ -186,7 +187,7 @@ const CYCLE_VISITS: Record<'semanal' | 'quinzenal', number> = { semanal: 4, quin
  * data, senão o reagendamento faria o número "pular" de novo (o mesmo problema que motivou a trava).
  */
 export function visitProgressLabel(sub: Pick<ClubinhoSubscription, 'started_at' | 'plan_type'> | null | undefined, date: Date, lockedPosition?: number | null): string {
-  if (!sub) return '(1/1)';
+  if (!sub || sub.plan_type === 'avulso') return '(1/1)';
   const total = CYCLE_VISITS[sub.plan_type];
   if (lockedPosition != null) return `(${lockedPosition}/${total})`;
   const intervalDays = sub.plan_type === 'quinzenal' ? 14 : 7;
@@ -212,7 +213,7 @@ export interface NewClubinhoInput {
   petId: string;
   petName: string;
   tutorName: string;
-  planType: 'semanal' | 'quinzenal';
+  planType: 'semanal' | 'quinzenal' | 'avulso';
   weekday: number | null;
   timeOfDay: string;
   price: number;
