@@ -301,8 +301,15 @@ async function unbuildClubinhoCycleAppointments(env, sub) {
 /**
  * Motor automático do Clubinho (decisão da proprietária/Paloma, 2026-10-29): a cor continua 100% escolhida pela
  * equipe, só a AGENDA passa a reagir sozinha a ela.
- *   - Pago/Débito, sem ciclo futuro montado ainda, e a renovação atual já venceu -> monta as N visitas do
- *     próximo ciclo e a cor volta pra "A confirmar" (novo ciclo começa pedindo confirmação de novo).
+ *   - Pago, sem ciclo futuro montado ainda, e a renovação atual já venceu -> monta as N visitas do próximo ciclo
+ *     e a cor volta pra "A confirmar" (novo ciclo começa pedindo confirmação de novo).
+ *   - Débito nessas mesmas condições -> TAMBÉM monta o próximo ciclo (a regra do negócio é não deixar a agenda
+ *     vazia só porque uma dívida ainda não foi paga), mas a cor continua Débito — não vira "A confirmar" como se
+ *     a dívida antiga tivesse sumido. Assim, quando a equipe registrar o pagamento depois, o sistema já entende
+ *     sozinho que aquele pagamento é o da dívida atrasada (é a própria marcação Débito que está sendo resolvida),
+ *     sem precisar perguntar a quê ela se refere (ajuste de 2026-10-29 depois de um caso real com o Woody: o
+ *     motor tinha apagado o roxo e posto azul, e um pagamento da dívida antiga acabou "confirmando" por engano
+ *     o ciclo novo, que nem tinha sido cobrado ainda).
  *   - Inadimplente ou Congelada, com um ciclo futuro já montado -> apaga esse ciclo futuro e deixa a renovação
  *     "vencida ontem", pra remontar assim que a cor voltar a ficar pago/débito. "A confirmar" e "sem marcação"
  *     nunca desmontam sozinhas: a primeira é o próprio estado em que o motor deixa um ciclo recém-montado.
@@ -325,11 +332,13 @@ async function evaluateClubinhoAutoSchedule(env, sub, userSub) {
   if (buildable && !hasBuilt && due) {
     const built = await buildClubinhoCycleAppointments(env, sub, userSub);
     if (!built) return null;
+    // Débito "atravessa" o build (ver comentário acima); só Pago vira "A confirmar".
+    const nextFlag = sub.payment_flag === 'debito' ? 'debito' : 'a_confirmar';
     const upd = await sb(env, `/clubinho_subscriptions?id=eq.${encodeURIComponent(sub.id)}&select=*`, {
       method: 'PATCH',
-      body: JSON.stringify({ renews_at: built.newRenewsAt, payment_flag: 'a_confirmar', current_cycle_series_id: built.seriesId }),
+      body: JSON.stringify({ renews_at: built.newRenewsAt, payment_flag: nextFlag, current_cycle_series_id: built.seriesId }),
     });
-    const after = upd.ok && upd.body[0] ? upd.body[0] : { ...sub, renews_at: built.newRenewsAt, payment_flag: 'a_confirmar', current_cycle_series_id: built.seriesId };
+    const after = upd.ok && upd.body[0] ? upd.body[0] : { ...sub, renews_at: built.newRenewsAt, payment_flag: nextFlag, current_cycle_series_id: built.seriesId };
     return { tipo: 'montado', assinatura: after, agendamentos_criados: built.created };
   }
 
@@ -1147,7 +1156,8 @@ export default {
           // Renovar agora é o reforço manual do mesmo motor automático (2026-10-29): cria o lote de agendamentos
           // até a data escolhida, marcando o lote com um series_id pra o motor saber o que desmontar depois se a
           // marcação mudar antes desses atendimentos acontecerem. Confirma o ciclo: tira "congelada" e volta pra
-          // "A confirmar" (mesma convenção do motor automático).
+          // "A confirmar" — exceto Débito, que atravessa pro ciclo novo igual ao motor automático (mesmo motivo:
+          // não apagar o sinal de uma dívida que ainda não foi paga só porque o ciclo girou).
           let created = 0;
           let seriesId = null;
           if (input.createAppointments !== false && sub.weekday !== null && sub.time_of_day) {
@@ -1183,9 +1193,10 @@ export default {
               seriesId = null;
             }
           }
+          const nextFlag = sub.payment_flag === 'debito' ? 'debito' : 'a_confirmar';
           const upd = await sb(env, `/clubinho_subscriptions?id=eq.${encodeURIComponent(id)}&select=*`, {
             method: 'PATCH',
-            body: JSON.stringify({ renews_at: newRenewsAt, is_active: true, payment_flag: 'a_confirmar', current_cycle_series_id: seriesId }),
+            body: JSON.stringify({ renews_at: newRenewsAt, is_active: true, payment_flag: nextFlag, current_cycle_series_id: seriesId }),
           });
           if (!upd.ok) return failC('Erro ao renovar a assinatura.', upd);
           return json({ assinatura: upd.body?.[0] || null, agendamentos_criados: created });
