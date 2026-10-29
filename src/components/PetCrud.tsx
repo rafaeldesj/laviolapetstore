@@ -614,7 +614,10 @@ export const PetCrud: React.FC<PetCrudProps> = ({ currentUser, styles }) => {
           </p>
         </div>
       ) : viewMode === 'details' ? (
-        <div style={{ overflowX: 'auto', border: `1px solid ${styles.borderColor}`, borderRadius: '10px', marginTop: '16px' }}>
+        <div
+          className="table-row-hoverable"
+          style={{ overflowX: 'auto', border: `1px solid ${styles.borderColor}`, borderRadius: '10px', marginTop: '16px', '--row-hover-bg': styles.isDark ? 'rgba(255,255,255,0.06)' : 'rgba(19,114,218,0.07)' } as React.CSSProperties}
+        >
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
             <thead>
               <tr>

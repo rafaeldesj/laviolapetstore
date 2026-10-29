@@ -82,6 +82,15 @@ button:not(:disabled):not(.no-global-hover):focus {
   box-shadow: 0 0 0 3px hsla(210, 85%, 45%, 0.4) !important;
 }
 
+/* ---------- Linha de tabela destacada ao passar o mouse ---------- */
+.table-row-hoverable tbody tr {
+  transition: background-color 0.12s ease;
+}
+
+.table-row-hoverable tbody tr:hover {
+  background-color: var(--row-hover-bg, rgba(19, 114, 218, 0.08));
+}
+
 /* ---------- Pequenos Botões de Ação (Icon Buttons) ---------- */
 .btn-action-icon {
   display: flex !important;
