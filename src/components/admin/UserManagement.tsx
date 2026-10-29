@@ -566,18 +566,22 @@ export const UserManagement: React.FC<UserManagementProps> = ({ currentUser, sty
             return (
               <div key={user.id} style={{ borderBottom: isLast ? 'none' : `1px solid ${styles.borderColor}` }}>
                 {/* Row */}
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '12px',
-                  padding: '10px 14px',
-                  backgroundColor: isEditing
-                    ? (styles.isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)')
-                    : styles.cardBackground || styles.background,
-                  opacity: user.is_active ? 1 : 0.6,
-                  transition: 'background 0.2s',
-                  flexWrap: 'wrap',
-                }}>
+                <div
+                  className="row-hoverable"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    padding: '10px 14px',
+                    backgroundColor: isEditing
+                      ? (styles.isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)')
+                      : styles.cardBackground || styles.background,
+                    opacity: user.is_active ? 1 : 0.6,
+                    transition: 'background 0.2s',
+                    flexWrap: 'wrap',
+                    '--row-hover-bg': styles.isDark ? 'rgba(255,255,255,0.06)' : 'rgba(19,114,218,0.07)',
+                  } as React.CSSProperties}
+                >
                   {/* Avatar + Badge */}
                   <div style={{
                     width: '36px',

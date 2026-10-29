@@ -93,6 +93,15 @@ button:not(:disabled):not(.no-global-hover):focus {
   background-color: var(--row-hover-bg, rgba(19, 114, 218, 0.08)) !important;
 }
 
+/* Mesmo efeito para listas de linhas feitas com <div> em vez de <table> (ex.: Usuários, Registros, Permissões) */
+.row-hoverable {
+  transition: background-color 0.12s ease;
+}
+
+.row-hoverable:hover {
+  background-color: var(--row-hover-bg, rgba(19, 114, 218, 0.08)) !important;
+}
+
 /* ---------- Pequenos Botões de Ação (Icon Buttons) ---------- */
 .btn-action-icon {
   display: flex !important;

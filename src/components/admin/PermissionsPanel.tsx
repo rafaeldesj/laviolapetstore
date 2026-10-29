@@ -162,10 +162,12 @@ export const PermissionsPanel: React.FC<PermissionsPanelProps> = ({
                         const isBusy = isSaving === perm.key;
                         return (
                           <div key={perm.key}
+                            className="row-hoverable"
                             style={{
                               display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                               padding: '10px 16px', borderBottom: `1px solid ${styles.borderColor}`,
-                            }}
+                              '--row-hover-bg': styles.isDark ? 'rgba(255,255,255,0.06)' : 'rgba(19,114,218,0.07)',
+                            } as React.CSSProperties}
                           >
                             <div>
                               <div style={{ fontSize: '0.9rem', fontWeight: 600, color: styles.textMain }}>{perm.label}</div>

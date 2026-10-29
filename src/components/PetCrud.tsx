@@ -665,7 +665,8 @@ export const PetCrud: React.FC<PetCrudProps> = ({ currentUser, styles }) => {
             <article
               key={pet.id}
               onClick={() => openDetail(pet)}
-              style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 14px', border: `1px solid ${styles.borderColor}`, borderRadius: '10px', cursor: 'pointer', backgroundColor: styles.cardBackground || styles.background }}
+              className="row-hoverable"
+              style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 14px', border: `1px solid ${styles.borderColor}`, borderRadius: '10px', cursor: 'pointer', backgroundColor: styles.cardBackground || styles.background, '--row-hover-bg': styles.isDark ? 'rgba(255,255,255,0.06)' : 'rgba(19,114,218,0.07)' } as React.CSSProperties}
             >
               {avatar(pet, 40)}
               <div style={{ flex: 1, minWidth: 0 }}>

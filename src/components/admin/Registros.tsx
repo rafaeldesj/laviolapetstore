@@ -247,6 +247,7 @@ export const Registros: React.FC<RegistrosProps> = ({ styles }) => {
             return (
               <div
                 key={log.id || index}
+                className="row-hoverable"
                 style={{
                   display: 'flex',
                   flexDirection: 'column',
@@ -255,7 +256,8 @@ export const Registros: React.FC<RegistrosProps> = ({ styles }) => {
                   backgroundColor: styles.cardBackground || styles.background,
                   borderBottom: isLast ? 'none' : `1px solid ${styles.borderColor}`,
                   transition: 'background 0.2s',
-                }}
+                  '--row-hover-bg': styles.isDark ? 'rgba(255,255,255,0.06)' : 'rgba(19,114,218,0.07)',
+                } as React.CSSProperties}
               >
                 {/* Top line: Action badge + Date */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
