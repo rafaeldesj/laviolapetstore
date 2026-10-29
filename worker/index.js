@@ -231,6 +231,121 @@ function clubinhoCyclePosition(sub, dateISO) {
   return Math.floor(mod / intervalDays) + 1;
 }
 
+/** 'YYYY-MM-DD' de hoje — mesmo formato das colunas `date` do Supabase, pra comparar como texto. */
+function todayDateStr() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+function dateStrOf(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+function addDaysToDateStr(dateStr, days) {
+  const d = new Date(dateStr + 'T00:00:00');
+  d.setDate(d.getDate() + days);
+  return dateStrOf(d);
+}
+
+/**
+ * Cria as N visitas fixas do próximo ciclo (semanal=4, quinzenal=2) a partir de amanhã, no dia/horário já
+ * cadastrado na assinatura — mesmo cálculo que o botão "Renovar" já usava. Usado tanto pelo motor automático
+ * quanto pelo próprio Renovar (agora um reforço manual da mesma ação).
+ */
+async function buildClubinhoCycleAppointments(env, sub, userSub) {
+  const total = CLUBINHO_CYCLE_VISITS[sub.plan_type];
+  if (!total || sub.weekday === null || sub.weekday === undefined || !sub.time_of_day) return null;
+  const intervalDays = sub.plan_type === 'quinzenal' ? 14 : 7;
+  const [hh, mm] = sub.time_of_day.split(':').map((n) => parseInt(n, 10) || 0);
+  const today = new Date();
+  let first = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1, hh, mm);
+  while (first.getDay() !== sub.weekday) first = new Date(first.getTime() + 86400000);
+  const seriesId = crypto.randomUUID();
+  const rows = [];
+  let last = first;
+  for (let i = 0; i < total; i++) {
+    const d = new Date(first.getTime() + i * intervalDays * 86400000);
+    last = d;
+    rows.push({
+      series_id: seriesId,
+      pet_id: sub.pet_id,
+      pet_name: sub.pet_name,
+      tutor_name: sub.tutor_name,
+      owner_id: '',
+      service_type: 'Banho & Tosa',
+      status: 'Agendado',
+      starts_at: d.toISOString(),
+      duration_min: 60,
+      notes: 'Gerado automaticamente pelo ciclo do Clubinho.',
+      created_by: userSub,
+    });
+  }
+  const r = await sb(env, '/appointments', { method: 'POST', body: JSON.stringify(rows), headers: { Prefer: 'return=minimal' } });
+  if (!r.ok) return null;
+  return { seriesId, newRenewsAt: dateStrOf(last), created: rows.length };
+}
+
+/**
+ * Apaga (da agenda) só os agendamentos futuros (ainda não ocorridos) do lote gravado em `current_cycle_series_id`
+ * — nunca por aproximação de nome/pet, só pelo código exato daquele lote. Retorna as linhas removidas pra quem
+ * chamou poder registrar no histórico de auditoria.
+ */
+async function unbuildClubinhoCycleAppointments(env, sub) {
+  if (!sub.current_cycle_series_id) return { removed: [] };
+  const nowISO = new Date().toISOString();
+  const q = `series_id=eq.${encodeURIComponent(sub.current_cycle_series_id)}&starts_at=gt.${encodeURIComponent(nowISO)}`;
+  const find = await sb(env, `/appointments?${q}&select=*`);
+  const rows = find.ok ? find.body : [];
+  if (rows.length > 0) await sb(env, `/appointments?${q}`, { method: 'DELETE' });
+  return { removed: rows };
+}
+
+/**
+ * Motor automático do Clubinho (decisão da proprietária/Paloma, 2026-10-29): a cor continua 100% escolhida pela
+ * equipe, só a AGENDA passa a reagir sozinha a ela.
+ *   - Pago/Débito, sem ciclo futuro montado ainda, e a renovação atual já venceu -> monta as N visitas do
+ *     próximo ciclo e a cor volta pra "A confirmar" (novo ciclo começa pedindo confirmação de novo).
+ *   - Inadimplente ou Congelada, com um ciclo futuro já montado -> apaga esse ciclo futuro e deixa a renovação
+ *     "vencida ontem", pra remontar assim que a cor voltar a ficar pago/débito. "A confirmar" e "sem marcação"
+ *     nunca desmontam sozinhas: a primeira é o próprio estado em que o motor deixa um ciclo recém-montado.
+ *   - Congelada nunca monta nada sozinha — só sai desse estado por ação manual da equipe (ex.: Renovar).
+ * Chamado depois de qualquer mudança na marcação (reage na hora) e ao abrir a lista de assinaturas (pega quem
+ * só venceu pelo calendário, sem ninguém ter mexido na marcação).
+ */
+async function evaluateClubinhoAutoSchedule(env, sub, userSub) {
+  const total = CLUBINHO_CYCLE_VISITS[sub.plan_type];
+  if (!total || !sub.is_active) return null;
+  const buildable = sub.payment_flag === 'pago' || sub.payment_flag === 'debito';
+  // "Ruim o bastante pra desmontar": só inadimplente/congelada. NÃO inclui 'a_confirmar' — essa é a própria
+  // marcação que o build deixa pra trás ao montar o ciclo, então usá-la aqui faria o motor desmontar o que ele
+  // mesmo acabou de montar na avaliação seguinte (bug encontrado e corrigido em 2026-10-29 antes do primeiro
+  // deploy real: sem isso, toda assinatura que esse motor monta se autodestrói na véspera seguinte).
+  const badEnoughToUnbuild = sub.payment_flag === 'inadimplente' || sub.payment_flag === 'congelada';
+  const hasBuilt = !!sub.current_cycle_series_id;
+  const due = todayDateStr() > sub.renews_at;
+
+  if (buildable && !hasBuilt && due) {
+    const built = await buildClubinhoCycleAppointments(env, sub, userSub);
+    if (!built) return null;
+    const upd = await sb(env, `/clubinho_subscriptions?id=eq.${encodeURIComponent(sub.id)}&select=*`, {
+      method: 'PATCH',
+      body: JSON.stringify({ renews_at: built.newRenewsAt, payment_flag: 'a_confirmar', current_cycle_series_id: built.seriesId }),
+    });
+    const after = upd.ok && upd.body[0] ? upd.body[0] : { ...sub, renews_at: built.newRenewsAt, payment_flag: 'a_confirmar', current_cycle_series_id: built.seriesId };
+    return { tipo: 'montado', assinatura: after, agendamentos_criados: built.created };
+  }
+
+  if (badEnoughToUnbuild && hasBuilt) {
+    const { removed } = await unbuildClubinhoCycleAppointments(env, sub);
+    const upd = await sb(env, `/clubinho_subscriptions?id=eq.${encodeURIComponent(sub.id)}&select=*`, {
+      method: 'PATCH',
+      body: JSON.stringify({ current_cycle_series_id: null, renews_at: addDaysToDateStr(todayDateStr(), -1) }),
+    });
+    const after = upd.ok && upd.body[0] ? upd.body[0] : { ...sub, current_cycle_series_id: null };
+    return removed.length > 0 ? { tipo: 'desmontado', assinatura: after, agendamentos_removidos: removed } : null;
+  }
+
+  return null;
+}
+
 const b64url = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 
 // Web Push sem conteúdo (não exige criptografia do texto): o serviço do celular só "acorda" o aparelho,
@@ -966,11 +1081,21 @@ export default {
           if (isStaff) {
             const r = await sb(env, '/clubinho_subscriptions?select=*&order=renews_at.asc');
             if (!r.ok) return failC('Erro ao listar as assinaturas.', r);
+            // Varredura preguiçosa do motor automático: pega quem só venceu pelo calendário desde a última vez
+            // que alguém abriu essa tela, sem precisar de um cron rodando à parte. Idempotente — se nada mudou
+            // desde a última varredura, não faz nada.
+            const bySub = new Map(r.body.map((s) => [s.id, s]));
+            const autoAcoes = [];
+            await Promise.all(r.body.map(async (s) => {
+              const ev = await evaluateClubinhoAutoSchedule(env, s, user.sub);
+              if (ev) { bySub.set(s.id, ev.assinatura); autoAcoes.push({ assinatura_id: s.id, pet_name: s.pet_name, ...ev }); }
+            }));
             // Anexa o último pagamento registrado de cada assinatura, pra não precisar de uma busca à parte na tela.
             const pay = await sb(env, '/clubinho_payments?select=*&order=paid_date.desc,paid_time.desc');
             const lastBySub = new Map();
             if (pay.ok) for (const p of pay.body) if (!lastBySub.has(p.subscription_id)) lastBySub.set(p.subscription_id, p);
-            return json({ assinaturas: r.body.map((s) => ({ ...s, last_payment: lastBySub.get(s.id) || null })) });
+            const assinaturas = r.body.map((s) => { const s2 = bySub.get(s.id) || s; return { ...s2, last_payment: lastBySub.get(s.id) || null }; });
+            return json({ assinaturas, auto_acoes: autoAcoes });
           }
           // Cliente: só as assinaturas dos pets que são dele.
           const myPets = await sb(env, `/pets?owner_id=eq.${encodeURIComponent(user.sub)}&select=id`);
@@ -1019,13 +1144,12 @@ export default {
           const newRenewsAt = String(input.renewsAt || '');
           if (!newRenewsAt) return json({ mensagem: 'Informe a nova data de renovação.' }, 400);
 
-          // Renovar é a própria confirmação de pagamento: limpa qualquer marcação de "a confirmar"/"débito" anterior.
-          const upd = await sb(env, `/clubinho_subscriptions?id=eq.${encodeURIComponent(id)}`, {
-            method: 'PATCH', body: JSON.stringify({ renews_at: newRenewsAt, is_active: true, payment_flag: null }),
-          });
-          if (!upd.ok) return failC('Erro ao renovar a assinatura.', upd);
-
+          // Renovar agora é o reforço manual do mesmo motor automático (2026-10-29): cria o lote de agendamentos
+          // até a data escolhida, marcando o lote com um series_id pra o motor saber o que desmontar depois se a
+          // marcação mudar antes desses atendimentos acontecerem. Confirma o ciclo: tira "congelada" e volta pra
+          // "A confirmar" (mesma convenção do motor automático).
           let created = 0;
+          let seriesId = null;
           if (input.createAppointments !== false && sub.weekday !== null && sub.time_of_day) {
             const intervalDays = sub.plan_type === 'quinzenal' ? 14 : 7;
             // Primeira ocorrência: a próxima data (a partir de amanhã) que cai no dia da semana certo.
@@ -1035,7 +1159,7 @@ export default {
             while (first.getDay() !== sub.weekday) first = new Date(first.getTime() + 86400000);
             const end = new Date(newRenewsAt + 'T23:59:59');
             const rows = [];
-            const seriesId = crypto.randomUUID();
+            seriesId = crypto.randomUUID();
             for (let d = first; d <= end; d = new Date(d.getTime() + intervalDays * 86400000)) {
               rows.push({
                 series_id: seriesId,
@@ -1054,17 +1178,24 @@ export default {
             if (rows.length > 0) {
               const r = await sb(env, '/appointments', { method: 'POST', body: JSON.stringify(rows), headers: { Prefer: 'return=minimal' } });
               if (r.ok) created = rows.length;
+              else seriesId = null;
+            } else {
+              seriesId = null;
             }
           }
-          const after = await sb(env, `/clubinho_subscriptions?id=eq.${encodeURIComponent(id)}&select=*`);
-          return json({ assinatura: after.body?.[0] || null, agendamentos_criados: created });
+          const upd = await sb(env, `/clubinho_subscriptions?id=eq.${encodeURIComponent(id)}&select=*`, {
+            method: 'PATCH',
+            body: JSON.stringify({ renews_at: newRenewsAt, is_active: true, payment_flag: 'a_confirmar', current_cycle_series_id: seriesId }),
+          });
+          if (!upd.ok) return failC('Erro ao renovar a assinatura.', upd);
+          return json({ assinatura: upd.body?.[0] || null, agendamentos_criados: created });
         }
 
         // Registra um pagamento (data/hora/forma/quem recebeu) e marca a assinatura como "Pagamento realizado".
         const payMatch = /^\/clubinho\/([\w-]+)\/pagamento$/.exec(dbRoute);
         if (request.method === 'POST' && payMatch) {
           const id = payMatch[1];
-          const cur = await sb(env, `/clubinho_subscriptions?id=eq.${encodeURIComponent(id)}&select=id`);
+          const cur = await sb(env, `/clubinho_subscriptions?id=eq.${encodeURIComponent(id)}&select=*`);
           if (!cur.ok) return failC('Erro ao buscar a assinatura.', cur);
           if (!cur.body[0]) return json({ mensagem: 'Assinatura não encontrada.' }, 404);
           const input = await request.json();
@@ -1079,9 +1210,15 @@ export default {
             body: JSON.stringify({ subscription_id: id, paid_date: paidDate, paid_time: paidTime, payment_method: method, received_by: receivedBy, created_by: user.sub }),
           });
           if (!insert.ok) return failC('Erro ao registrar o pagamento.', insert);
-          const upd = await sb(env, `/clubinho_subscriptions?id=eq.${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ payment_flag: 'pago' }) });
+          const upd = await sb(env, `/clubinho_subscriptions?id=eq.${encodeURIComponent(id)}&select=*`, { method: 'PATCH', body: JSON.stringify({ payment_flag: 'pago' }) });
           if (!upd.ok) return failC('Erro ao marcar o pagamento na assinatura.', upd);
-          return json({ assinatura: upd.body?.[0] || null, pagamento: insert.body[0] }, 201);
+          let assinatura = upd.body?.[0] || null;
+          let autoAcao = null;
+          if (assinatura) {
+            const r = await evaluateClubinhoAutoSchedule(env, assinatura, user.sub);
+            if (r) { assinatura = r.assinatura; autoAcao = r; }
+          }
+          return json({ assinatura, pagamento: insert.body[0], auto_acao: autoAcao }, 201);
         }
 
         const one = /^\/clubinho\/([\w-]+)$/.exec(dbRoute);
@@ -1102,9 +1239,18 @@ export default {
             fields.payment_flag = input.paymentFlag;
           }
           if (Object.keys(fields).length === 0) return json({ mensagem: 'Nada para alterar.' }, 400);
-          const r = await sb(env, `/clubinho_subscriptions?id=eq.${encodeURIComponent(one[1])}`, { method: 'PATCH', body: JSON.stringify(fields) });
+          const r = await sb(env, `/clubinho_subscriptions?id=eq.${encodeURIComponent(one[1])}&select=*`, { method: 'PATCH', body: JSON.stringify(fields) });
           if (!r.ok) return failC('Erro ao salvar a assinatura.', r);
-          return r.body.length ? json({ assinatura: r.body[0] }) : json({ mensagem: 'Assinatura não encontrada.' }, 404);
+          if (!r.body.length) return json({ mensagem: 'Assinatura não encontrada.' }, 404);
+          let assinatura = r.body[0];
+          let autoAcao = null;
+          // Só roda o motor automático quando a marcação (ou o ativo/inativo) mudou — editar preço/dia/horário etc.
+          // não deve mexer na agenda sozinho.
+          if ('payment_flag' in fields || 'is_active' in fields) {
+            const ev = await evaluateClubinhoAutoSchedule(env, assinatura, user.sub);
+            if (ev) { assinatura = ev.assinatura; autoAcao = ev; }
+          }
+          return json({ assinatura, auto_acao: autoAcao });
         }
 
         if (one && request.method === 'DELETE') {

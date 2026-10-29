@@ -2,10 +2,10 @@ import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 're
 import { createPortal } from 'react-dom';
 import { PlusCircle, RefreshCw, Edit3, Ban, X, Save, AlertTriangle, Search, ArrowUpDown } from 'lucide-react';
 import {
-  listClubinho, createClubinho, updateClubinho, renewClubinho, cancelClubinho, registerClubinhoPayment,
+  listClubinhoWithAutoActions, createClubinho, updateClubinho, renewClubinho, cancelClubinho, registerClubinhoPayment,
   getClubinhoStatus, describeClubinhoStatus, visitProgressLabel, CLUBINHO_STATUS_COLOR, CLUBINHO_STATUS_LABEL, CLUBINHO_STATUS_TOOLTIP, CLUBINHO_STATUS_DOT, CLUBINHO_STATUS_ICON, WEEKDAY_LABELS, PAYMENT_METHOD_LABELS,
 } from '../utils/clubinhoService';
-import type { ClubinhoSubscription, ClubinhoStatus } from '../utils/clubinhoService';
+import type { ClubinhoSubscription, ClubinhoStatus, ClubinhoAutoAction } from '../utils/clubinhoService';
 import { listPets } from '../utils/petsService';
 import type { Pet } from '../utils/petsService';
 import { logAction } from '../supabaseClient';
@@ -93,10 +93,31 @@ export const ClubinhoManager: React.FC<Props> = ({ styles, currentUser }) => {
   const [sortBy, setSortBy] = useState<'renewal' | 'name' | 'price' | 'status'>('renewal');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
 
+  // Registra no histórico de auditoria o que o motor automático fez sozinho (montou ou desmontou um ciclo),
+  // pra equipe sempre conseguir ver o porquê de um agendamento ter sumido ou aparecido sem ninguém ter clicado
+  // em nada.
+  const logAutoAction = async (a: ClubinhoAutoAction) => {
+    const pet = a.pet_name || a.assinatura.pet_name;
+    if (a.tipo === 'montado') {
+      await logAction(
+        'sistema', 'Sistema (motor automático)', 'Montagem automática do Clubinho',
+        `Próximo ciclo de "${pet}" montado automaticamente (${a.agendamentos_criados || 0} agendamento(s)) — status voltou para "A confirmar".`
+      );
+    } else {
+      const datas = (a.agendamentos_removidos || []).map(r => fmtDate(r.starts_at.slice(0, 10))).join(', ');
+      await logAction(
+        'sistema', 'Sistema (motor automático)', 'Exclusão automática do Clubinho',
+        `Ciclo futuro de "${pet}" desmontado automaticamente — marcação deixou de ser Pago/Débito. ${a.agendamentos_removidos?.length || 0} agendamento(s) removido(s)${datas ? ` (${datas})` : ''}.`
+      );
+    }
+  };
+
   const load = async () => {
     setErrorMsg(null);
     try {
-      setSubs(await listClubinho());
+      const { assinaturas, autoAcoes } = await listClubinhoWithAutoActions();
+      setSubs(assinaturas);
+      for (const a of autoAcoes) await logAutoAction(a);
     } catch (e: any) {
       setErrorMsg(e.message || 'Erro ao carregar as assinaturas do Clubinho.');
     }
@@ -229,9 +250,10 @@ export const ClubinhoManager: React.FC<Props> = ({ styles, currentUser }) => {
   const setPaymentFlag = async (s: ClubinhoSubscription, flag: 'a_confirmar' | 'debito' | 'inadimplente' | 'congelada' | null) => {
     setBusyId(s.id);
     try {
-      await updateClubinho(s.id, { paymentFlag: flag });
+      const { autoAcao } = await updateClubinho(s.id, { paymentFlag: flag });
       const label = flag === 'debito' ? 'Vencido/Débito' : flag === 'a_confirmar' ? 'A confirmar' : flag === 'inadimplente' ? 'Inadimplente (Suspenso)' : flag === 'congelada' ? 'Congelada' : 'Sem marcação';
       await logAction(currentUser.email || '', currentUser.name || 'Equipe', 'Marcação de pagamento do Clubinho', `Status de "${s.pet_name}" marcado como: ${label}.`);
+      if (autoAcao) await logAutoAction(autoAcao);
       load();
     } catch (e: any) {
       setErrorMsg(e.message || 'Erro ao marcar o status.');
@@ -251,7 +273,7 @@ export const ClubinhoManager: React.FC<Props> = ({ styles, currentUser }) => {
     setBusyId(paymentTarget.id);
     setErrorMsg(null);
     try {
-      await registerClubinhoPayment(paymentTarget.id, {
+      const { autoAcao } = await registerClubinhoPayment(paymentTarget.id, {
         paidDate: paymentForm.paidDate, paidTime: paymentForm.paidTime,
         paymentMethod: paymentForm.paymentMethod, receivedBy: paymentForm.receivedBy.trim(),
       });
@@ -259,6 +281,7 @@ export const ClubinhoManager: React.FC<Props> = ({ styles, currentUser }) => {
         currentUser.email || '', currentUser.name || 'Equipe', 'Pagamento do Clubinho registrado',
         `Pagamento de "${paymentTarget.pet_name}" registrado: ${PAYMENT_METHOD_LABELS[paymentForm.paymentMethod]}, em ${fmtDate(paymentForm.paidDate)} às ${paymentForm.paidTime}, recebido por ${paymentForm.receivedBy.trim()}.`
       );
+      if (autoAcao) await logAutoAction(autoAcao);
       setPaymentTarget(null);
       load();
     } catch (e: any) {

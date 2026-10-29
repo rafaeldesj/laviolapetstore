@@ -18,11 +18,31 @@ export interface ClubinhoSubscription {
    *  marcação explícita. 'a_confirmar' | 'debito' | 'pago' | 'inadimplente' | 'congelada' | null (null = ainda
    *  não marcada, ex.: assinatura recém-criada). */
   payment_flag: 'a_confirmar' | 'debito' | 'pago' | 'inadimplente' | 'congelada' | null;
+  /** Código do lote de agendamentos do próximo ciclo quando o motor automático (ou o Renovar) já montou a
+   *  agenda à frente do ciclo atual — null quando não há nada montado além do ciclo corrente. Uso interno do
+   *  motor automático (src/utils/clubinhoService.ts `evaluateClubinhoAutoSchedule` no Worker); a tela não precisa
+   *  exibir isso, só repassar. */
+  current_cycle_series_id?: string | null;
   /** Último pagamento registrado (detalhes de data/hora/forma/quem recebeu) — vem junto na listagem, não precisa buscar à parte. */
   last_payment?: ClubinhoPayment | null;
   created_by: string;
   created_at: string;
   updated_at: string;
+}
+
+/**
+ * O que o motor automático do Clubinho fez sozinho numa assinatura (2026-10-29, decisão da proprietária/Paloma):
+ * monta o próximo ciclo quando a marcação é pago/débito e a renovação já venceu; desmonta (apaga) um ciclo
+ * futuro que já tivesse sido montado se a marcação deixar de ser pago/débito antes dele acontecer. A tela usa
+ * isso só pra registrar no histórico de auditoria — a cor/datas já vêm atualizadas na própria `assinatura`.
+ */
+export interface ClubinhoAutoAction {
+  tipo: 'montado' | 'desmontado';
+  assinatura_id?: string;
+  pet_name?: string;
+  assinatura: ClubinhoSubscription;
+  agendamentos_criados?: number;
+  agendamentos_removidos?: Array<{ pet_name: string; tutor_name: string; starts_at: string }>;
 }
 
 export interface ClubinhoPayment {
@@ -209,6 +229,13 @@ export const listClubinho = async (): Promise<ClubinhoSubscription[]> => {
   return assinaturas;
 };
 
+/** Igual a `listClubinho`, mas também devolve o que o motor automático fez sozinho nessa chamada (pra a tela
+ *  de gestão registrar no histórico de auditoria) — uso exclusivo do ClubinhoManager, que é quem a equipe abre. */
+export const listClubinhoWithAutoActions = async (): Promise<{ assinaturas: ClubinhoSubscription[]; autoAcoes: ClubinhoAutoAction[] }> => {
+  const { assinaturas, auto_acoes } = await workerCall<{ assinaturas: ClubinhoSubscription[]; auto_acoes?: ClubinhoAutoAction[] }>('/clubinho');
+  return { assinaturas, autoAcoes: auto_acoes || [] };
+};
+
 export interface NewClubinhoInput {
   petId: string;
   petName: string;
@@ -230,9 +257,9 @@ export const createClubinho = async (input: NewClubinhoInput): Promise<ClubinhoS
 export const updateClubinho = async (id: string, patch: Partial<{
   planType: string; weekday: number | null; timeOfDay: string; price: number; taxiDogFee: number; tutorName: string; startedAt: string; renewsAt: string; isActive: boolean;
   paymentFlag: 'a_confirmar' | 'debito' | 'pago' | 'inadimplente' | 'congelada' | null;
-}>): Promise<ClubinhoSubscription> => {
-  const { assinatura } = await workerCall<{ assinatura: ClubinhoSubscription }>(`/clubinho/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(patch) });
-  return assinatura;
+}>): Promise<{ assinatura: ClubinhoSubscription; autoAcao: ClubinhoAutoAction | null }> => {
+  const { assinatura, auto_acao } = await workerCall<{ assinatura: ClubinhoSubscription; auto_acao?: ClubinhoAutoAction | null }>(`/clubinho/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(patch) });
+  return { assinatura, autoAcao: auto_acao || null };
 };
 
 export const renewClubinho = async (id: string, renewsAt: string, createAppointments = true): Promise<{ assinatura: ClubinhoSubscription; agendamentos_criados: number }> =>
@@ -246,8 +273,10 @@ export interface NewClubinhoPaymentInput {
 }
 
 /** Registra um pagamento (data/hora/forma/quem recebeu) e marca a assinatura como "Pagamento realizado". */
-export const registerClubinhoPayment = async (id: string, input: NewClubinhoPaymentInput): Promise<{ assinatura: ClubinhoSubscription; pagamento: ClubinhoPayment }> =>
-  workerCall(`/clubinho/${encodeURIComponent(id)}/pagamento`, { method: 'POST', body: JSON.stringify(input) });
+export const registerClubinhoPayment = async (id: string, input: NewClubinhoPaymentInput): Promise<{ assinatura: ClubinhoSubscription; pagamento: ClubinhoPayment; autoAcao: ClubinhoAutoAction | null }> => {
+  const { assinatura, pagamento, auto_acao } = await workerCall<{ assinatura: ClubinhoSubscription; pagamento: ClubinhoPayment; auto_acao?: ClubinhoAutoAction | null }>(`/clubinho/${encodeURIComponent(id)}/pagamento`, { method: 'POST', body: JSON.stringify(input) });
+  return { assinatura, pagamento, autoAcao: auto_acao || null };
+};
 
 export const cancelClubinho = async (id: string): Promise<void> => {
   await workerCall(`/clubinho/${encodeURIComponent(id)}`, { method: 'DELETE' });

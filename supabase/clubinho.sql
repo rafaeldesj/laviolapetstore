@@ -17,6 +17,12 @@ create table if not exists public.clubinho_subscriptions (
   -- a equipe confirmou (ex.: trazida dos calendários "Confirmar"/"Débitos" do Google Agenda antigo, ou um
   -- pagamento registrado à mão em clubinho_payments). Null = deixa o status seguir pela data de renovação normalmente.
   payment_flag  text,
+  -- Código do lote de agendamentos do próximo ciclo quando o motor automático (ou o botão "Renovar") já montou
+  -- a agenda à frente do ciclo atual. Usado só pra saber, com segurança, o que apagar se a marcação virar algo
+  -- diferente de pago/débito antes desses agendamentos acontecerem — nunca por aproximação de nome/pet.
+  -- null = nenhum ciclo futuro montado no momento (coluna adicionada em 2026-10-29, aditiva: todo registro
+  -- anterior a essa data nasceu com null, nada foi alterado nos dados existentes).
+  current_cycle_series_id text,
   is_active     boolean not null default true,
   created_by    text not null default '',
   created_at    timestamptz not null default now(),
