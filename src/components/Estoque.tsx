@@ -362,7 +362,7 @@ export const Estoque: React.FC<EstoqueProps> = ({ styles }) => {
         </tr>
       </thead>
     );
-    const box: React.CSSProperties = { border: `1px solid ${styles.borderColor}`, borderRadius: '10px', overflow: 'hidden', marginTop: '20px' };
+    const box: React.CSSProperties = { border: `1px solid ${styles.borderColor}`, borderRadius: '10px', overflow: 'hidden', marginTop: '20px', ['--row-hover-bg' as string]: styles.isDark ? 'rgba(255,255,255,0.06)' : 'rgba(19,114,218,0.07)' };
     const tableStyle: React.CSSProperties = { width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem', tableLayout: 'auto' };
 
     if (viewMode === 'categorias') {
@@ -376,7 +376,7 @@ export const Estoque: React.FC<EstoqueProps> = ({ styles }) => {
             const isCollapsed = !!collapsed[cat];
             const alerts = items.filter(p => p.quantity <= p.min_stock).length;
             return (
-              <div key={cat} style={{ ...box, marginTop: 0 }}>
+              <div key={cat} className="table-row-hoverable" style={{ ...box, marginTop: 0 }}>
                 <button
                   type="button"
                   onClick={() => setCollapsed(c => ({ ...c, [cat]: !c[cat] }))}
@@ -404,7 +404,7 @@ export const Estoque: React.FC<EstoqueProps> = ({ styles }) => {
     }
 
     return (
-      <div style={box}>
+      <div className="table-row-hoverable" style={box}>
         <table style={tableStyle}>
           {header}
           <tbody>{pagedProducts.map(renderRow)}</tbody>

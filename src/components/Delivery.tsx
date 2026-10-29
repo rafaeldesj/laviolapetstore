@@ -2349,11 +2349,15 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
           <div className={`delivery-grid-container${selectedDelivery ? ' has-map' : ''}`} style={{ marginTop: '20px' }}>
             
             {/* Table layout of deliveries */}
-            <div style={{
-              padding: '16px', backgroundColor: styles.cardBackground,
-              borderRadius: '12px', border: `1px solid ${styles.borderColor}`, boxShadow: styles.shadow,
-              overflowX: 'auto'
-            }}>
+            <div
+              className="table-row-hoverable"
+              style={{
+                padding: '16px', backgroundColor: styles.cardBackground,
+                borderRadius: '12px', border: `1px solid ${styles.borderColor}`, boxShadow: styles.shadow,
+                overflowX: 'auto',
+                '--row-hover-bg': styles.isDark ? 'rgba(255,255,255,0.06)' : 'rgba(19,114,218,0.07)',
+              } as React.CSSProperties}
+            >
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem', textAlign: 'left' }}>
                 <thead>
                   <tr style={{ borderBottom: `2px solid ${styles.borderColor}`, color: styles.sidebarWidgetText?.color }}>
@@ -2665,7 +2669,10 @@ export const Delivery: React.FC<DeliveryProps> = ({ styles, currentUser }) => {
 
                 {/* Cart list */}
                 {cart.length > 0 ? (
-                  <div style={{ maxHeight: '180px', overflowY: 'auto', border: `1px solid ${styles.borderColor}`, borderRadius: '8px' }}>
+                  <div
+                    className="table-row-hoverable"
+                    style={{ maxHeight: '180px', overflowY: 'auto', border: `1px solid ${styles.borderColor}`, borderRadius: '8px', '--row-hover-bg': styles.isDark ? 'rgba(255,255,255,0.06)' : 'rgba(19,114,218,0.07)' } as React.CSSProperties}
+                  >
                     <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.8rem' }}>
                       <thead style={{ position: 'sticky', top: 0, backgroundColor: styles.isDark ? '#1e293b' : '#f8fafc', zIndex: 1 }}>
                         <tr style={{ borderBottom: `1px solid ${styles.borderColor}`, color: styles.sidebarWidgetText?.color }}>

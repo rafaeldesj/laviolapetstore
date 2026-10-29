@@ -2170,7 +2170,10 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
                     </div>
                   </div>
 
-                  <div style={{ overflowX: 'auto', border: `1px solid ${styles.borderColor}`, borderRadius: '8px', maxHeight: '350px' }}>
+                  <div
+                    className="table-row-hoverable"
+                    style={{ overflowX: 'auto', border: `1px solid ${styles.borderColor}`, borderRadius: '8px', maxHeight: '350px', '--row-hover-bg': styles.isDark ? 'rgba(255,255,255,0.06)' : 'rgba(19,114,218,0.07)' } as React.CSSProperties}
+                  >
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem', textAlign: 'left' }}>
                       <thead>
                         <tr style={{ backgroundColor: styles.background, borderBottom: `1px solid ${styles.borderColor}` }}>

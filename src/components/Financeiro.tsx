@@ -236,7 +236,7 @@ export const Financeiro: React.FC<FinanceiroProps> = ({ styles, readOnly = false
             Nenhuma movimentação financeira registrada no momento.
           </p>
         ) : (
-          <div style={{ overflowX: 'auto' }}>
+          <div className="table-row-hoverable" style={{ overflowX: 'auto', '--row-hover-bg': styles.isDark ? 'rgba(255,255,255,0.06)' : 'rgba(19,114,218,0.07)' } as React.CSSProperties}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem', textAlign: 'left' }}>
               <thead>
                 <tr style={{ borderBottom: `2px solid ${styles.borderColor}`, color: styles.sidebarWidgetText?.color }}>

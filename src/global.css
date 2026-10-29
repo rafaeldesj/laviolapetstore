@@ -83,12 +83,14 @@ button:not(:disabled):not(.no-global-hover):focus {
 }
 
 /* ---------- Linha de tabela destacada ao passar o mouse ---------- */
+/* !important porque várias linhas de tabela definem backgroundColor inline (ex.: estado selecionado),
+   e isso teria precedência sobre uma regra normal de CSS. */
 .table-row-hoverable tbody tr {
   transition: background-color 0.12s ease;
 }
 
 .table-row-hoverable tbody tr:hover {
-  background-color: var(--row-hover-bg, rgba(19, 114, 218, 0.08));
+  background-color: var(--row-hover-bg, rgba(19, 114, 218, 0.08)) !important;
 }
 
 /* ---------- Pequenos Botões de Ação (Icon Buttons) ---------- */

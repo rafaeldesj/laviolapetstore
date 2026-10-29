@@ -2863,7 +2863,7 @@ export const Configuracoes = ({ styles, highContrast, setHighContrast, fontSize,
                       Nenhum pedido offline concluído no período atual.
                     </p>
                   ) : (
-                    <div style={{ overflowX: 'auto' }}>
+                    <div className="table-row-hoverable" style={{ overflowX: 'auto', ['--row-hover-bg' as string]: 'rgba(128,128,128,0.12)' }}>
                       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem', textAlign: 'left' }}>
                         <thead>
                           <tr style={{ borderBottom: '1px solid rgba(128,128,128,0.15)' }}>

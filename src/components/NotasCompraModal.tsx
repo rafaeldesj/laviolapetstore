@@ -67,7 +67,7 @@ export const NotasCompraModal: React.FC<Props> = ({ styles, onClose }) => {
             {list.length === 0 ? 'Nenhuma nota de compra lançada ainda.' : 'Nenhuma nota encontrada para essa busca.'}
           </p>
         ) : (
-          <div style={{ overflowX: 'auto', border: `1px solid ${styles.borderColor}`, borderRadius: '10px' }}>
+          <div className="table-row-hoverable" style={{ overflowX: 'auto', border: `1px solid ${styles.borderColor}`, borderRadius: '10px', '--row-hover-bg': styles.isDark ? 'rgba(255,255,255,0.06)' : 'rgba(19,114,218,0.07)' } as React.CSSProperties}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.84rem', minWidth: '760px' }}>
               <thead>
                 <tr style={{ backgroundColor: styles.background }}>
