@@ -208,22 +208,27 @@ export const WEEKDAY_LABELS = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta
 const CYCLE_VISITS: Record<'semanal' | 'quinzenal', number> = { semanal: 4, quinzenal: 2 };
 
 /**
- * `lockedPosition`: quando o atendimento já foi reagendado uma vez (tutor avisou com antecedência), o Worker
- * trava o número de antes de mover a data — aqui só exibimos esse valor travado em vez de recalcular pela nova
- * data, senão o reagendamento faria o número "pular" de novo (o mesmo problema que motivou a trava).
+ * `lockedPosition`: quando o agendamento já tem a posição real gravada (pelo motor automático/Renovar ao criar,
+ * ou pela trava de reagendamento), usamos esse valor direto em vez de calcular — é informação real da agenda,
+ * não uma conta teórica.
+ *
+ * Sem isso, cai no cálculo por data — usado só como reserva (ex.: assinaturas/agendamentos antigos, de antes
+ * desse mecanismo). Esse cálculo usa `last_renewed_at` (a ÚLTIMA renovação real) como âncora do ciclo, não
+ * `started_at`: o início da assinatura pode ser muito antigo (meses), o que afasta demais a conta da realidade
+ * — `last_renewed_at` fica sempre próximo do ciclo que está rodando agora (decisão do usuário, 2026-10-31,
+ * depois de ver o "(X/N)" ficar fora de sincronia usando `started_at` como base).
  */
-export function visitProgressLabel(sub: Pick<ClubinhoSubscription, 'started_at' | 'plan_type'> | null | undefined, date: Date, lockedPosition?: number | null): string {
+export function visitProgressLabel(sub: Pick<ClubinhoSubscription, 'started_at' | 'last_renewed_at' | 'plan_type'> | null | undefined, date: Date, lockedPosition?: number | null): string {
   if (!sub || sub.plan_type === 'avulso') return '(1/1)';
   const total = CYCLE_VISITS[sub.plan_type];
   if (lockedPosition != null) return `(${lockedPosition}/${total})`;
   const intervalDays = sub.plan_type === 'quinzenal' ? 14 : 7;
   const cycleLen = intervalDays * total;
-  const started = new Date(sub.started_at + 'T00:00:00');
+  const anchor = new Date((sub.last_renewed_at || sub.started_at) + 'T00:00:00');
   const dayStart = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-  const diffDays = Math.round((dayStart.getTime() - started.getTime()) / 86400000);
-  // Ciclo se repete infinitamente pra frente E pra trás a partir da data de início: datas antigas (de antes
-  // do cadastro da assinatura, recuperadas da agenda histórica) também precisam cair na posição certa do
-  // ciclo, não travar em 1 só porque são anteriores ao "started_at" registrado hoje.
+  const diffDays = Math.round((dayStart.getTime() - anchor.getTime()) / 86400000);
+  // Ciclo se repete infinitamente pra frente E pra trás a partir da âncora: datas antigas (de antes da última
+  // renovação) também precisam cair na posição certa do ciclo, não travar em 1 só por serem anteriores a ela.
   let mod = diffDays % cycleLen;
   if (mod < 0) mod += cycleLen;
   const current = Math.floor(mod / intervalDays) + 1;

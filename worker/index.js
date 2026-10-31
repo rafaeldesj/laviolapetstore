@@ -217,15 +217,17 @@ async function findClubinhoSubForAppt(env, apptRow) {
 }
 
 /** Posição (1..N) desta data dentro do ciclo da assinatura — mesma fórmula de src/utils/clubinhoService.ts. */
+/** Âncora do ciclo pro cálculo por data (reserva, só pra agendamento sem posição real gravada): a ÚLTIMA
+ *  renovação real, não o início da assinatura (que pode ser muito mais antigo que o ciclo atual). */
 function clubinhoCyclePosition(sub, dateISO) {
   const total = CLUBINHO_CYCLE_VISITS[sub.plan_type];
   if (!total) return null;
   const intervalDays = sub.plan_type === 'quinzenal' ? 14 : 7;
   const cycleLen = intervalDays * total;
-  const started = new Date(sub.started_at + 'T00:00:00');
+  const anchor = new Date((sub.last_renewed_at || sub.started_at) + 'T00:00:00');
   const d = new Date(dateISO);
   const dayStart = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-  const diffDays = Math.round((dayStart.getTime() - started.getTime()) / 86400000);
+  const diffDays = Math.round((dayStart.getTime() - anchor.getTime()) / 86400000);
   let mod = diffDays % cycleLen;
   if (mod < 0) mod += cycleLen;
   return Math.floor(mod / intervalDays) + 1;
