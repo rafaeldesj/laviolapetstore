@@ -23,6 +23,10 @@ export interface ClubinhoSubscription {
    *  motor automático (src/utils/clubinhoService.ts `evaluateClubinhoAutoSchedule` no Worker); a tela não precisa
    *  exibir isso, só repassar. */
   current_cycle_series_id?: string | null;
+  /** Posição real (1..N) da visita mais relevante (a próxima futura, ou a última já passada) lida diretamente do
+   *  agendamento correspondente — não é um cálculo por data. null quando não há nenhum agendamento com a posição
+   *  gravada (ex.: assinatura ainda não montada por este mecanismo). Veio junto na listagem (GET /clubinho). */
+  real_cycle_position?: number | null;
   /** Último pagamento registrado (detalhes de data/hora/forma/quem recebeu) — vem junto na listagem, não precisa buscar à parte. */
   last_payment?: ClubinhoPayment | null;
   created_by: string;

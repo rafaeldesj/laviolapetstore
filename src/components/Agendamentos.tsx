@@ -1397,7 +1397,7 @@ export const Agendamentos: React.FC<AgendamentosProps> = ({ currentUser, styles,
                       const dotIcon = !app.payment_flag && clubStatus ? CLUBINHO_STATUS_ICON[clubStatus] : undefined;
                       const time = new Date(app.scheduled_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
                       const paymentNote = app.payment_flag ? ` · ${PAYMENT_FLAG_LABEL[app.payment_flag]}` : clubStatus ? ` · Clubinho: ${CLUBINHO_STATUS_LABEL[clubStatus]}` : '';
-                      const visitLabel = visitProgressLabel(clubSub, new Date(app.scheduled_at));
+                      const visitLabel = visitProgressLabel(clubSub, new Date(app.scheduled_at), app.clubinho_cycle_position);
                       return (
                         <button
                           key={app.id}

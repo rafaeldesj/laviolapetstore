@@ -527,7 +527,7 @@ export const ClubinhoManager: React.FC<Props> = ({ styles, currentUser }) => {
                   <tr key={s.id} style={{ borderTop: `1px solid ${styles.borderColor}` }}>
                     <td style={{ padding: '8px 10px', color: styles.sidebarWidgetText?.color }}>{idx + 1}</td>
                     <td style={{ padding: '8px 10px', fontWeight: 700, color: styles.textMain, whiteSpace: 'nowrap' }}>
-                      {s.pet_name} <span style={{ fontWeight: 500, fontSize: '0.78rem', color: styles.sidebarWidgetText?.color }}>{visitProgressLabel(s, new Date())}</span>
+                      {s.pet_name} <span style={{ fontWeight: 500, fontSize: '0.78rem', color: styles.sidebarWidgetText?.color }}>{visitProgressLabel(s, new Date(), s.real_cycle_position)}</span>
                     </td>
                     <td style={{ padding: '8px 10px', color: styles.sidebarWidgetText?.color }}>{s.tutor_name || '—'}</td>
                     <td style={{ padding: '8px 10px', color: styles.textMain, textTransform: 'capitalize' }}>{s.plan_type}</td>

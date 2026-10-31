@@ -275,6 +275,11 @@ async function buildClubinhoCycleAppointments(env, sub, userSub) {
       starts_at: d.toISOString(),
       duration_min: 60,
       notes: 'Gerado automaticamente pelo ciclo do Clubinho.',
+      // Grava a posição real (1..N) de cada visita no próprio agendamento, em vez de deixar pro cálculo por
+      // data (que gira pra sempre a partir de `started_at` e pode ficar fora de sincronia com a agenda real
+      // quando o ciclo é remontado numa data diferente da teórica — foi exatamente isso que o usuário notou
+      // em 2026-10-31: o "(X/N)" mostrava uma conta antiga enquanto a cor já refletia o ciclo recém-montado).
+      clubinho_cycle_position: i + 1,
       created_by: userSub,
     });
   }
@@ -1117,7 +1122,33 @@ export default {
             const pay = await sb(env, '/clubinho_payments?select=*&order=paid_date.desc,paid_time.desc');
             const lastBySub = new Map();
             if (pay.ok) for (const p of pay.body) if (!lastBySub.has(p.subscription_id)) lastBySub.set(p.subscription_id, p);
-            const assinaturas = r.body.map((s) => { const s2 = bySub.get(s.id) || s; return { ...s2, last_payment: lastBySub.get(s.id) || null }; });
+            // "Banho X de N" real: lê a posição gravada no próprio agendamento (clubinho_cycle_position), não o
+            // cálculo por data — esse cálculo gira pra sempre a partir de `started_at` e fica fora de sincronia
+            // sempre que o ciclo real foi remontado numa data diferente da teórica (2026-10-31: usuário notou
+            // o número "(4/4)" não batendo com a cor, já corrigida, de várias assinaturas recém-montadas).
+            const petIds = [...new Set(r.body.filter((s) => CLUBINHO_CYCLE_VISITS[s.plan_type] && s.pet_id).map((s) => s.pet_id))];
+            const posByPet = new Map();
+            if (petIds.length > 0) {
+              const filter = petIds.map((id) => encodeURIComponent(id)).join(',');
+              const posRows = await sb(env, `/appointments?pet_id=in.(${filter})&clubinho_cycle_position=not.is.null&select=pet_id,starts_at,clubinho_cycle_position&order=starts_at.asc`);
+              if (posRows.ok) {
+                const nowISO = new Date().toISOString();
+                const byPet = new Map();
+                for (const row of posRows.body) {
+                  if (!byPet.has(row.pet_id)) byPet.set(row.pet_id, []);
+                  byPet.get(row.pet_id).push(row);
+                }
+                for (const [petId, rows] of byPet) {
+                  const next = rows.find((row) => row.starts_at >= nowISO);
+                  const chosen = next || rows[rows.length - 1];
+                  posByPet.set(petId, chosen.clubinho_cycle_position);
+                }
+              }
+            }
+            const assinaturas = r.body.map((s) => {
+              const s2 = bySub.get(s.id) || s;
+              return { ...s2, last_payment: lastBySub.get(s.id) || null, real_cycle_position: posByPet.get(s.pet_id) ?? null };
+            });
             return json({ assinaturas, auto_acoes: autoAcoes });
           }
           // Cliente: só as assinaturas dos pets que são dele.
@@ -1184,7 +1215,9 @@ export default {
             const end = new Date(newRenewsAt + 'T23:59:59');
             const rows = [];
             seriesId = crypto.randomUUID();
-            for (let d = first; d <= end; d = new Date(d.getTime() + intervalDays * 86400000)) {
+            const total = CLUBINHO_CYCLE_VISITS[sub.plan_type] || null;
+            let i = 0;
+            for (let d = first; d <= end; d = new Date(d.getTime() + intervalDays * 86400000), i++) {
               rows.push({
                 series_id: seriesId,
                 pet_id: sub.pet_id,
@@ -1196,6 +1229,9 @@ export default {
                 starts_at: d.toISOString(),
                 duration_min: 60,
                 notes: 'Gerado automaticamente pela renovação do Clubinho.',
+                // Mesma posição real gravada no agendamento (ver buildClubinhoCycleAppointments) — null se a
+                // equipe escolheu uma data de renovação que cria mais ou menos visitas que o ciclo padrão.
+                clubinho_cycle_position: total ? (i % total) + 1 : null,
                 created_by: user.sub,
               });
             }
