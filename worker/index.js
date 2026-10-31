@@ -299,20 +299,22 @@ async function unbuildClubinhoCycleAppointments(env, sub) {
 }
 
 /**
- * Motor automático do Clubinho (decisão da proprietária/Paloma, 2026-10-29): a cor continua 100% escolhida pela
- * equipe, só a AGENDA passa a reagir sozinha a ela.
- *   - Pago, sem ciclo futuro montado ainda, e a renovação atual já venceu -> monta as N visitas do próximo ciclo
- *     e a cor volta pra "A confirmar" (novo ciclo começa pedindo confirmação de novo).
- *   - Débito nessas mesmas condições -> TAMBÉM monta o próximo ciclo (a regra do negócio é não deixar a agenda
- *     vazia só porque uma dívida ainda não foi paga), mas a cor continua Débito — não vira "A confirmar" como se
- *     a dívida antiga tivesse sumido. Assim, quando a equipe registrar o pagamento depois, o sistema já entende
- *     sozinho que aquele pagamento é o da dívida atrasada (é a própria marcação Débito que está sendo resolvida),
- *     sem precisar perguntar a quê ela se refere (ajuste de 2026-10-29 depois de um caso real com o Woody: o
- *     motor tinha apagado o roxo e posto azul, e um pagamento da dívida antiga acabou "confirmando" por engano
- *     o ciclo novo, que nem tinha sido cobrado ainda).
- *   - Inadimplente ou Congelada, com um ciclo futuro já montado -> apaga esse ciclo futuro e deixa a renovação
- *     "vencida ontem", pra remontar assim que a cor voltar a ficar pago/débito. "A confirmar" e "sem marcação"
- *     nunca desmontam sozinhas: a primeira é o próprio estado em que o motor deixa um ciclo recém-montado.
+ * Motor automático do Clubinho (decisão da proprietária/Paloma, 2026-10-29, ajustado em 2026-10-31 depois de ver
+ * o resultado em produção): a cor continua 100% escolhida pela equipe, só a AGENDA e o momento de pedir
+ * reconfirmação reagem sozinhos a ela. Montar a agenda com antecedência e pedir reconfirmação são DOIS eventos
+ * em momentos diferentes, não o mesmo instante:
+ *   1) MONTAR: Pago/Débito, sem ciclo futuro montado ainda, e o ciclo atual já venceu -> monta as N visitas do
+ *      próximo ciclo. A cor NÃO muda aqui — continua exatamente a mesma (verde continua verde, mostrando que o
+ *      cliente está em dia enquanto esse ciclo novo roda) — só a agenda fica pronta com antecedência.
+ *   2) PEDIR CONFIRMAÇÃO: só depois, quando esse ciclo que JÁ estava montado TAMBÉM chega ao fim (a própria
+ *      última visita dele, 4/4 ou 2/2, realmente aconteceu) e a cor ainda for Pago -> SÓ ENTÃO a cor vira
+ *      "A confirmar". Débito nunca vira "A confirmar" sozinho (seria confundir dívida antiga com o ciclo novo —
+ *      caso real do Woody, 2026-10-29: um pagamento pra quitar a dívida atrasada tinha "confirmado" por engano
+ *      um ciclo que nem tinha sido cobrado ainda). Isso evita o problema visto em produção em 2026-10-31: pets
+ *      recém-entrados no ciclo novo (ex. "1/2", "3/4") apareciam como "A confirmar" meses antes da hora, só
+ *      porque a agenda já tinha sido montada — a cor tem que esperar o ciclo rodar até o fim de verdade.
+ *   3) DESMONTAR: Inadimplente ou Congelada, com um ciclo futuro já montado -> apaga esse ciclo futuro e deixa a
+ *      renovação "vencida ontem", pra remontar assim que a cor voltar a ficar pago/débito.
  *   - Congelada nunca monta nada sozinha — só sai desse estado por ação manual da equipe (ex.: Renovar).
  * Chamado depois de qualquer mudança na marcação (reage na hora) e ao abrir a lista de assinaturas (pega quem
  * só venceu pelo calendário, sem ninguém ter mexido na marcação).
@@ -322,26 +324,14 @@ async function evaluateClubinhoAutoSchedule(env, sub, userSub) {
   if (!total || !sub.is_active) return null;
   const buildable = sub.payment_flag === 'pago' || sub.payment_flag === 'debito';
   // "Ruim o bastante pra desmontar": só inadimplente/congelada. NÃO inclui 'a_confirmar' — essa é a própria
-  // marcação que o build deixa pra trás ao montar o ciclo, então usá-la aqui faria o motor desmontar o que ele
-  // mesmo acabou de montar na avaliação seguinte (bug encontrado e corrigido em 2026-10-29 antes do primeiro
-  // deploy real: sem isso, toda assinatura que esse motor monta se autodestrói na véspera seguinte).
+  // marcação que o passo 2 deixa pra trás ao concluir um ciclo, então usá-la aqui faria o motor desmontar o que
+  // ele mesmo acabou de sinalizar (bug encontrado e corrigido em 2026-10-29 antes do primeiro deploy real).
   const badEnoughToUnbuild = sub.payment_flag === 'inadimplente' || sub.payment_flag === 'congelada';
   const hasBuilt = !!sub.current_cycle_series_id;
-  const due = todayDateStr() > sub.renews_at;
+  const due = todayDateStr() > sub.renews_at; // true = o ciclo "ativo" (montado ou não) já venceu
 
-  if (buildable && !hasBuilt && due) {
-    const built = await buildClubinhoCycleAppointments(env, sub, userSub);
-    if (!built) return null;
-    // Débito "atravessa" o build (ver comentário acima); só Pago vira "A confirmar".
-    const nextFlag = sub.payment_flag === 'debito' ? 'debito' : 'a_confirmar';
-    const upd = await sb(env, `/clubinho_subscriptions?id=eq.${encodeURIComponent(sub.id)}&select=*`, {
-      method: 'PATCH',
-      body: JSON.stringify({ renews_at: built.newRenewsAt, payment_flag: nextFlag, current_cycle_series_id: built.seriesId }),
-    });
-    const after = upd.ok && upd.body[0] ? upd.body[0] : { ...sub, renews_at: built.newRenewsAt, payment_flag: nextFlag, current_cycle_series_id: built.seriesId };
-    return { tipo: 'montado', assinatura: after, agendamentos_criados: built.created };
-  }
-
+  // DESMONTAR vem primeiro e nunca espera o "due": uma marcação ruim tem que reagir na hora, não só quando o
+  // ciclo que já estava montado vencer (senão a agenda fica com agendamentos indevidos até lá).
   if (badEnoughToUnbuild && hasBuilt) {
     const { removed } = await unbuildClubinhoCycleAppointments(env, sub);
     const upd = await sb(env, `/clubinho_subscriptions?id=eq.${encodeURIComponent(sub.id)}&select=*`, {
@@ -350,6 +340,30 @@ async function evaluateClubinhoAutoSchedule(env, sub, userSub) {
     });
     const after = upd.ok && upd.body[0] ? upd.body[0] : { ...sub, current_cycle_series_id: null };
     return removed.length > 0 ? { tipo: 'desmontado', assinatura: after, agendamentos_removidos: removed } : null;
+  }
+
+  if (!due) return null; // ciclo atual ainda rodando — nada mais a fazer
+
+  // 1) MONTAR o próximo ciclo (cor intacta — nem Pago nem Débito mudam aqui).
+  if (buildable && !hasBuilt) {
+    const built = await buildClubinhoCycleAppointments(env, sub, userSub);
+    if (!built) return null;
+    const upd = await sb(env, `/clubinho_subscriptions?id=eq.${encodeURIComponent(sub.id)}&select=*`, {
+      method: 'PATCH',
+      body: JSON.stringify({ renews_at: built.newRenewsAt, current_cycle_series_id: built.seriesId }),
+    });
+    const after = upd.ok && upd.body[0] ? upd.body[0] : { ...sub, renews_at: built.newRenewsAt, current_cycle_series_id: built.seriesId };
+    return { tipo: 'montado', assinatura: after, agendamentos_criados: built.created };
+  }
+
+  // 2) O ciclo que já estava montado também chegou ao fim de verdade -> agora sim pede reconfirmação.
+  if (hasBuilt && sub.payment_flag === 'pago') {
+    const upd = await sb(env, `/clubinho_subscriptions?id=eq.${encodeURIComponent(sub.id)}&select=*`, {
+      method: 'PATCH',
+      body: JSON.stringify({ payment_flag: 'a_confirmar', current_cycle_series_id: null }),
+    });
+    const after = upd.ok && upd.body[0] ? upd.body[0] : { ...sub, payment_flag: 'a_confirmar', current_cycle_series_id: null };
+    return { tipo: 'aguardando_confirmacao', assinatura: after };
   }
 
   return null;
@@ -1153,11 +1167,11 @@ export default {
           const newRenewsAt = String(input.renewsAt || '');
           if (!newRenewsAt) return json({ mensagem: 'Informe a nova data de renovação.' }, 400);
 
-          // Renovar agora é o reforço manual do mesmo motor automático (2026-10-29): cria o lote de agendamentos
-          // até a data escolhida, marcando o lote com um series_id pra o motor saber o que desmontar depois se a
-          // marcação mudar antes desses atendimentos acontecerem. Confirma o ciclo: tira "congelada" e volta pra
-          // "A confirmar" — exceto Débito, que atravessa pro ciclo novo igual ao motor automático (mesmo motivo:
-          // não apagar o sinal de uma dívida que ainda não foi paga só porque o ciclo girou).
+          // Renovar agora é o reforço manual do mesmo motor automático (2026-10-29, ajustado em 2026-10-31): cria
+          // o lote de agendamentos até a data escolhida, marcando o lote com um series_id pra o motor saber o que
+          // desmontar depois se a marcação mudar antes desses atendimentos acontecerem. Pago/Débito atravessam
+          // sem mudar de cor (mesma regra do passo 1 do motor); tira "congelada"/outras marcações, mas sem
+          // presumir pagamento recebido.
           let created = 0;
           let seriesId = null;
           if (input.createAppointments !== false && sub.weekday !== null && sub.time_of_day) {
@@ -1193,7 +1207,11 @@ export default {
               seriesId = null;
             }
           }
-          const nextFlag = sub.payment_flag === 'debito' ? 'debito' : 'a_confirmar';
+          // Pago/Débito atravessam o Renovar sem mudar (mesma regra do motor automático: a cor só reflete
+          // confirmação quando o ciclo recém-montado também chegar ao fim). Qualquer outra marcação (congelada,
+          // inadimplente, a_confirmar, sem marcação) vira "A confirmar" — Renovar reativa, mas não presume que o
+          // pagamento já foi recebido (isso é feito à parte, no "Marcar: Pagamento realizado").
+          const nextFlag = (sub.payment_flag === 'debito' || sub.payment_flag === 'pago') ? sub.payment_flag : 'a_confirmar';
           const upd = await sb(env, `/clubinho_subscriptions?id=eq.${encodeURIComponent(id)}&select=*`, {
             method: 'PATCH',
             body: JSON.stringify({ renews_at: newRenewsAt, is_active: true, payment_flag: nextFlag, current_cycle_series_id: seriesId }),
