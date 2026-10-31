@@ -1313,11 +1313,29 @@ export default {
           return json({ assinatura, pagamento: insert.body[0], auto_acao: autoAcao }, 201);
         }
 
-        // Histórico de pagamentos de UMA assinatura — pra tela de gestão de pagamentos por ciclo.
+        // Histórico de pagamentos de UMA assinatura — pra tela de gestão de pagamentos por ciclo. Também devolve
+        // as datas de renovação REAIS conhecidas dessa assinatura (`ciclos`), pra tela nunca deixar a equipe
+        // digitar uma data qualquer como "a quê ciclo esse pagamento se refere" — só datas que de fato marcam
+        // o início de um ciclo: a Última Renovação atual, o Início, e o início de cada ciclo que o motor/Renovar
+        // já montou (primeira visita de cada lote, `clubinho_cycle_position = 1`).
         const payListMatch = /^\/clubinho\/([\w-]+)\/pagamentos$/.exec(dbRoute);
         if (request.method === 'GET' && payListMatch) {
-          const r = await sb(env, `/clubinho_payments?subscription_id=eq.${encodeURIComponent(payListMatch[1])}&select=*&order=cycle_renewal_date.desc.nullslast,paid_date.desc,paid_time.desc`);
-          return r.ok ? json({ pagamentos: r.body }) : failC('Erro ao listar os pagamentos.', r);
+          const subId = payListMatch[1];
+          const r = await sb(env, `/clubinho_payments?subscription_id=eq.${encodeURIComponent(subId)}&select=*&order=cycle_renewal_date.desc.nullslast,paid_date.desc,paid_time.desc`);
+          if (!r.ok) return failC('Erro ao listar os pagamentos.', r);
+          const curSub = await sb(env, `/clubinho_subscriptions?id=eq.${encodeURIComponent(subId)}&select=pet_id,last_renewed_at,started_at`);
+          const sub = curSub.ok ? curSub.body[0] : null;
+          const ciclosSet = new Set();
+          if (sub) {
+            if (sub.last_renewed_at) ciclosSet.add(sub.last_renewed_at);
+            if (sub.started_at) ciclosSet.add(sub.started_at);
+            if (sub.pet_id) {
+              const posRows = await sb(env, `/appointments?pet_id=eq.${encodeURIComponent(sub.pet_id)}&clubinho_cycle_position=eq.1&select=starts_at&order=starts_at.desc`);
+              if (posRows.ok) for (const row of posRows.body) ciclosSet.add(row.starts_at.slice(0, 10));
+            }
+          }
+          const ciclos = [...ciclosSet].sort().reverse();
+          return json({ pagamentos: r.body, ciclos });
         }
 
         // Editar ou apagar um pagamento específico do histórico — nunca mexe sozinho na cor/agenda da

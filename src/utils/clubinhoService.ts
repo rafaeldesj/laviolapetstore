@@ -298,10 +298,12 @@ export const registerClubinhoPayment = async (id: string, input: NewClubinhoPaym
   return { assinatura, pagamento, autoAcao: auto_acao || null };
 };
 
-/** Histórico completo de pagamentos de uma assinatura (todos os ciclos) — pra tela de gestão por ciclo. */
-export const listClubinhoPayments = async (subscriptionId: string): Promise<ClubinhoPayment[]> => {
-  const { pagamentos } = await workerCall<{ pagamentos: ClubinhoPayment[] }>(`/clubinho/${encodeURIComponent(subscriptionId)}/pagamentos`);
-  return pagamentos;
+/** Histórico completo de pagamentos de uma assinatura (todos os ciclos), mais as datas de renovação REAIS
+ *  conhecidas dela (`cycles`) — pra nunca deixar a equipe digitar uma data qualquer como "a quê ciclo esse
+ *  pagamento se refere", só datas que de fato marcam o início de um ciclo. */
+export const listClubinhoPayments = async (subscriptionId: string): Promise<{ payments: ClubinhoPayment[]; cycles: string[] }> => {
+  const { pagamentos, ciclos } = await workerCall<{ pagamentos: ClubinhoPayment[]; ciclos: string[] }>(`/clubinho/${encodeURIComponent(subscriptionId)}/pagamentos`);
+  return { payments: pagamentos, cycles: ciclos || [] };
 };
 
 /** Corrige um pagamento já registrado (ex.: data/forma erradas, ou a qual ciclo ele se refere). Nunca mexe

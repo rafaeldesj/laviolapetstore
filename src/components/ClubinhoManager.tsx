@@ -66,11 +66,13 @@ export const ClubinhoManager: React.FC<Props> = ({ styles, currentUser }) => {
   const isSharedOwnerLogin = (currentUser.profile?.username || '').trim().toUpperCase() === 'LAVIOLA';
   const [paymentTarget, setPaymentTarget] = useState<ClubinhoSubscription | null>(null);
   const [paymentForm, setPaymentForm] = useState<PaymentFormState>(emptyPaymentForm(currentUser.name || '', todayStr()));
+  const [paymentCycleOptions, setPaymentCycleOptions] = useState<string[]>([]);
 
   // Histórico de pagamentos por ciclo (criar/editar/apagar) — pra equipe nunca mais ter que adivinhar a quê
   // ciclo um pagamento antigo pertence (caso real da Nina, 2026-10-31).
   const [historyTarget, setHistoryTarget] = useState<ClubinhoSubscription | null>(null);
   const [historyList, setHistoryList] = useState<ClubinhoPayment[] | null>(null);
+  const [historyCycleOptions, setHistoryCycleOptions] = useState<string[]>([]);
   const [historyBusy, setHistoryBusy] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [historyFormId, setHistoryFormId] = useState<string | null>(null); // null = fechado, 'new' = criando, senão id do pagamento em edição
@@ -278,9 +280,14 @@ export const ClubinhoManager: React.FC<Props> = ({ styles, currentUser }) => {
     }
   };
 
-  const openPaymentForm = (s: ClubinhoSubscription) => {
+  const openPaymentForm = async (s: ClubinhoSubscription) => {
     setPaymentTarget(s);
     setPaymentForm(emptyPaymentForm(isSharedOwnerLogin ? '' : (currentUser.name || ''), s.last_renewed_at || todayStr()));
+    setPaymentCycleOptions(s.last_renewed_at ? [s.last_renewed_at] : []);
+    try {
+      const { cycles } = await listClubinhoPayments(s.id);
+      setPaymentCycleOptions(cycles);
+    } catch { /* mantém a opção mínima já definida acima */ }
   };
 
   const handleRegisterPayment = async () => {
@@ -311,10 +318,13 @@ export const ClubinhoManager: React.FC<Props> = ({ styles, currentUser }) => {
   const openHistory = async (s: ClubinhoSubscription) => {
     setHistoryTarget(s);
     setHistoryList(null);
+    setHistoryCycleOptions(s.last_renewed_at ? [s.last_renewed_at] : []);
     setHistoryError(null);
     setHistoryFormId(null);
     try {
-      setHistoryList(await listClubinhoPayments(s.id));
+      const { payments, cycles } = await listClubinhoPayments(s.id);
+      setHistoryList(payments);
+      setHistoryCycleOptions(cycles);
     } catch (e: any) {
       setHistoryError(e.message || 'Erro ao carregar os pagamentos.');
     }
@@ -322,7 +332,13 @@ export const ClubinhoManager: React.FC<Props> = ({ styles, currentUser }) => {
 
   const reloadHistory = async () => {
     if (!historyTarget) return;
-    try { setHistoryList(await listClubinhoPayments(historyTarget.id)); } catch (e: any) { setHistoryError(e.message || 'Erro ao carregar os pagamentos.'); }
+    try {
+      const { payments, cycles } = await listClubinhoPayments(historyTarget.id);
+      setHistoryList(payments);
+      setHistoryCycleOptions(cycles);
+    } catch (e: any) {
+      setHistoryError(e.message || 'Erro ao carregar os pagamentos.');
+    }
   };
 
   const startNewHistoryPayment = () => {
@@ -395,7 +411,7 @@ export const ClubinhoManager: React.FC<Props> = ({ styles, currentUser }) => {
   };
 
   // Campos compartilhados entre o popup rápido de confirmação e a linha de criar/editar do histórico.
-  const renderPaymentFields = (form: PaymentFormState, setForm: React.Dispatch<React.SetStateAction<PaymentFormState>>, lastRenewedAt: string) => (
+  const renderPaymentFields = (form: PaymentFormState, setForm: React.Dispatch<React.SetStateAction<PaymentFormState>>, lastRenewedAt: string, cycleOptions: string[]) => (
     <>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginTop: '6px' }}>
         <div style={styles.formGroup}>
@@ -409,9 +425,16 @@ export const ClubinhoManager: React.FC<Props> = ({ styles, currentUser }) => {
       </div>
       <div style={styles.formGroup}>
         <label style={styles.formLabel}>Referente à renovação de</label>
-        <input type="date" value={form.cycleRenewalDate} onChange={(e) => setForm(f => ({ ...f, cycleRenewalDate: e.target.value }))} style={styles.formInput} />
+        <select value={form.cycleRenewalDate} onChange={(e) => setForm(f => ({ ...f, cycleRenewalDate: e.target.value }))} style={styles.formInput}>
+          {!cycleOptions.includes(form.cycleRenewalDate) && form.cycleRenewalDate && (
+            <option value={form.cycleRenewalDate}>{fmtDate(form.cycleRenewalDate)}</option>
+          )}
+          {cycleOptions.map(c => (
+            <option key={c} value={c}>{fmtDate(c)}{c === lastRenewedAt ? ' (ciclo atual)' : ''}</option>
+          ))}
+        </select>
         <span style={{ fontSize: '0.72rem', color: styles.sidebarWidgetText?.color }}>
-          Última Renovação atual: {fmtDate(lastRenewedAt)}. Mude só se esse pagamento for de um ciclo diferente.
+          Só mostra datas que já marcaram o início de um ciclo real dessa assinatura.
         </span>
       </div>
       <div style={styles.formGroup}>
@@ -780,7 +803,7 @@ export const ClubinhoManager: React.FC<Props> = ({ styles, currentUser }) => {
               <h2 style={{ ...styles.modalTitle, fontSize: '1.05rem' }}>Registrar pagamento — {paymentTarget.pet_name}</h2>
               <button onClick={() => setPaymentTarget(null)} style={styles.modalCloseBtn(false)}>✕</button>
             </div>
-            {renderPaymentFields(paymentForm, setPaymentForm, paymentTarget.last_renewed_at || paymentTarget.started_at)}
+            {renderPaymentFields(paymentForm, setPaymentForm, paymentTarget.last_renewed_at || paymentTarget.started_at, paymentCycleOptions)}
             <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
               <button type="button" disabled={busyId === paymentTarget.id} onClick={handleRegisterPayment} className="btn-save" style={styles.btnAcc(false)}>
                 {busyId === paymentTarget.id ? 'Salvando...' : 'Confirmar pagamento'}
@@ -846,7 +869,7 @@ export const ClubinhoManager: React.FC<Props> = ({ styles, currentUser }) => {
                 <h3 style={{ fontSize: '0.88rem', fontWeight: 700, color: styles.textMain, margin: 0 }}>
                   {historyFormId === 'new' ? 'Novo pagamento' : 'Editar pagamento'}
                 </h3>
-                {renderPaymentFields(historyForm, setHistoryForm, historyTarget.last_renewed_at || historyTarget.started_at)}
+                {renderPaymentFields(historyForm, setHistoryForm, historyTarget.last_renewed_at || historyTarget.started_at, historyCycleOptions)}
                 <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
                   <button type="button" disabled={historyBusy} onClick={saveHistoryPayment} className="btn-save" style={styles.btnAcc(false)}>
                     {historyBusy ? 'Salvando...' : 'Salvar'}
