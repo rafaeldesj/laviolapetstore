@@ -290,10 +290,29 @@ export interface NewClubinhoPaymentInput {
   cycleRenewalDate?: string;
 }
 
-/** Registra um pagamento (data/hora/forma/quem recebeu) e marca a assinatura como "Pagamento realizado". */
+/** Registra um pagamento (data/hora/forma/quem recebeu). Só marca a assinatura como "Pagamento realizado" (e
+ *  roda o motor automático) quando `cycleRenewalDate` bate com a Última Renovação atual — pagamento de um ciclo
+ *  passado (ex.: preenchendo o histórico) não mexe na cor nem na agenda de agora. */
 export const registerClubinhoPayment = async (id: string, input: NewClubinhoPaymentInput): Promise<{ assinatura: ClubinhoSubscription; pagamento: ClubinhoPayment; autoAcao: ClubinhoAutoAction | null }> => {
   const { assinatura, pagamento, auto_acao } = await workerCall<{ assinatura: ClubinhoSubscription; pagamento: ClubinhoPayment; auto_acao?: ClubinhoAutoAction | null }>(`/clubinho/${encodeURIComponent(id)}/pagamento`, { method: 'POST', body: JSON.stringify(input) });
   return { assinatura, pagamento, autoAcao: auto_acao || null };
+};
+
+/** Histórico completo de pagamentos de uma assinatura (todos os ciclos) — pra tela de gestão por ciclo. */
+export const listClubinhoPayments = async (subscriptionId: string): Promise<ClubinhoPayment[]> => {
+  const { pagamentos } = await workerCall<{ pagamentos: ClubinhoPayment[] }>(`/clubinho/${encodeURIComponent(subscriptionId)}/pagamentos`);
+  return pagamentos;
+};
+
+/** Corrige um pagamento já registrado (ex.: data/forma erradas, ou a qual ciclo ele se refere). Nunca mexe
+ *  sozinho na cor/agenda da assinatura — isso continua decisão manual da equipe. */
+export const updateClubinhoPayment = async (paymentId: string, patch: Partial<NewClubinhoPaymentInput>): Promise<ClubinhoPayment> => {
+  const { pagamento } = await workerCall<{ pagamento: ClubinhoPayment }>(`/clubinho/pagamentos/${encodeURIComponent(paymentId)}`, { method: 'PATCH', body: JSON.stringify(patch) });
+  return pagamento;
+};
+
+export const deleteClubinhoPayment = async (paymentId: string): Promise<void> => {
+  await workerCall(`/clubinho/pagamentos/${encodeURIComponent(paymentId)}`, { method: 'DELETE' });
 };
 
 export const cancelClubinho = async (id: string): Promise<void> => {

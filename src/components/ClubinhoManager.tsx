@@ -1,11 +1,12 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { PlusCircle, RefreshCw, Edit3, Ban, X, Save, AlertTriangle, Search, ArrowUpDown } from 'lucide-react';
+import { PlusCircle, RefreshCw, Edit3, Ban, X, Save, AlertTriangle, Search, ArrowUpDown, Receipt, Trash2 } from 'lucide-react';
 import {
   listClubinhoWithAutoActions, createClubinho, updateClubinho, renewClubinho, cancelClubinho, registerClubinhoPayment,
+  listClubinhoPayments, updateClubinhoPayment, deleteClubinhoPayment,
   getClubinhoStatus, describeClubinhoStatus, visitProgressLabel, CLUBINHO_STATUS_COLOR, CLUBINHO_STATUS_LABEL, CLUBINHO_STATUS_TOOLTIP, CLUBINHO_STATUS_DOT, CLUBINHO_STATUS_ICON, WEEKDAY_LABELS, PAYMENT_METHOD_LABELS,
 } from '../utils/clubinhoService';
-import type { ClubinhoSubscription, ClubinhoStatus, ClubinhoAutoAction } from '../utils/clubinhoService';
+import type { ClubinhoSubscription, ClubinhoStatus, ClubinhoAutoAction, ClubinhoPayment } from '../utils/clubinhoService';
 import { listPets } from '../utils/petsService';
 import type { Pet } from '../utils/petsService';
 import { logAction } from '../supabaseClient';
@@ -65,6 +66,16 @@ export const ClubinhoManager: React.FC<Props> = ({ styles, currentUser }) => {
   const isSharedOwnerLogin = (currentUser.profile?.username || '').trim().toUpperCase() === 'LAVIOLA';
   const [paymentTarget, setPaymentTarget] = useState<ClubinhoSubscription | null>(null);
   const [paymentForm, setPaymentForm] = useState<PaymentFormState>(emptyPaymentForm(currentUser.name || '', todayStr()));
+
+  // Histórico de pagamentos por ciclo (criar/editar/apagar) — pra equipe nunca mais ter que adivinhar a quê
+  // ciclo um pagamento antigo pertence (caso real da Nina, 2026-10-31).
+  const [historyTarget, setHistoryTarget] = useState<ClubinhoSubscription | null>(null);
+  const [historyList, setHistoryList] = useState<ClubinhoPayment[] | null>(null);
+  const [historyBusy, setHistoryBusy] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [historyFormId, setHistoryFormId] = useState<string | null>(null); // null = fechado, 'new' = criando, senão id do pagamento em edição
+  const [historyForm, setHistoryForm] = useState<PaymentFormState>(emptyPaymentForm('', todayStr()));
+  const [historyDeleteTarget, setHistoryDeleteTarget] = useState<ClubinhoPayment | null>(null);
 
   // Visão ampla: a tabela (com bastante coluna) fica espremida na área de conteúdo normal; isso a estica até a
   // largura toda da página, do menu até o aviso lateral — mesma ideia já usada na Agenda.
@@ -296,6 +307,136 @@ export const ClubinhoManager: React.FC<Props> = ({ styles, currentUser }) => {
       setBusyId(null);
     }
   };
+
+  const openHistory = async (s: ClubinhoSubscription) => {
+    setHistoryTarget(s);
+    setHistoryList(null);
+    setHistoryError(null);
+    setHistoryFormId(null);
+    try {
+      setHistoryList(await listClubinhoPayments(s.id));
+    } catch (e: any) {
+      setHistoryError(e.message || 'Erro ao carregar os pagamentos.');
+    }
+  };
+
+  const reloadHistory = async () => {
+    if (!historyTarget) return;
+    try { setHistoryList(await listClubinhoPayments(historyTarget.id)); } catch (e: any) { setHistoryError(e.message || 'Erro ao carregar os pagamentos.'); }
+  };
+
+  const startNewHistoryPayment = () => {
+    if (!historyTarget) return;
+    setHistoryFormId('new');
+    setHistoryForm(emptyPaymentForm(isSharedOwnerLogin ? '' : (currentUser.name || ''), historyTarget.last_renewed_at || todayStr()));
+  };
+
+  const startEditHistoryPayment = (p: ClubinhoPayment) => {
+    setHistoryFormId(p.id);
+    setHistoryForm({ paidDate: p.paid_date, paidTime: p.paid_time, paymentMethod: p.payment_method, receivedBy: p.received_by, cycleRenewalDate: p.cycle_renewal_date || '' });
+  };
+
+  const saveHistoryPayment = async () => {
+    if (!historyTarget || !historyFormId) return;
+    if (!historyForm.receivedBy.trim()) { setHistoryError('Informe quem recebeu o pagamento.'); return; }
+    setHistoryBusy(true);
+    setHistoryError(null);
+    try {
+      if (historyFormId === 'new') {
+        const { autoAcao } = await registerClubinhoPayment(historyTarget.id, {
+          paidDate: historyForm.paidDate, paidTime: historyForm.paidTime,
+          paymentMethod: historyForm.paymentMethod, receivedBy: historyForm.receivedBy.trim(),
+          cycleRenewalDate: historyForm.cycleRenewalDate,
+        });
+        await logAction(
+          currentUser.email || '', currentUser.name || 'Equipe', 'Pagamento do Clubinho registrado',
+          `Pagamento de "${historyTarget.pet_name}" registrado: ${PAYMENT_METHOD_LABELS[historyForm.paymentMethod]}, em ${fmtDate(historyForm.paidDate)} às ${historyForm.paidTime}, recebido por ${historyForm.receivedBy.trim()} — referente à renovação de ${fmtDate(historyForm.cycleRenewalDate)}.`
+        );
+        if (autoAcao) await logAutoAction(autoAcao);
+      } else {
+        await updateClubinhoPayment(historyFormId, {
+          paidDate: historyForm.paidDate, paidTime: historyForm.paidTime,
+          paymentMethod: historyForm.paymentMethod, receivedBy: historyForm.receivedBy.trim(),
+          cycleRenewalDate: historyForm.cycleRenewalDate,
+        });
+        await logAction(
+          currentUser.email || '', currentUser.name || 'Equipe', 'Pagamento do Clubinho editado',
+          `Pagamento de "${historyTarget.pet_name}" (referente à renovação de ${fmtDate(historyForm.cycleRenewalDate)}) corrigido.`
+        );
+      }
+      setHistoryFormId(null);
+      await reloadHistory();
+      load();
+    } catch (e: any) {
+      setHistoryError(e.message || 'Erro ao salvar o pagamento.');
+    } finally {
+      setHistoryBusy(false);
+    }
+  };
+
+  const confirmDeleteHistoryPayment = async () => {
+    if (!historyDeleteTarget || !historyTarget) return;
+    setHistoryBusy(true);
+    setHistoryError(null);
+    try {
+      await deleteClubinhoPayment(historyDeleteTarget.id);
+      await logAction(
+        currentUser.email || '', currentUser.name || 'Equipe', 'Pagamento do Clubinho apagado',
+        `Pagamento de "${historyTarget.pet_name}" (${fmtDate(historyDeleteTarget.paid_date)}, referente à renovação de ${historyDeleteTarget.cycle_renewal_date ? fmtDate(historyDeleteTarget.cycle_renewal_date) : '—'}) removido do histórico.`
+      );
+      setHistoryDeleteTarget(null);
+      await reloadHistory();
+      load();
+    } catch (e: any) {
+      setHistoryError(e.message || 'Erro ao apagar o pagamento.');
+    } finally {
+      setHistoryBusy(false);
+    }
+  };
+
+  // Campos compartilhados entre o popup rápido de confirmação e a linha de criar/editar do histórico.
+  const renderPaymentFields = (form: PaymentFormState, setForm: React.Dispatch<React.SetStateAction<PaymentFormState>>, lastRenewedAt: string) => (
+    <>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginTop: '6px' }}>
+        <div style={styles.formGroup}>
+          <label style={styles.formLabel}>Data</label>
+          <input type="date" value={form.paidDate} onChange={(e) => setForm(f => ({ ...f, paidDate: e.target.value }))} style={styles.formInput} />
+        </div>
+        <div style={styles.formGroup}>
+          <label style={styles.formLabel}>Hora</label>
+          <input type="time" value={form.paidTime} onChange={(e) => setForm(f => ({ ...f, paidTime: e.target.value }))} style={styles.formInput} />
+        </div>
+      </div>
+      <div style={styles.formGroup}>
+        <label style={styles.formLabel}>Referente à renovação de</label>
+        <input type="date" value={form.cycleRenewalDate} onChange={(e) => setForm(f => ({ ...f, cycleRenewalDate: e.target.value }))} style={styles.formInput} />
+        <span style={{ fontSize: '0.72rem', color: styles.sidebarWidgetText?.color }}>
+          Última Renovação atual: {fmtDate(lastRenewedAt)}. Mude só se esse pagamento for de um ciclo diferente.
+        </span>
+      </div>
+      <div style={styles.formGroup}>
+        <label style={styles.formLabel}>Forma de pagamento</label>
+        <select value={form.paymentMethod} onChange={(e) => setForm(f => ({ ...f, paymentMethod: e.target.value as PaymentFormState['paymentMethod'] }))} style={styles.formInput}>
+          <option value="pix">Pix</option>
+          <option value="debito">Débito</option>
+          <option value="credito">Crédito</option>
+          <option value="especie">Espécie</option>
+        </select>
+      </div>
+      <div style={styles.formGroup}>
+        <label style={styles.formLabel}>Quem recebeu</label>
+        {isSharedOwnerLogin ? (
+          <select value={form.receivedBy} onChange={(e) => setForm(f => ({ ...f, receivedBy: e.target.value }))} style={styles.formInput}>
+            <option value="">Selecione...</option>
+            <option value="André">André</option>
+            <option value="Paloma">Paloma</option>
+          </select>
+        ) : (
+          <input type="text" value={form.receivedBy} onChange={(e) => setForm(f => ({ ...f, receivedBy: e.target.value }))} style={styles.formInput} placeholder="Nome de quem recebeu" />
+        )}
+      </div>
+    </>
+  );
 
   const statusPill = (s: ClubinhoSubscription) => {
     const st = getClubinhoStatus(s);
@@ -579,6 +720,7 @@ export const ClubinhoManager: React.FC<Props> = ({ styles, currentUser }) => {
                           className="btn-action-icon"
                         ><RefreshCw size={14} /></button>
                         <button type="button" disabled={busyId === s.id} onClick={() => startEdit(s)} title="Editar" className="btn-action-icon"><Edit3 size={14} /></button>
+                        <button type="button" disabled={busyId === s.id} onClick={() => openHistory(s)} title="Histórico de pagamentos" className="btn-action-icon"><Receipt size={14} /></button>
                         <button type="button" disabled={busyId === s.id} onClick={() => setCancelTarget(s)} title="Cancelar" className="btn-action-icon btn-action-danger"><Ban size={14} /></button>
                       </div>
                     </td>
@@ -638,48 +780,7 @@ export const ClubinhoManager: React.FC<Props> = ({ styles, currentUser }) => {
               <h2 style={{ ...styles.modalTitle, fontSize: '1.05rem' }}>Registrar pagamento — {paymentTarget.pet_name}</h2>
               <button onClick={() => setPaymentTarget(null)} style={styles.modalCloseBtn(false)}>✕</button>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginTop: '6px' }}>
-              <div style={styles.formGroup}>
-                <label style={styles.formLabel}>Data</label>
-                <input type="date" value={paymentForm.paidDate} onChange={(e) => setPaymentForm(f => ({ ...f, paidDate: e.target.value }))} style={styles.formInput} />
-              </div>
-              <div style={styles.formGroup}>
-                <label style={styles.formLabel}>Hora</label>
-                <input type="time" value={paymentForm.paidTime} onChange={(e) => setPaymentForm(f => ({ ...f, paidTime: e.target.value }))} style={styles.formInput} />
-              </div>
-            </div>
-            <div style={styles.formGroup}>
-              <label style={styles.formLabel}>Referente à renovação de</label>
-              <input type="date" value={paymentForm.cycleRenewalDate} onChange={(e) => setPaymentForm(f => ({ ...f, cycleRenewalDate: e.target.value }))} style={styles.formInput} />
-              <span style={{ fontSize: '0.72rem', color: styles.sidebarWidgetText?.color }}>
-                Já vem com a Última Renovação atual ({fmtDate(paymentTarget.last_renewed_at || paymentTarget.started_at)}). Mude só se esse pagamento for de um ciclo diferente (ex.: pagamento atrasado de um ciclo anterior).
-              </span>
-            </div>
-            <div style={styles.formGroup}>
-              <label style={styles.formLabel}>Forma de pagamento</label>
-              <select
-                value={paymentForm.paymentMethod}
-                onChange={(e) => setPaymentForm(f => ({ ...f, paymentMethod: e.target.value as PaymentFormState['paymentMethod'] }))}
-                style={styles.formInput}
-              >
-                <option value="pix">Pix</option>
-                <option value="debito">Débito</option>
-                <option value="credito">Crédito</option>
-                <option value="especie">Espécie</option>
-              </select>
-            </div>
-            <div style={styles.formGroup}>
-              <label style={styles.formLabel}>Quem recebeu</label>
-              {isSharedOwnerLogin ? (
-                <select value={paymentForm.receivedBy} onChange={(e) => setPaymentForm(f => ({ ...f, receivedBy: e.target.value }))} style={styles.formInput}>
-                  <option value="">Selecione...</option>
-                  <option value="André">André</option>
-                  <option value="Paloma">Paloma</option>
-                </select>
-              ) : (
-                <input type="text" value={paymentForm.receivedBy} onChange={(e) => setPaymentForm(f => ({ ...f, receivedBy: e.target.value }))} style={styles.formInput} placeholder="Nome de quem recebeu" />
-              )}
-            </div>
+            {renderPaymentFields(paymentForm, setPaymentForm, paymentTarget.last_renewed_at || paymentTarget.started_at)}
             <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
               <button type="button" disabled={busyId === paymentTarget.id} onClick={handleRegisterPayment} className="btn-save" style={styles.btnAcc(false)}>
                 {busyId === paymentTarget.id ? 'Salvando...' : 'Confirmar pagamento'}
@@ -705,6 +806,78 @@ export const ClubinhoManager: React.FC<Props> = ({ styles, currentUser }) => {
                 {busyId === cancelTarget.id ? 'Cancelando...' : 'Sim, cancelar'}
               </button>
               <button type="button" onClick={() => setCancelTarget(null)} style={styles.btnAcc(false)}>Voltar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {historyTarget && (
+        <div style={styles.modalOverlay}>
+          <div style={{ ...styles.modalContent, maxWidth: '560px' }} role="dialog" aria-modal="true">
+            <div style={styles.modalHeader}>
+              <h2 style={{ ...styles.modalTitle, fontSize: '1.05rem' }}>Histórico de pagamentos — {historyTarget.pet_name}</h2>
+              <button onClick={() => { setHistoryTarget(null); setHistoryList(null); setHistoryFormId(null); }} style={styles.modalCloseBtn(false)}>✕</button>
+            </div>
+            {historyError && <p style={{ color: 'hsl(0,75%,50%)', fontSize: '0.82rem' }}>{historyError}</p>}
+            {historyList === null ? (
+              <p style={{ color: styles.sidebarWidgetText?.color, fontSize: '0.85rem' }}>Carregando...</p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '260px', overflowY: 'auto', marginTop: '8px' }}>
+                {historyList.length === 0 && <p style={{ color: styles.sidebarWidgetText?.color, fontSize: '0.85rem' }}>Nenhum pagamento registrado ainda.</p>}
+                {historyList.map(p => (
+                  <div key={p.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', padding: '8px 10px', border: `1px solid ${styles.borderColor}`, borderRadius: '8px' }}>
+                    <div style={{ fontSize: '0.8rem', color: styles.textMain }}>
+                      <strong>Ciclo de {p.cycle_renewal_date ? fmtDate(p.cycle_renewal_date) : '—'}</strong>
+                      <div style={{ color: styles.sidebarWidgetText?.color, marginTop: '2px' }}>
+                        {PAYMENT_METHOD_LABELS[p.payment_method]} em {fmtDate(p.paid_date)} às {p.paid_time}, recebido por {p.received_by}
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
+                      <button type="button" onClick={() => startEditHistoryPayment(p)} title="Editar" className="btn-action-icon"><Edit3 size={13} /></button>
+                      <button type="button" onClick={() => setHistoryDeleteTarget(p)} title="Apagar" className="btn-action-icon btn-action-danger"><Trash2 size={13} /></button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {historyFormId ? (
+              <div style={{ marginTop: '14px', paddingTop: '12px', borderTop: `1px solid ${styles.borderColor}` }}>
+                <h3 style={{ fontSize: '0.88rem', fontWeight: 700, color: styles.textMain, margin: 0 }}>
+                  {historyFormId === 'new' ? 'Novo pagamento' : 'Editar pagamento'}
+                </h3>
+                {renderPaymentFields(historyForm, setHistoryForm, historyTarget.last_renewed_at || historyTarget.started_at)}
+                <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+                  <button type="button" disabled={historyBusy} onClick={saveHistoryPayment} className="btn-save" style={styles.btnAcc(false)}>
+                    {historyBusy ? 'Salvando...' : 'Salvar'}
+                  </button>
+                  <button type="button" onClick={() => setHistoryFormId(null)} style={styles.btnAcc(false)}>Cancelar</button>
+                </div>
+              </div>
+            ) : (
+              <button type="button" onClick={startNewHistoryPayment} style={{ ...styles.btnAcc(false), marginTop: '12px' }}>
+                <PlusCircle size={14} /> Novo pagamento
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {historyDeleteTarget && (
+        <div style={styles.modalOverlay}>
+          <div style={{ ...styles.modalContent, maxWidth: '360px' }} role="dialog" aria-modal="true">
+            <div style={styles.modalHeader}>
+              <h2 style={{ ...styles.modalTitle, fontSize: '1.05rem' }}>Apagar pagamento?</h2>
+              <button onClick={() => setHistoryDeleteTarget(null)} style={styles.modalCloseBtn(false)}>✕</button>
+            </div>
+            <p style={{ fontSize: '0.88rem', color: styles.sidebarWidgetText?.color }}>
+              O pagamento de {fmtDate(historyDeleteTarget.paid_date)} (ciclo de {historyDeleteTarget.cycle_renewal_date ? fmtDate(historyDeleteTarget.cycle_renewal_date) : '—'}) será removido do histórico. Isso não muda a cor/agenda atual da assinatura.
+            </p>
+            <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+              <button type="button" disabled={historyBusy} onClick={confirmDeleteHistoryPayment} style={{ ...styles.btnAcc(false), backgroundColor: 'hsl(0,75%,55%)', color: '#fff' }}>
+                {historyBusy ? 'Apagando...' : 'Sim, apagar'}
+              </button>
+              <button type="button" onClick={() => setHistoryDeleteTarget(null)} style={styles.btnAcc(false)}>Voltar</button>
             </div>
           </div>
         </div>

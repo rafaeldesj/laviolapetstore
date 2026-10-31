@@ -1299,15 +1299,49 @@ export default {
             body: JSON.stringify({ subscription_id: id, paid_date: paidDate, paid_time: paidTime, payment_method: method, received_by: receivedBy, cycle_renewal_date: cycleRenewalDate, created_by: user.sub }),
           });
           if (!insert.ok) return failC('Erro ao registrar o pagamento.', insert);
-          const upd = await sb(env, `/clubinho_subscriptions?id=eq.${encodeURIComponent(id)}&select=*`, { method: 'PATCH', body: JSON.stringify({ payment_flag: 'pago' }) });
-          if (!upd.ok) return failC('Erro ao marcar o pagamento na assinatura.', upd);
-          let assinatura = upd.body?.[0] || null;
+          // Só mexe na cor/no motor se esse pagamento é mesmo do ciclo ATUAL — um pagamento lançado pra um ciclo
+          // passado (ex.: preenchendo o histórico pela tela de pagamentos) não deve confirmar o ciclo de agora.
+          let assinatura = cur.body[0];
           let autoAcao = null;
-          if (assinatura) {
+          if (cycleRenewalDate === cur.body[0].last_renewed_at) {
+            const upd = await sb(env, `/clubinho_subscriptions?id=eq.${encodeURIComponent(id)}&select=*`, { method: 'PATCH', body: JSON.stringify({ payment_flag: 'pago' }) });
+            if (!upd.ok) return failC('Erro ao marcar o pagamento na assinatura.', upd);
+            assinatura = upd.body?.[0] || assinatura;
             const r = await evaluateClubinhoAutoSchedule(env, assinatura, user.sub);
             if (r) { assinatura = r.assinatura; autoAcao = r; }
           }
           return json({ assinatura, pagamento: insert.body[0], auto_acao: autoAcao }, 201);
+        }
+
+        // Histórico de pagamentos de UMA assinatura — pra tela de gestão de pagamentos por ciclo.
+        const payListMatch = /^\/clubinho\/([\w-]+)\/pagamentos$/.exec(dbRoute);
+        if (request.method === 'GET' && payListMatch) {
+          const r = await sb(env, `/clubinho_payments?subscription_id=eq.${encodeURIComponent(payListMatch[1])}&select=*&order=cycle_renewal_date.desc.nullslast,paid_date.desc,paid_time.desc`);
+          return r.ok ? json({ pagamentos: r.body }) : failC('Erro ao listar os pagamentos.', r);
+        }
+
+        // Editar ou apagar um pagamento específico do histórico — nunca mexe sozinho na cor/agenda da
+        // assinatura (isso é decisão manual da equipe pelo dropdown de status), só corrige o registro em si.
+        const payOneMatch = /^\/clubinho\/pagamentos\/([\w-]+)$/.exec(dbRoute);
+        if (payOneMatch && request.method === 'PATCH') {
+          const input = await request.json();
+          const fields = {};
+          if (input.paidDate !== undefined) fields.paid_date = String(input.paidDate);
+          if (input.paidTime !== undefined) fields.paid_time = String(input.paidTime).slice(0, 5);
+          if (input.paymentMethod !== undefined) {
+            if (!PAYMENT_METHODS.includes(input.paymentMethod)) return json({ mensagem: 'Forma de pagamento inválida.' }, 400);
+            fields.payment_method = input.paymentMethod;
+          }
+          if (input.receivedBy !== undefined) fields.received_by = String(input.receivedBy).trim().slice(0, 150);
+          if (input.cycleRenewalDate !== undefined) fields.cycle_renewal_date = input.cycleRenewalDate ? String(input.cycleRenewalDate) : null;
+          if (Object.keys(fields).length === 0) return json({ mensagem: 'Nada para alterar.' }, 400);
+          const r = await sb(env, `/clubinho_payments?id=eq.${encodeURIComponent(payOneMatch[1])}&select=*`, { method: 'PATCH', body: JSON.stringify(fields) });
+          if (!r.ok) return failC('Erro ao salvar o pagamento.', r);
+          return r.body.length ? json({ pagamento: r.body[0] }) : json({ mensagem: 'Pagamento não encontrado.' }, 404);
+        }
+        if (payOneMatch && request.method === 'DELETE') {
+          const r = await sb(env, `/clubinho_payments?id=eq.${encodeURIComponent(payOneMatch[1])}`, { method: 'DELETE' });
+          return r.ok ? json({ ok: true }) : failC('Erro ao apagar o pagamento.', r);
         }
 
         const one = /^\/clubinho\/([\w-]+)$/.exec(dbRoute);
