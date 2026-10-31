@@ -43,7 +43,7 @@ export interface ClubinhoSubscription {
  * isso só pra registrar no histórico de auditoria — a cor/datas já vêm atualizadas na própria `assinatura`.
  */
 export interface ClubinhoAutoAction {
-  tipo: 'montado' | 'desmontado';
+  tipo: 'montado' | 'aguardando_confirmacao' | 'desmontado';
   assinatura_id?: string;
   pet_name?: string;
   assinatura: ClubinhoSubscription;
@@ -58,6 +58,9 @@ export interface ClubinhoPayment {
   paid_time: string; // HH:MM
   payment_method: 'pix' | 'debito' | 'credito' | 'especie';
   received_by: string;
+  /** A qual ciclo esse pagamento se refere (mesmo valor de `last_renewed_at` daquele ciclo) — null em pagamentos
+   *  registrados antes dessa amarração existir. */
+  cycle_renewal_date?: string | null;
   created_by: string;
   created_at: string;
 }
@@ -281,6 +284,10 @@ export interface NewClubinhoPaymentInput {
   paidTime: string; // HH:MM
   paymentMethod: 'pix' | 'debito' | 'credito' | 'especie';
   receivedBy: string;
+  /** A qual ciclo esse pagamento confirma (mesmo valor que ficaria em `last_renewed_at`) — por padrão a Última
+   *  Renovação atual da assinatura; a equipe pode escolher uma data diferente se o pagamento for de um ciclo
+   *  passado, registrado atrasado. */
+  cycleRenewalDate?: string;
 }
 
 /** Registra um pagamento (data/hora/forma/quem recebeu) e marca a assinatura como "Pagamento realizado". */

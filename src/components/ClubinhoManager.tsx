@@ -31,9 +31,9 @@ const addDays = (dateStr: string, days: number): string => {
 const todayStr = (): string => new Date().toISOString().slice(0, 10);
 const nowHHMM = (): string => new Date().toTimeString().slice(0, 5);
 
-type PaymentFormState = { paidDate: string; paidTime: string; paymentMethod: 'pix' | 'debito' | 'credito' | 'especie'; receivedBy: string };
-const emptyPaymentForm = (defaultReceivedBy: string): PaymentFormState => ({
-  paidDate: todayStr(), paidTime: nowHHMM(), paymentMethod: 'pix', receivedBy: defaultReceivedBy,
+type PaymentFormState = { paidDate: string; paidTime: string; paymentMethod: 'pix' | 'debito' | 'credito' | 'especie'; receivedBy: string; cycleRenewalDate: string };
+const emptyPaymentForm = (defaultReceivedBy: string, cycleRenewalDate: string): PaymentFormState => ({
+  paidDate: todayStr(), paidTime: nowHHMM(), paymentMethod: 'pix', receivedBy: defaultReceivedBy, cycleRenewalDate,
 });
 
 type FormState = {
@@ -64,7 +64,7 @@ export const ClubinhoManager: React.FC<Props> = ({ styles, currentUser }) => {
   // não sabe qual dos dois está de fato usando o login agora, então pede pra escolher ao registrar um pagamento.
   const isSharedOwnerLogin = (currentUser.profile?.username || '').trim().toUpperCase() === 'LAVIOLA';
   const [paymentTarget, setPaymentTarget] = useState<ClubinhoSubscription | null>(null);
-  const [paymentForm, setPaymentForm] = useState<PaymentFormState>(emptyPaymentForm(currentUser.name || ''));
+  const [paymentForm, setPaymentForm] = useState<PaymentFormState>(emptyPaymentForm(currentUser.name || '', todayStr()));
 
   // Visão ampla: a tabela (com bastante coluna) fica espremida na área de conteúdo normal; isso a estica até a
   // largura toda da página, do menu até o aviso lateral — mesma ideia já usada na Agenda.
@@ -101,13 +101,18 @@ export const ClubinhoManager: React.FC<Props> = ({ styles, currentUser }) => {
     if (a.tipo === 'montado') {
       await logAction(
         'sistema', 'Sistema (motor automático)', 'Montagem automática do Clubinho',
-        `Próximo ciclo de "${pet}" montado automaticamente (${a.agendamentos_criados || 0} agendamento(s)) — status voltou para "A confirmar".`
+        `Próximo ciclo de "${pet}" montado automaticamente (${a.agendamentos_criados || 0} agendamento(s)) — cor não muda até esse ciclo também terminar.`
+      );
+    } else if (a.tipo === 'aguardando_confirmacao') {
+      await logAction(
+        'sistema', 'Sistema (motor automático)', 'Reconfirmação pedida pelo Clubinho',
+        `Ciclo de "${pet}" chegou ao fim — status voltou para "A confirmar", aguardando a equipe confirmar o pagamento.`
       );
     } else {
       const datas = (a.agendamentos_removidos || []).map(r => fmtDate(r.starts_at.slice(0, 10))).join(', ');
       await logAction(
         'sistema', 'Sistema (motor automático)', 'Exclusão automática do Clubinho',
-        `Ciclo futuro de "${pet}" desmontado automaticamente — marcação deixou de ser Pago/Débito. ${a.agendamentos_removidos?.length || 0} agendamento(s) removido(s)${datas ? ` (${datas})` : ''}.`
+        `Ciclo futuro de "${pet}" desmontado automaticamente — marcação virou Inadimplente/Congelada. ${a.agendamentos_removidos?.length || 0} agendamento(s) removido(s)${datas ? ` (${datas})` : ''}.`
       );
     }
   };
@@ -264,7 +269,7 @@ export const ClubinhoManager: React.FC<Props> = ({ styles, currentUser }) => {
 
   const openPaymentForm = (s: ClubinhoSubscription) => {
     setPaymentTarget(s);
-    setPaymentForm(emptyPaymentForm(isSharedOwnerLogin ? '' : (currentUser.name || '')));
+    setPaymentForm(emptyPaymentForm(isSharedOwnerLogin ? '' : (currentUser.name || ''), s.last_renewed_at || todayStr()));
   };
 
   const handleRegisterPayment = async () => {
@@ -276,10 +281,11 @@ export const ClubinhoManager: React.FC<Props> = ({ styles, currentUser }) => {
       const { autoAcao } = await registerClubinhoPayment(paymentTarget.id, {
         paidDate: paymentForm.paidDate, paidTime: paymentForm.paidTime,
         paymentMethod: paymentForm.paymentMethod, receivedBy: paymentForm.receivedBy.trim(),
+        cycleRenewalDate: paymentForm.cycleRenewalDate,
       });
       await logAction(
         currentUser.email || '', currentUser.name || 'Equipe', 'Pagamento do Clubinho registrado',
-        `Pagamento de "${paymentTarget.pet_name}" registrado: ${PAYMENT_METHOD_LABELS[paymentForm.paymentMethod]}, em ${fmtDate(paymentForm.paidDate)} às ${paymentForm.paidTime}, recebido por ${paymentForm.receivedBy.trim()}.`
+        `Pagamento de "${paymentTarget.pet_name}" registrado: ${PAYMENT_METHOD_LABELS[paymentForm.paymentMethod]}, em ${fmtDate(paymentForm.paidDate)} às ${paymentForm.paidTime}, recebido por ${paymentForm.receivedBy.trim()} — referente à renovação de ${fmtDate(paymentForm.cycleRenewalDate)}.`
       );
       if (autoAcao) await logAutoAction(autoAcao);
       setPaymentTarget(null);
@@ -641,6 +647,13 @@ export const ClubinhoManager: React.FC<Props> = ({ styles, currentUser }) => {
                 <label style={styles.formLabel}>Hora</label>
                 <input type="time" value={paymentForm.paidTime} onChange={(e) => setPaymentForm(f => ({ ...f, paidTime: e.target.value }))} style={styles.formInput} />
               </div>
+            </div>
+            <div style={styles.formGroup}>
+              <label style={styles.formLabel}>Referente à renovação de</label>
+              <input type="date" value={paymentForm.cycleRenewalDate} onChange={(e) => setPaymentForm(f => ({ ...f, cycleRenewalDate: e.target.value }))} style={styles.formInput} />
+              <span style={{ fontSize: '0.72rem', color: styles.sidebarWidgetText?.color }}>
+                Já vem com a Última Renovação atual ({fmtDate(paymentTarget.last_renewed_at || paymentTarget.started_at)}). Mude só se esse pagamento for de um ciclo diferente (ex.: pagamento atrasado de um ciclo anterior).
+              </span>
             </div>
             <div style={styles.formGroup}>
               <label style={styles.formLabel}>Forma de pagamento</label>

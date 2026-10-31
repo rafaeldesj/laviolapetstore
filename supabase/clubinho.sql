@@ -48,6 +48,11 @@ create table if not exists public.clubinho_payments (
   paid_time       text not null default '',   -- 'HH:MM'
   payment_method  text not null default '',   -- 'pix' | 'debito' | 'credito' | 'especie'
   received_by     text not null default '',   -- quem recebeu (ex.: André, Paloma, ou o nome de quem está logado)
+  -- A qual ciclo esse pagamento se refere (mesmo valor de `clubinho_subscriptions.last_renewed_at` daquele
+  -- ciclo) — sem isso, o "último pagamento" da tela parecia sempre confirmar o ciclo atual, mesmo quando era de
+  -- um ciclo antigo (coluna adicionada em 2026-10-31, aditiva: pagamentos anteriores nasceram com null e não
+  -- amarram a nenhum ciclo específico, só continuam no histórico).
+  cycle_renewal_date date,
   created_by      text not null default '',
   created_at      timestamptz not null default now()
 );

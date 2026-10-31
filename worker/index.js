@@ -1122,9 +1122,20 @@ export default {
               if (ev) { bySub.set(s.id, ev.assinatura); autoAcoes.push({ assinatura_id: s.id, pet_name: s.pet_name, ...ev }); }
             }));
             // Anexa o último pagamento registrado de cada assinatura, pra não precisar de uma busca à parte na tela.
+            // Só conta o pagamento se ele estiver amarrado ao ciclo ATUAL (cycle_renewal_date == last_renewed_at
+            // da assinatura) — senão um pagamento de um ciclo antigo parece confirmar o ciclo de agora (caso real
+            // da Nina, 2026-10-31). Pagamentos antigos, de antes dessa amarração existir, não têm essa coluna
+            // preenchida e por isso não aparecem mais como "confirmando" nenhum ciclo específico.
             const pay = await sb(env, '/clubinho_payments?select=*&order=paid_date.desc,paid_time.desc');
+            const paysBySub = new Map();
+            if (pay.ok) for (const p of pay.body) { if (!paysBySub.has(p.subscription_id)) paysBySub.set(p.subscription_id, []); paysBySub.get(p.subscription_id).push(p); }
             const lastBySub = new Map();
-            if (pay.ok) for (const p of pay.body) if (!lastBySub.has(p.subscription_id)) lastBySub.set(p.subscription_id, p);
+            for (const s of r.body) {
+              const sNow = bySub.get(s.id) || s;
+              const candidates = paysBySub.get(s.id) || [];
+              const match = sNow.last_renewed_at ? candidates.find((p) => p.cycle_renewal_date === sNow.last_renewed_at) : candidates[0];
+              if (match) lastBySub.set(s.id, match);
+            }
             // "Banho X de N" real: lê a posição gravada no próprio agendamento (clubinho_cycle_position), não o
             // cálculo por data — esse cálculo gira pra sempre a partir de `started_at` e fica fora de sincronia
             // sempre que o ciclo real foi remontado numa data diferente da teórica (2026-10-31: usuário notou
@@ -1277,9 +1288,15 @@ export default {
           const receivedBy = String(input.receivedBy || '').trim().slice(0, 150);
           if (!paidDate || !paidTime || !receivedBy) return json({ mensagem: 'Informe a data, a hora e quem recebeu o pagamento.' }, 400);
           if (!PAYMENT_METHODS.includes(method)) return json({ mensagem: 'Forma de pagamento inválida.' }, 400);
+          // A quê ciclo esse pagamento se refere: por padrão a Última Renovação atual da assinatura, mas a
+          // equipe pode escolher uma data diferente (ex.: pagamento de um ciclo passado, registrado atrasado) —
+          // sem isso, o "último pagamento" exibido na tela parecia confirmar o ciclo atual mesmo quando era de
+          // um ciclo bem mais antigo (caso real da Nina, 2026-10-31: pagamento de 26/09 parecia confirmar o
+          // ciclo que só foi montado em 31/10).
+          const cycleRenewalDate = String(input.cycleRenewalDate || cur.body[0].last_renewed_at || paidDate);
           const insert = await sb(env, '/clubinho_payments', {
             method: 'POST',
-            body: JSON.stringify({ subscription_id: id, paid_date: paidDate, paid_time: paidTime, payment_method: method, received_by: receivedBy, created_by: user.sub }),
+            body: JSON.stringify({ subscription_id: id, paid_date: paidDate, paid_time: paidTime, payment_method: method, received_by: receivedBy, cycle_renewal_date: cycleRenewalDate, created_by: user.sub }),
           });
           if (!insert.ok) return failC('Erro ao registrar o pagamento.', insert);
           const upd = await sb(env, `/clubinho_subscriptions?id=eq.${encodeURIComponent(id)}&select=*`, { method: 'PATCH', body: JSON.stringify({ payment_flag: 'pago' }) });
