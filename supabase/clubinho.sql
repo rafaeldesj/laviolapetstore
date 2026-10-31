@@ -12,7 +12,11 @@ create table if not exists public.clubinho_subscriptions (
   price         numeric(10,2) not null default 0,
   taxi_dog_fee  numeric(10,2) not null default 0,
   started_at    date not null,
-  renews_at     date not null,              -- próxima data de renovação/pagamento
+  renews_at     date not null,              -- PRÓXIMA renovação (fim do ciclo atualmente montado/em uso)
+  -- ÚLTIMA renovação real (quando o ciclo atual foi montado/confirmado de verdade) — distinto de `renews_at`,
+  -- que é a PRÓXIMA. Preenchido pelo motor automático, pelo Renovar, e com `started_at` na criação da assinatura
+  -- (coluna adicionada em 2026-10-31, aditiva: todo registro anterior nasceu com null).
+  last_renewed_at date,
   -- Quando preenchido ('a_confirmar' | 'debito' | 'pago'), vale mais que o cálculo por data: é informação real que
   -- a equipe confirmou (ex.: trazida dos calendários "Confirmar"/"Débitos" do Google Agenda antigo, ou um
   -- pagamento registrado à mão em clubinho_payments). Null = deixa o status seguir pela data de renovação normalmente.

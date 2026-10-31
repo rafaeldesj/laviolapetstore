@@ -353,11 +353,12 @@ async function evaluateClubinhoAutoSchedule(env, sub, userSub) {
   if (buildable && !hasBuilt) {
     const built = await buildClubinhoCycleAppointments(env, sub, userSub);
     if (!built) return null;
+    const lastRenewedAt = todayDateStr();
     const upd = await sb(env, `/clubinho_subscriptions?id=eq.${encodeURIComponent(sub.id)}&select=*`, {
       method: 'PATCH',
-      body: JSON.stringify({ renews_at: built.newRenewsAt, current_cycle_series_id: built.seriesId }),
+      body: JSON.stringify({ renews_at: built.newRenewsAt, current_cycle_series_id: built.seriesId, last_renewed_at: lastRenewedAt }),
     });
-    const after = upd.ok && upd.body[0] ? upd.body[0] : { ...sub, renews_at: built.newRenewsAt, current_cycle_series_id: built.seriesId };
+    const after = upd.ok && upd.body[0] ? upd.body[0] : { ...sub, renews_at: built.newRenewsAt, current_cycle_series_id: built.seriesId, last_renewed_at: lastRenewedAt };
     return { tipo: 'montado', assinatura: after, agendamentos_criados: built.created };
   }
 
@@ -1181,6 +1182,8 @@ export default {
             taxi_dog_fee: Math.max(0, Number(input.taxiDogFee) || 0),
             started_at: startedAt,
             renews_at: renewsAt,
+            // Ciclo inicial: a própria data de início é a "última renovação" até o motor montar um ciclo de verdade.
+            last_renewed_at: startedAt,
             created_by: user.sub,
           };
           const r = await sb(env, '/clubinho_subscriptions', { method: 'POST', body: JSON.stringify(fields) });
@@ -1248,9 +1251,11 @@ export default {
           // inadimplente, a_confirmar, sem marcação) vira "A confirmar" — Renovar reativa, mas não presume que o
           // pagamento já foi recebido (isso é feito à parte, no "Marcar: Pagamento realizado").
           const nextFlag = (sub.payment_flag === 'debito' || sub.payment_flag === 'pago') ? sub.payment_flag : 'a_confirmar';
+          const renewFields = { renews_at: newRenewsAt, is_active: true, payment_flag: nextFlag, current_cycle_series_id: seriesId };
+          if (seriesId) renewFields.last_renewed_at = todayDateStr();
           const upd = await sb(env, `/clubinho_subscriptions?id=eq.${encodeURIComponent(id)}&select=*`, {
             method: 'PATCH',
-            body: JSON.stringify({ renews_at: newRenewsAt, is_active: true, payment_flag: nextFlag, current_cycle_series_id: seriesId }),
+            body: JSON.stringify(renewFields),
           });
           if (!upd.ok) return failC('Erro ao renovar a assinatura.', upd);
           return json({ assinatura: upd.body?.[0] || null, agendamentos_criados: created });

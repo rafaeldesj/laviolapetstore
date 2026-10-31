@@ -12,6 +12,8 @@ export interface ClubinhoSubscription {
   price: number;
   taxi_dog_fee: number;
   started_at: string; // YYYY-MM-DD
+  /** Quando o ciclo ATUAL foi montado/confirmado de verdade — distinto de `renews_at` (a PRÓXIMA renovação). */
+  last_renewed_at?: string | null; // YYYY-MM-DD
   renews_at: string; // YYYY-MM-DD
   is_active: boolean;
   /** Marcação feita pela equipe — não há mais cálculo automático por data, toda assinatura ativa precisa de uma
